@@ -1,10 +1,17 @@
 name: Build macOS App
 
-# Every push (including branches and tags) gets its own build and download.
-# Deliberately do not cancel earlier runs when a new commit is pushed.
+# Build every branch/tag except the rolling release tag maintained below.
 on:
   push:
+    branches: ['**']
+    tags-ignore: [latest]
   workflow_dispatch:
+
+# Finish the active build; keep only the newest pending build during a push burst.
+# Serialization prevents two successful builds from replacing release assets at once.
+concurrency:
+  group: lightx2v-latest-release
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -15,11 +22,12 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     permissions:
-      contents: read
+      contents: write
+      actions: write
       deployments: write
     environment:
       name: macos-arm64
-      url: ${{ steps.upload.outputs.artifact-url || format('{0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) }}
+      url: https://github.com/${{ github.repository }}/releases/tag/latest
     defaults:
       run:
         shell: bash
@@ -55,36 +63,26 @@ jobs:
         run: bash scripts/build.sh
 
       - name: Package and verify download
-        id: package
-        run: |
-          archive="LightX2V-APP-macOS-arm64-${GITHUB_SHA:0:7}.zip"
-          bash scripts/package.sh "dist/LightX2V APP.app" "dist/$archive"
-          printf 'archive=%s\n' "$archive" >> "$GITHUB_OUTPUT"
+        run: bash scripts/package.sh
 
-      - name: Upload application
-        id: upload
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          path: dist/${{ steps.package.outputs.archive }}
-          archive: false
-          if-no-files-found: error
-          retention-days: 30
+      - name: Replace latest release and remove obsolete app packages
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/publish_latest.py dist/LightX2V-APP-macOS-arm64.zip
 
       - name: Publish download summary
         env:
-          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
-          ARCHIVE: ${{ steps.package.outputs.archive }}
+          DOWNLOAD_URL: https://github.com/${{ github.repository }}/releases/download/latest/LightX2V-APP-macOS-arm64.zip
         run: |
           {
             printf '## LightX2V APP · Apple Silicon\n\n'
-            printf '[Download %s](%s)\n\n' "$ARCHIVE" "$ARTIFACT_URL"
-            printf -- '- Commit: `%s`\n' "$GITHUB_SHA"
+            printf '[Download latest APP](%s)\n\n' "$DOWNLOAD_URL"
+            printf -- '- Build commit: `%s`\n' "$GITHUB_SHA"
             printf -- '- Target: macOS 14+, arm64\n'
             printf -- '- Tests: Swift core checks and Python bridge integration tests passed\n'
             printf -- '- Signing: ad-hoc (not notarized)\n'
-            printf -- '- Artifact retention: 30 days; sign in to GitHub to download\n'
+            printf -- '- Retention: no expiry; only the latest successful APP package is kept\n'
+            printf -- '- This stable URL always serves the latest package, including from older run summaries\n'
             printf -- '- Requires a local LightX2V checkout, model weights and Python inference environment\n\n'
-            printf '### SHA-256\n\n```text\n'
-            cat "dist/$ARCHIVE.sha256"
-            printf '```\n'
+            printf 'See the [latest release](https://github.com/%s/releases/tag/latest) for its commit and SHA-256.\n' "$GITHUB_REPOSITORY"
           } >> "$GITHUB_STEP_SUMMARY"
