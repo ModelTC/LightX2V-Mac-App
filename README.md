@@ -1,6 +1,23 @@
 # LightX2V APP
 
+[![Build macOS App](https://github.com/ModelTC/LightX2V-Mac-App/actions/workflows/build-macos.yml/badge.svg?branch=main)](https://github.com/ModelTC/LightX2V-Mac-App/actions/workflows/build-macos.yml)
+
 适用于 Apple Silicon Mac 的原生图像生成应用。采用 SwiftUI / AppKit，界面参考 Codex 的侧边栏、创作区和底部输入框，首版支持 **Qwen-Image-2.1 / Viggle v0.3 文生图**。
+
+## 自动构建与下载
+
+每次向本仓库 push（任意分支或标签），[Build macOS App](https://github.com/ModelTC/LightX2V-Mac-App/actions/workflows/build-macos.yml) 都会自动执行：
+
+1. 在 GitHub 的 macOS 15 / Apple Silicon runner 上运行 Swift 核心检查和 Python 桥接集成测试。
+2. 编译 arm64 Release 应用并完成 ad-hoc 签名。
+3. 生成 ZIP，重新解压检查签名、可执行权限和内容一致性。
+4. 上传 `LightX2V-APP-macOS-arm64-<提交短 SHA>.zip`，并将下载链接写入 `macos-arm64` 的 Deployment。
+
+下载时打开 [Actions](https://github.com/ModelTC/LightX2V-Mac-App/actions/workflows/build-macos.yml)，选择对应提交的成功运行，点击 Summary 中的下载链接或 **Artifacts** 中的 ZIP。也可以从仓库的 [Deployments](https://github.com/ModelTC/LightX2V-Mac-App/deployments) 进入对应构建。下载需要登录 GitHub，构建包保留 **30 天**，SHA-256 校验值位于运行摘要中。
+
+解压后将 `LightX2V APP.app` 放入「应用程序」目录即可。当前为 ad-hoc 签名，尚未进行 Apple Developer ID 签名和公证；从网络下载后，macOS 可能需要在「系统设置 → 隐私与安全性」中确认打开。模型、LightX2V 源码和 Python 推理环境仍需在本机配置。
+
+可以通过该工作流页面的 **Run workflow** 手动构建指定分支。每次 push 按该次推送的 HEAD 构建，失败的检查会阻止发布；后续提交不会自动取消已启动的构建。CI 只安装轻量测试依赖，不下载模型、不执行真实模型推理，也不需要配置额外的 GitHub PAT 或 Apple 证书。
 
 ## 开始使用
 
@@ -136,10 +153,19 @@ LIGHTX2V_BUILD_DIR=/path/to/build-cache bash scripts/build.sh "/path/to/LightX2V
 ```bash
 swift run LightX2VApp
 swift run LightX2VCoreChecks
+python3 -m pip install -r Tests/requirements.txt
 python3 -m unittest discover -s Tests -v
 ```
 
 Python 测试使用隔离的临时 CLI 和 Pillow，不加载模型权重；请使用已安装 Pillow 的 Python 环境（可直接使用推理环境）。SwiftUI 中的应用状态通过 `AppStore` 管理，Python 桥接程序通过 NDJSON 发送事件。
+
+生成与 CI 相同格式的可下载 ZIP（需先完成构建）：
+
+```bash
+bash scripts/package.sh
+```
+
+输出为 `dist/LightX2V-APP-macOS-arm64.zip` 和对应的 `.sha256` 文件。
 
 ```text
 SwiftUI 界面 → AppStore → Foundation Process → bridge.py

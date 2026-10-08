@@ -1,0 +1,2 @@
+# Only needed by the isolated bridge tests; no model/PyTorch download in CI.
+Pillow==12.3.0
