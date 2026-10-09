@@ -215,8 +215,6 @@ struct ComposerView: View {
                 }
                 HStack(spacing: 7) {
                     ModelSelector()
-                    Text("·").foregroundStyle(Palette.muted)
-                    Text("\(store.width) × \(store.height)").font(.system(size: 11)).foregroundStyle(Palette.muted).monospacedDigit()
                     Spacer()
                     if store.isRunning {
                         Button { store.stop() } label: {
