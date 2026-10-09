@@ -11,28 +11,33 @@ struct InspectorView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         sectionHeader("模型准备", symbol: "cube.transparent", expanded: $store.modelPreparationExpanded)
-                            .padding(.top, 28).id("model-preparation")
+                            .id("model-preparation")
                         separator
-                        if store.selectedModel != nil && store.modelPreparationExpanded {
-                            ModelPreparationView().padding(.vertical, 20)
-                                .transition(.opacity.combined(with: .move(edge: .top)))
-                            separator
+                        ClippedReveal(progress: store.selectedModel != nil && store.modelPreparationExpanded ? 1 : 0) {
+                            VStack(spacing: 0) {
+                                ModelPreparationView().padding(.vertical, 20)
+                                separator
+                            }
                         }
+                        .animation(disclosureAnimation, value: store.modelPreparationExpanded)
                         sectionHeader("生成参数", symbol: "slider.horizontal.3", expanded: $store.generationParametersExpanded)
-                        if store.selectedModel != nil && store.generationParametersExpanded {
-                            GenerationParametersView().padding(.bottom, 23)
-                                .transition(.opacity.combined(with: .move(edge: .top)))
-                        } else {
-                            separator
+                        separator
+                        ClippedReveal(progress: store.selectedModel != nil && store.generationParametersExpanded ? 1 : 0) {
+                            GenerationParametersView().padding(.top, 16).padding(.bottom, 23)
                         }
+                        .animation(disclosureAnimation, value: store.generationParametersExpanded)
                     }.subtleScrollbars()
-                }.onChange(of: store.modelPreparationFocus) { _, _ in
-                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
+                }.clipped().onChange(of: store.modelPreparationFocus) { _, _ in
+                    withAnimation(disclosureAnimation) {
                         proxy.scrollTo("model-preparation", anchor: .top)
                     }
                 }
             }
-        }.padding(.horizontal, 20).background(Palette.inspector)
+        }.padding(.top, 28).padding(.horizontal, 20).background(Palette.inspector)
+    }
+
+    private var disclosureAnimation: Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.24)
     }
 
     private var separator: some View {
@@ -41,9 +46,7 @@ struct InspectorView: View {
 
     private func sectionHeader(_ title: String, symbol: String, expanded: Binding<Bool>) -> some View {
         Button {
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
-                expanded.wrappedValue.toggle()
-            }
+            expanded.wrappedValue.toggle()
         } label: {
             HStack(spacing: 10) {
                 Text(title).font(.system(size: 12, weight: .semibold))
@@ -51,6 +54,7 @@ struct InspectorView: View {
                 Image(systemName: symbol).foregroundStyle(Palette.muted)
                 Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
                     .rotationEffect(.degrees(expanded.wrappedValue ? 90 : 0))
+                    .animation(disclosureAnimation, value: expanded.wrappedValue)
                     .foregroundStyle(Palette.muted)
             }.frame(height: 58).contentShape(Rectangle())
         }

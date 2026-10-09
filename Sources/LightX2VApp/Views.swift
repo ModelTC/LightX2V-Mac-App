@@ -236,15 +236,12 @@ struct ComposerView: View {
 
 struct ModelSelector: View {
     @EnvironmentObject var store: AppStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Menu {
             ForEach(GenerationModel.allCases) { model in
                 Button {
-                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
-                        store.selectModel(model)
-                    }
+                    store.selectModel(model)
                 } label: {
                     if store.selectedModel == model {
                         Label(model.title, systemImage: "checkmark")

@@ -62,6 +62,9 @@ jobs:
       - name: Check native input, cursors and scrollbars
         run: bash scripts/check-prompt-editor.sh
 
+      - name: Check inspector animation clipping
+        run: bash scripts/check-inspector.sh
+
       - name: Run Python bridge integration tests
         run: python -B -m unittest discover -s Tests -v
 
