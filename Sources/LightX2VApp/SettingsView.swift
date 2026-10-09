@@ -115,6 +115,7 @@ struct PathSettingField: View {
             HStack(spacing: 8) {
                 TextField(title, text: $value).font(.system(size: compact ? 10 : 11, design: .monospaced)).textFieldStyle(.roundedBorder)
                     .accessibilityLabel(title).help(value)
+                    .dismissEditingOnOutsideClick()
                 Button {
                     let panel = NSOpenPanel()
                     panel.canChooseDirectories = directory; panel.canChooseFiles = !directory; panel.allowsMultipleSelection = false

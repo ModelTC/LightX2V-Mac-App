@@ -123,6 +123,7 @@ private struct DimensionField: View {
                 }))
                     .textFieldStyle(.plain).font(.system(size: 12, design: .monospaced))
                     .accessibilityLabel(title == "宽" ? "图片宽度" : "图片高度")
+                    .dismissEditingOnOutsideClick()
                     .onChange(of: value) { _, newValue in
                         if (Int(text) ?? 0) != newValue { text = String(newValue) }
                     }
