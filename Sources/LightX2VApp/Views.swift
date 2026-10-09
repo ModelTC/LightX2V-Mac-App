@@ -89,22 +89,18 @@ struct SidebarView: View {
                     .background(Palette.surface, in: RoundedRectangle(cornerRadius: 9))
                     .overlay(RoundedRectangle(cornerRadius: 9).stroke(Palette.line, lineWidth: 1))
             }.buttonStyle(.plain).padding(.horizontal, 14)
-            HStack(spacing: 7) {
-                Image(systemName: "magnifyingglass").font(.system(size: 11))
-                TextField("搜索创作", text: $store.search).textFieldStyle(.plain).font(.system(size: 12))
-            }.foregroundStyle(Palette.muted).padding(.horizontal, 24).padding(.vertical, 20)
             HStack { Text("最近创作"); Spacer(); Text("\(store.generations.count)").monospacedDigit() }
                 .font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.muted)
-                .padding(.horizontal, 24).padding(.bottom, 10)
+                .padding(.horizontal, 24).padding(.top, 24).padding(.bottom, 10)
             ScrollView {
                 LazyVStack(spacing: 5) {
-                    if store.filteredGenerations.isEmpty {
+                    if store.generations.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(store.search.isEmpty ? "灵感从这里开始" : "没有找到匹配的创作").font(.system(size: 12))
-                            if store.search.isEmpty { Text("生成的图片会保存在这里").font(.system(size: 11)).foregroundStyle(Palette.muted) }
+                            Text("灵感从这里开始").font(.system(size: 12))
+                            Text("生成的图片会保存在这里").font(.system(size: 11)).foregroundStyle(Palette.muted)
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24).padding(.top, 18)
                     }
-                    ForEach(store.filteredGenerations) { job in
+                    ForEach(store.generations) { job in
                         Button { store.selectedID = job.id } label: {
                             HStack(alignment: .top, spacing: 9) {
                                 Image(systemName: job.status == .completed ? "photo" : job.status == .running ? "circle.dotted" : "clock")

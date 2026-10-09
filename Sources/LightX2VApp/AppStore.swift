@@ -22,7 +22,6 @@ final class AppStore: ObservableObject {
     @Published var isComposingPrompt = false
     @Published var selectedModel: GenerationModel = .qwenImage21
     @Published var generationSize = GenerationSize()
-    @Published var search = ""
     @Published var isRunning = false
     @Published var isChecking = false
     @Published var isStopping = false
@@ -53,9 +52,6 @@ final class AppStore: ObservableObject {
     var width: Int { generationSize.dimensions.width }
     var height: Int { generationSize.dimensions.height }
     var canGenerate: Bool { !busy && !isComposingPrompt && !hasUnsavedModelSettings && generationSize.dimensions.isValid && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    var filteredGenerations: [Generation] {
-        search.isEmpty ? generations : generations.filter { $0.request.prompt.localizedCaseInsensitiveContains(search) }
-    }
     var bridgePath: String {
         (Bundle.main.url(forResource: "bridge", withExtension: "py")
          ?? Bundle.module.url(forResource: "bridge", withExtension: "py")!).path
