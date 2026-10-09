@@ -138,7 +138,7 @@ struct SidebarView: View {
                     Text("本机推理").font(.system(size: 12, weight: .medium))
                     HStack(spacing: 4) {
                         Circle().fill(store.environmentReady ? Palette.green : Palette.muted).frame(width: 5, height: 5)
-                        Text(store.isChecking ? "检查环境中" : store.environmentReady ? "Apple Silicon · MPS" : "需要检查环境")
+                        Text(store.isChecking ? "检查环境中" : store.environmentReady ? MacHardware.sidebarDescription : "需要检查环境")
                             .font(.system(size: 9)).foregroundStyle(Palette.muted)
                     }
                 }
