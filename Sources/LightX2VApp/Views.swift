@@ -177,18 +177,20 @@ struct WelcomeView: View {
                             Text("·"); Text(model.title); Text("·"); Text("6 步生成")
                         }
                     }.font(.system(size: 10)).foregroundStyle(Palette.muted).padding(.top, 16)
-                    HStack(spacing: 10) {
-                        ForEach(examples, id: \.0) { item in
-                            Button { store.usePrompt(item.2) } label: {
-                                VStack(alignment: .leading, spacing: 15) {
-                                    Image(systemName: item.0).font(.system(size: 16, weight: .light)).foregroundStyle(Palette.ink)
-                                    HStack { Text(item.1).font(.system(size: 12)); Spacer(minLength: 2); Image(systemName: "arrow.up.left").font(.system(size: 9)).foregroundStyle(Palette.muted) }
-                                }.padding(15).frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
-                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line, lineWidth: 1))
-                            }.buttonStyle(HoverButtonStyle(radius: 12, border: true)).help(item.2)
-                        }
-                    }.frame(maxWidth: 470).padding(.top, 40)
+                    if store.selectedModel == .qwenImage21 {
+                        HStack(spacing: 10) {
+                            ForEach(examples, id: \.0) { item in
+                                Button { store.usePrompt(item.2) } label: {
+                                    VStack(alignment: .leading, spacing: 15) {
+                                        Image(systemName: item.0).font(.system(size: 16, weight: .light)).foregroundStyle(Palette.ink)
+                                        HStack { Text(item.1).font(.system(size: 12)); Spacer(minLength: 2); Image(systemName: "arrow.up.left").font(.system(size: 9)).foregroundStyle(Palette.muted) }
+                                    }.padding(15).frame(maxWidth: .infinity, alignment: .leading)
+                                        .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
+                                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line, lineWidth: 1))
+                                }.buttonStyle(HoverButtonStyle(radius: 12, border: true)).help(item.2)
+                            }
+                        }.frame(maxWidth: 470).padding(.top, 40)
+                    }
                 }.frame(maxWidth: .infinity).frame(minHeight: geometry.size.height).padding(.horizontal, 32).subtleScrollbars()
             }
         }
