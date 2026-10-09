@@ -89,7 +89,7 @@ struct SidebarView: View {
                     .background(Palette.surface, in: RoundedRectangle(cornerRadius: 9))
                     .overlay(RoundedRectangle(cornerRadius: 9).stroke(Palette.line, lineWidth: 1))
             }.buttonStyle(HoverButtonStyle(radius: 9, border: true)).padding(.horizontal, 14)
-            HStack { Text("最近创作"); Spacer(); Text("\(store.generations.count)").monospacedDigit() }
+            Text("最近创作")
                 .font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.muted)
                 .padding(.horizontal, 24).padding(.top, 24).padding(.bottom, 10)
             ScrollView {
