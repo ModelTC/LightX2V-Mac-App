@@ -2,12 +2,25 @@ import AppKit
 import SwiftUI
 import LightX2VCore
 
+enum GenerationModel: String, CaseIterable, Identifiable {
+    case qwenImage21
+
+    var id: String { rawValue }
+    var title: String {
+        switch self { case .qwenImage21: return "Qwen-Image-2.1" }
+    }
+    var detail: String {
+        switch self { case .qwenImage21: return "Viggle v0.3 · BF16" }
+    }
+}
+
 @MainActor
 final class AppStore: ObservableObject {
     @Published var settings: AppSettings
     @Published var generations: [Generation]
     @Published var selectedID: UUID? { didSet { loadSelectedLog() } }
     @Published var prompt = ""
+    @Published var selectedModel: GenerationModel = .qwenImage21
     @Published var width = 1024
     @Published var height = 1024
     @Published var seedText = "42"

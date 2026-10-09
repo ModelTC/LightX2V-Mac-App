@@ -72,7 +72,6 @@ struct WorkspaceView: View {
             Text("/").foregroundStyle(Palette.muted.opacity(0.5))
             Text(store.selected == nil ? "新建创作" : "图像生成").fontWeight(.medium)
             Spacer()
-            Text("Qwen-Image-2.1").font(.system(size: 11, weight: .medium)).foregroundStyle(Palette.muted)
             IconButton(symbol: "terminal", label: "显示运行日志", active: store.showLogs) { store.showLogs.toggle() }
             IconButton(symbol: "sidebar.right", label: "显示生成参数", active: store.showInspector) { store.showInspector.toggle() }
         }.font(.system(size: 12)).padding(.horizontal, 24).frame(height: 58).padding(.top, 28)
@@ -182,7 +181,7 @@ struct WelcomeView: View {
                     Text("用文字描绘灵感，交给你的 Mac 来实现。").font(.system(size: 13)).foregroundStyle(Palette.muted).padding(.top, 12)
                     HStack(spacing: 7) {
                         Image(systemName: "lock.shield").font(.system(size: 10))
-                        Text("本地运行"); Text("·"); Text("Qwen-Image-2.1"); Text("·"); Text("6 步生成")
+                        Text("本地运行"); Text("·"); Text(store.selectedModel.title); Text("·"); Text("6 步生成")
                     }.font(.system(size: 10)).foregroundStyle(Palette.muted.opacity(0.85)).padding(.top, 16)
                     HStack(spacing: 10) {
                         ForEach(examples, id: \.0) { item in
@@ -215,8 +214,7 @@ struct ComposerView: View {
                         .accessibilityLabel("图像提示词")
                 }
                 HStack(spacing: 7) {
-                    Image(systemName: "photo.badge.plus").font(.system(size: 12)).foregroundStyle(Palette.muted)
-                    Text("文生图").font(.system(size: 11, weight: .medium))
+                    ModelSelector()
                     Text("·").foregroundStyle(Palette.muted)
                     Text("\(store.width) × \(store.height)").font(.system(size: 11)).foregroundStyle(Palette.muted).monospacedDigit()
                     Spacer()
@@ -242,6 +240,35 @@ struct ComposerView: View {
                 Text("⌘ ↵ 生成").font(.system(size: 10))
             }.font(.system(size: 10)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
         }.frame(maxWidth: 850)
+    }
+}
+
+struct ModelSelector: View {
+    @EnvironmentObject var store: AppStore
+
+    var body: some View {
+        Menu {
+            Picker("模型", selection: $store.selectedModel) {
+                ForEach(GenerationModel.allCases) { model in
+                    Text(model.title).tag(model)
+                }
+            }.pickerStyle(.inline)
+            Text(store.selectedModel.detail)
+            Divider()
+            Button("模型设置…") { store.showSettings = true }
+        } label: {
+            Label(store.selectedModel.title, systemImage: "cube.transparent")
+        }
+        .font(.system(size: 11, weight: .medium))
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.visible)
+        .fixedSize()
+        .padding(.horizontal, 8).frame(height: 30)
+        .background(Palette.sidebar.opacity(0.6), in: RoundedRectangle(cornerRadius: 7))
+        .disabled(store.busy)
+        .help("选择生成模型 · \(store.selectedModel.detail)")
+        .accessibilityLabel("选择模型")
+        .accessibilityValue(store.selectedModel.title)
     }
 }
 

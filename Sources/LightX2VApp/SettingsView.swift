@@ -12,17 +12,6 @@ struct InspectorView: View {
             Rectangle().fill(Palette.line).frame(height: 1).padding(.horizontal, -20)
             ScrollView {
                 VStack(alignment: .leading, spacing: 25) {
-                    VStack(alignment: .leading, spacing: 11) {
-                        sectionLabel("模型")
-                        HStack(spacing: 10) {
-                            Image(systemName: "cube.transparent").font(.system(size: 22, weight: .light)).foregroundStyle(Palette.accent)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Qwen-Image-2.1").font(.system(size: 12, weight: .medium))
-                                Text("Viggle v0.3 · BF16").font(.system(size: 10)).foregroundStyle(Palette.muted)
-                            }
-                        }.padding(12).frame(maxWidth: .infinity, alignment: .leading).background(.white, in: RoundedRectangle(cornerRadius: 10))
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line, lineWidth: 1))
-                    }
                     VStack(alignment: .leading, spacing: 12) {
                         sectionLabel("画面尺寸")
                         HStack(spacing: 5) {
