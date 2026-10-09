@@ -20,7 +20,9 @@ final class AppStore: ObservableObject {
     @Published var selectedID: UUID? { didSet { loadSelectedLog() } }
     @Published var prompt = ""
     @Published var isComposingPrompt = false
-    @Published var selectedModel: GenerationModel = .qwenImage21
+    @Published private(set) var selectedModel: GenerationModel?
+    @Published var modelPreparationExpanded = false
+    @Published var generationParametersExpanded = false
     @Published var generationSize = GenerationSize()
     @Published var isRunning = false
     @Published var isChecking = false
@@ -58,7 +60,7 @@ final class AppStore: ObservableObject {
     var hasUnsavedModelSettings: Bool { modelDirectory != settings.model || modelConfig != settings.config }
     var width: Int { generationSize.dimensions.width }
     var height: Int { generationSize.dimensions.height }
-    var canGenerate: Bool { !needsGeneralSetup && !busy && !isComposingPrompt && !hasUnsavedModelSettings && generationSize.dimensions.isValid && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var canGenerate: Bool { selectedModel != nil && !needsGeneralSetup && !busy && !isComposingPrompt && !hasUnsavedModelSettings && generationSize.dimensions.isValid && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var bridgePath: String {
         (Bundle.main.url(forResource: "bridge", withExtension: "py")
          ?? Bundle.module.url(forResource: "bridge", withExtension: "py")!).path
@@ -95,6 +97,16 @@ final class AppStore: ObservableObject {
     func newGeneration() { selectedID = nil; prompt = ""; showLogs = false; generationSize = GenerationSize() }
 
     func usePrompt(_ value: String) { selectedID = nil; prompt = value }
+
+    func selectModel(_ model: GenerationModel) {
+        guard !busy else { return }
+        let changed = selectedModel != model
+        selectedModel = model
+        showInspector = true
+        modelPreparationExpanded = true
+        generationParametersExpanded = true
+        if changed { environmentReady = false; checkEnvironment() }
+    }
 
     func reuse(_ generation: Generation) {
         prompt = generation.request.prompt
@@ -141,6 +153,7 @@ final class AppStore: ObservableObject {
     }
 
     func applyModelSettings() {
+        guard selectedModel != nil else { return }
         var updated = settings
         updated.model = modelDirectory
         updated.config = modelConfig
@@ -154,6 +167,8 @@ final class AppStore: ObservableObject {
 
     func showModelPreparation() {
         showInspector = true
+        guard selectedModel != nil else { return }
+        modelPreparationExpanded = true
         modelPreparationFocus += 1
     }
 
@@ -165,6 +180,11 @@ final class AppStore: ObservableObject {
 
     func checkEnvironment() {
         guard !busy else { return }
+        guard selectedModel != nil else {
+            environmentReady = false
+            environmentMessage = "请先选择模型。"
+            return
+        }
         guard !needsGeneralSetup else {
             environmentMessage = "请先完成通用设置。"
             return
@@ -214,6 +234,7 @@ final class AppStore: ObservableObject {
 
     func generate() {
         guard !busy, !isComposingPrompt else { return }
+        guard selectedModel != nil else { errorMessage = "请先选择模型。"; return }
         guard !needsGeneralSetup else { showSettings = true; return }
         guard !hasUnsavedModelSettings else {
             showModelPreparation()

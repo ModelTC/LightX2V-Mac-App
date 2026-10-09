@@ -4,25 +4,60 @@ import LightX2VCore
 
 struct InspectorView: View {
     @EnvironmentObject var store: AppStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        HStack { Text("模型准备").font(.system(size: 12, weight: .semibold)); Spacer(); Image(systemName: "cube.transparent").foregroundStyle(Palette.muted) }
-                            .frame(height: 58).padding(.top, 28).id("model-preparation")
-                        Rectangle().fill(Palette.line).frame(height: 1).padding(.horizontal, -20)
-                        ModelPreparationView().padding(.vertical, 20)
-                        Rectangle().fill(Palette.line).frame(height: 1).padding(.horizontal, -20)
-                        HStack { Text("生成参数").font(.system(size: 12, weight: .semibold)); Spacer(); Image(systemName: "slider.horizontal.3").foregroundStyle(Palette.muted) }
-                            .padding(.top, 22).padding(.bottom, 20)
-                        GenerationParametersView().padding(.bottom, 23)
+                        sectionHeader("模型准备", symbol: "cube.transparent", expanded: $store.modelPreparationExpanded)
+                            .padding(.top, 28).id("model-preparation")
+                        separator
+                        if store.selectedModel != nil && store.modelPreparationExpanded {
+                            ModelPreparationView().padding(.vertical, 20)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                            separator
+                        }
+                        sectionHeader("生成参数", symbol: "slider.horizontal.3", expanded: $store.generationParametersExpanded)
+                        if store.selectedModel != nil && store.generationParametersExpanded {
+                            GenerationParametersView().padding(.bottom, 23)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                        } else {
+                            separator
+                        }
                     }.subtleScrollbars()
                 }.onChange(of: store.modelPreparationFocus) { _, _ in
-                    withAnimation { proxy.scrollTo("model-preparation", anchor: .top) }
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
+                        proxy.scrollTo("model-preparation", anchor: .top)
+                    }
                 }
             }
         }.padding(.horizontal, 20).background(Palette.inspector)
+    }
+
+    private var separator: some View {
+        Rectangle().fill(Palette.line).frame(height: 1).padding(.horizontal, -20)
+    }
+
+    private func sectionHeader(_ title: String, symbol: String, expanded: Binding<Bool>) -> some View {
+        Button {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
+                expanded.wrappedValue.toggle()
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Text(title).font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Image(systemName: symbol).foregroundStyle(Palette.muted)
+                Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
+                    .rotationEffect(.degrees(expanded.wrappedValue ? 90 : 0))
+                    .foregroundStyle(Palette.muted)
+            }.frame(height: 58).contentShape(Rectangle())
+        }
+        .buttonStyle(HoverButtonStyle(radius: 8))
+        .disabled(store.selectedModel == nil)
+        .accessibilityLabel(title)
+        .accessibilityValue(expanded.wrappedValue ? "已展开" : "已收起")
     }
 }
 

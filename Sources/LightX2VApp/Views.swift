@@ -56,7 +56,6 @@ struct WorkspaceView: View {
         .alert("LightX2V APP", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
             Button("好") { store.errorMessage = nil }
         } message: { Text(store.errorMessage ?? "") }
-        .task { store.checkEnvironment() }
     }
 
     private var toolbar: some View {
@@ -97,7 +96,7 @@ struct SidebarView: View {
                     if store.generations.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("灵感从这里开始").font(.system(size: 12))
-                            Text("生成的图片会保存在这里").font(.system(size: 11)).foregroundStyle(Palette.muted)
+                            Text("生成的作品会保存在这里").font(.system(size: 11)).foregroundStyle(Palette.muted)
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24).padding(.top, 18)
                     }
                     ForEach(store.generations) { job in
@@ -138,7 +137,7 @@ struct SidebarView: View {
                     Text("本机推理").font(.system(size: 12, weight: .medium))
                     HStack(spacing: 4) {
                         Circle().fill(store.environmentReady ? Palette.green : Palette.muted).frame(width: 5, height: 5)
-                        Text(store.isChecking ? "检查环境中" : store.environmentReady ? MacHardware.sidebarDescription : "需要检查环境")
+                        Text(store.selectedModel == nil ? "请选择模型" : store.isChecking ? "检查环境中" : store.environmentReady ? MacHardware.sidebarDescription : "需要检查环境")
                             .font(.system(size: 9)).foregroundStyle(Palette.muted)
                     }
                 }
@@ -173,7 +172,10 @@ struct WelcomeView: View {
                     Text("用文字描绘灵感，交给你的 Mac 来实现。").font(.system(size: 13)).foregroundStyle(Palette.muted).padding(.top, 12)
                     HStack(spacing: 7) {
                         Image(systemName: "lock.shield").font(.system(size: 10))
-                        Text("本地运行"); Text("·"); Text(store.selectedModel.title); Text("·"); Text("6 步生成")
+                        Text("本地运行")
+                        if let model = store.selectedModel {
+                            Text("·"); Text(model.title); Text("·"); Text("6 步生成")
+                        }
                     }.font(.system(size: 10)).foregroundStyle(Palette.muted).padding(.top, 16)
                     HStack(spacing: 10) {
                         ForEach(examples, id: \.0) { item in
@@ -234,16 +236,25 @@ struct ComposerView: View {
 
 struct ModelSelector: View {
     @EnvironmentObject var store: AppStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Menu {
-            Picker("模型", selection: $store.selectedModel) {
-                ForEach(GenerationModel.allCases) { model in
-                    Text(model.title).tag(model)
+            ForEach(GenerationModel.allCases) { model in
+                Button {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
+                        store.selectModel(model)
+                    }
+                } label: {
+                    if store.selectedModel == model {
+                        Label(model.title, systemImage: "checkmark")
+                    } else {
+                        Text(model.title)
+                    }
                 }
-            }.pickerStyle(.inline)
+            }
         } label: {
-            Label(store.selectedModel.title, systemImage: "cube.transparent")
+            Label(store.selectedModel?.title ?? "选择模型", systemImage: "cube.transparent")
         }
         .font(.system(size: 11, weight: .medium))
         .menuStyle(.borderlessButton)
@@ -255,7 +266,7 @@ struct ModelSelector: View {
         .disabled(store.busy)
         .help("选择生成模型")
         .accessibilityLabel("选择模型")
-        .accessibilityValue(store.selectedModel.title)
+        .accessibilityValue(store.selectedModel?.title ?? "未选择")
     }
 }
 
