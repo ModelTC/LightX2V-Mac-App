@@ -53,6 +53,8 @@ private struct AspectRatioButton: View {
     let resolution: ImageResolution
     let selected: Bool
     let action: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var enabled
     @State private var hovered = false
     @FocusState private var focused: Bool
 
@@ -84,8 +86,11 @@ private struct AspectRatioButton: View {
             .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain).focusable().focusEffectDisabled().focused($focused)
-        .onKeyPress(.space) { action(); return .handled }
-        .onHover { hovered = $0 }
+        .onKeyPress(.space) { guard enabled else { return .ignored }; action(); return .handled }
+        .onHover { hovered = $0 && enabled }
+        .onChange(of: enabled) { _, value in if !value { hovered = false } }
+        .animation(InteractionMotion.hover(reduced: reduceMotion), value: hovered)
+        .animation(InteractionMotion.hover(reduced: reduceMotion), value: selected)
         .help("\(resolution.rawValue) · \(dimensions.width) × \(dimensions.height) 像素")
         .accessibilityLabel("画面比例 \(ratio.rawValue)")
         .accessibilityValue("\(dimensions.width) × \(dimensions.height) 像素")

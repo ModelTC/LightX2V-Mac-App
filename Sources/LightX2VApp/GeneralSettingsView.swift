@@ -99,10 +99,11 @@ struct SettingsView: View {
                         .disabled(store.isPreparingWorkspace)
                 }
                 Button(store.needsGeneralSetup ? "保存并开始" : "保存设置") { save() }
-                    .buttonStyle(.borderedProminent).tint(Palette.button)
+                    .buttonStyle(SettingsActionStyle(prominent: true))
                     .keyboardShortcut(.defaultAction).disabled(store.busy || !settings.hasGeneralPaths)
             }.padding(.horizontal, 26).padding(.vertical, 18)
         }.frame(width: 660).background(Palette.canvas).foregroundStyle(Palette.ink)
+            .buttonStyle(SettingsActionStyle())
             .onChange(of: settings) { _, _ in saveError = nil }
             .onDisappear { store.setupTask?.cancel() }
             .sheet(isPresented: $showEnvironments, onDismiss: { if searching { store.setupTask?.cancel() } }) {
@@ -125,7 +126,8 @@ struct SettingsView: View {
                 if panel.runModal() == .OK, let url = panel.url { value.wrappedValue = url.path }
             }.font(.system(size: 11)).accessibilityLabel("选择\(title)")
         }.padding(10).background(Palette.surface, in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line, lineWidth: 1)).disabled(store.busy)
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line, lineWidth: 1))
+            .hoverSurface().disabled(store.busy)
     }
 
     private var environmentPicker: some View {
@@ -172,7 +174,7 @@ struct SettingsView: View {
                             }.padding(13).frame(maxWidth: .infinity, alignment: .leading)
                                 .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10))
                                 .contentShape(RoundedRectangle(cornerRadius: 10))
-                        }.buttonStyle(EnvironmentRowButtonStyle()).disabled(!environment.mpsAvailable).help(environment.detail)
+                        }.buttonStyle(HoverButtonStyle(radius: 10, border: true, dimsWhenDisabled: false)).disabled(!environment.mpsAvailable).help(environment.detail)
                     }
                 }.subtleScrollbars()
             }.frame(height: 290)
@@ -186,6 +188,7 @@ struct SettingsView: View {
                 Button("返回") { store.setupTask?.cancel(); showEnvironments = false }.keyboardShortcut(.cancelAction)
             }
         }.padding(24).frame(width: 610).background(Palette.canvas).foregroundStyle(Palette.ink)
+            .buttonStyle(SettingsActionStyle())
     }
 
     private func normalized(_ value: String) -> String {
@@ -258,11 +261,5 @@ private struct SettingsSection<Content: View>: View {
             }
             content
         }
-    }
-}
-
-private struct EnvironmentRowButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label.opacity(configuration.isPressed ? 0.75 : 1)
     }
 }

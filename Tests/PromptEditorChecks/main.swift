@@ -167,3 +167,74 @@ for horizontal in [false, true] {
     check(!scroller.hovered, "\(name): removing scrollbar clears hover and detaches observers")
 }
 print("Scrollbar hover checks passed")
+
+// The same native boundaries used behind SwiftUI path fields. No visible window
+// or OS input injection is needed to check cursor ownership at actual hit targets.
+let form = hoverWindow.contentView!
+let field = NSTextField(frame: NSRect(x: 20, y: 220, width: 150, height: 24))
+let boundary = EditingBoundaryView(frame: field.frame)
+form.addSubview(boundary); form.addSubview(field)
+boundary.isEditing = true
+let secondField = NSTextField(frame: NSRect(x: 20, y: 165, width: 150, height: 24))
+let secondBoundary = EditingBoundaryView(frame: secondField.frame)
+form.addSubview(secondBoundary); form.addSubview(secondField)
+let choose = NSButton(frame: NSRect(x: 185, y: 220, width: 90, height: 24))
+form.addSubview(choose)
+func cursorAt(_ point: NSPoint, type: NSEvent.EventType = .mouseMoved) -> NSCursor? {
+    boundary.cursor(for: pointerEvent(point, type: type))
+}
+let inputPoint = NSPoint(x: 50, y: 232)
+check(cursorAt(inputPoint) === NSCursor.iBeam, "cursor: path input uses I-beam")
+for (name, point) in [("left", NSPoint(x: 19, y: 232)), ("right", NSPoint(x: 171, y: 232)),
+                       ("top", NSPoint(x: 50, y: 245)), ("bottom", NSPoint(x: 50, y: 219))] {
+    NSCursor.iBeam.set() // Model the stale cursor left by AppKit's field editor.
+    cursorAt(point)?.set()
+    check(NSCursor.current === NSCursor.arrow, "cursor: leaving \(name) edge restores arrow")
+}
+check(cursorAt(NSPoint(x: 220, y: 232)) === NSCursor.arrow, "cursor: adjacent choose button uses arrow")
+choose.isEnabled = false
+check(cursorAt(NSPoint(x: 220, y: 232)) === NSCursor.arrow, "cursor: disabled button still uses arrow")
+check(cursorAt(NSPoint(x: 290, y: 110)) === NSCursor.arrow, "cursor: blank form area uses arrow")
+check(cursorAt(NSPoint(x: 50, y: 177)) === NSCursor.iBeam, "cursor: moving directly into another path input keeps I-beam")
+secondBoundary.isInputEnabled = false; secondField.isEnabled = false
+check(cursorAt(NSPoint(x: 50, y: 177)) === NSCursor.arrow, "cursor: disabled path input uses arrow")
+secondBoundary.isInputEnabled = true; secondField.isEnabled = true
+secondBoundary.isHidden = true; secondField.isHidden = true
+check(cursorAt(NSPoint(x: 50, y: 177)) === NSCursor.arrow, "cursor: hidden path input cannot claim cursor")
+secondBoundary.isHidden = false; secondField.isHidden = false
+check(cursorAt(NSPoint(x: 220, y: 232), type: .leftMouseDragged) == nil, "cursor: text selection dragging is left to AppKit")
+check(cursorAt(NSPoint(x: 220, y: 232), type: .leftMouseUp) === NSCursor.arrow, "cursor: releasing outside input restores arrow")
+check(cursorAt(inputPoint, type: .leftMouseUp) === NSCursor.iBeam, "cursor: releasing inside input keeps I-beam")
+check(cursorAt(NSPoint(x: -1, y: 232)) == nil, "cursor: outside window is left to the destination application")
+check(boundary.cursor(for: pointerEvent(inputPoint, in: otherWindow)) == nil, "cursor: other windows and native panels are not overridden")
+let focusedBefore = hoverWindow.firstResponder
+for _ in 0..<30 { _ = cursorAt(inputPoint); _ = cursorAt(NSPoint(x: 220, y: 232)) }
+check(hoverWindow.firstResponder === focusedBefore, "cursor: repeated pointer crossings never change keyboard focus")
+
+let clipped = NSScrollView(frame: NSRect(x: 20, y: 40, width: 250, height: 80))
+let document = NSView(frame: NSRect(x: 0, y: 0, width: 250, height: 300))
+clipped.documentView = document; form.addSubview(clipped)
+let clippedInput = EditingBoundaryView(frame: NSRect(x: 0, y: 0, width: 180, height: 200))
+document.addSubview(clippedInput)
+let clippedPoint = clipped.contentView.convert(NSPoint(x: 20, y: 20), to: nil)
+check(cursorAt(clippedPoint) === NSCursor.iBeam, "cursor: visible part of a scrolling input keeps I-beam")
+check(cursorAt(NSPoint(x: 40, y: 130)) === NSCursor.arrow, "cursor: clipped input cannot extend its cursor into surrounding space")
+clipped.contentView.scroll(to: NSPoint(x: 0, y: 220))
+check(cursorAt(clippedPoint) === NSCursor.arrow, "cursor: scrolling an input out of view releases cursor ownership")
+clipped.removeFromSuperview()
+scroll.frame = NSRect(x: 20, y: 40, width: 250, height: 80)
+form.addSubview(scroll); scroll.tile(); scroll.updateTextLayout()
+let promptPoint = editor.convert(NSPoint(x: 20, y: 10), to: nil)
+check(cursorAt(promptPoint) === NSCursor.iBeam, "cursor: native prompt editor keeps I-beam after leaving path input")
+check(cursorAt(NSPoint(x: 40, y: 30)) === NSCursor.arrow, "cursor: space below prompt is arrow")
+scroll.removeFromSuperview()
+let selectable = NSTextView(frame: NSRect(x: 20, y: 40, width: 250, height: 80))
+selectable.isEditable = false; selectable.isSelectable = true; form.addSubview(selectable)
+check(cursorAt(NSPoint(x: 40, y: 60)) === NSCursor.iBeam, "cursor: selectable logs retain their native text cursor")
+selectable.isSelectable = false
+check(cursorAt(NSPoint(x: 40, y: 60)) === NSCursor.arrow, "cursor: nonselectable text uses arrow")
+secondBoundary.removeFromSuperview(); secondField.removeFromSuperview()
+check(cursorAt(NSPoint(x: 50, y: 177)) === NSCursor.arrow, "cursor: detached input no longer claims cursor")
+boundary.removeFromSuperview()
+check(cursorAt(inputPoint) == nil, "cursor: detached observer does not modify cursor")
+print("Input cursor boundary checks passed")

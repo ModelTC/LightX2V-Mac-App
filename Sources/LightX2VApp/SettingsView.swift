@@ -83,7 +83,7 @@ struct ModelPreparationView: View {
                             }.padding(18).frame(width: 320)
                         }
                 }
-            }.font(.system(size: 10)).buttonStyle(.plain).foregroundStyle(Palette.muted)
+            }.font(.system(size: 10)).buttonStyle(HoverButtonStyle(radius: 6)).foregroundStyle(Palette.muted)
 
             if !store.isChecking && !store.environmentReady && !store.hasUnsavedModelSettings && store.environmentMessage != "尚未检查运行环境" {
                 Text(store.environmentMessage).font(.system(size: 10)).foregroundStyle(needsModelSelection ? Palette.muted : Palette.accent)
@@ -96,7 +96,7 @@ struct ModelPreparationView: View {
                     Text(store.isChecking ? "正在检查…" : store.hasUnsavedModelSettings ? "保存并检查" : "检查模型")
                 }
                 .font(.system(size: 11, weight: .medium)).frame(maxWidth: .infinity).frame(height: 26)
-            }.buttonStyle(.borderedProminent).tint(Palette.button).disabled(store.busy)
+            }.buttonStyle(SettingsActionStyle(prominent: true)).disabled(store.busy)
         }
     }
 }
@@ -126,7 +126,7 @@ private struct ModelResourceRow: View {
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
             }
-            .buttonStyle(.plain).accessibilityLabel("编辑\(title)：\(name)")
+            .buttonStyle(HoverButtonStyle(radius: 6)).accessibilityLabel("编辑\(title)：\(name)")
             .help("\(value)\n点击编辑完整路径")
             .popover(isPresented: $showsEditor, arrowEdge: .leading) {
                 VStack(alignment: .leading, spacing: 14) {
@@ -135,7 +135,7 @@ private struct ModelResourceRow: View {
                         Spacer()
                         Button("完成") { showsEditor = false }.keyboardShortcut(.defaultAction)
                     }
-                }.padding(18).frame(width: 420)
+                }.padding(18).frame(width: 420).buttonStyle(SettingsActionStyle())
             }
             Button {
                 let panel = NSOpenPanel()
@@ -146,7 +146,7 @@ private struct ModelResourceRow: View {
             } label: {
                 Image(systemName: "folder").font(.system(size: 12)).foregroundStyle(Palette.muted)
                     .frame(width: 28, height: 28).contentShape(RoundedRectangle(cornerRadius: 6))
-            }.buttonStyle(.plain).help("选择\(title)").accessibilityLabel("选择\(title)")
+            }.buttonStyle(HoverButtonStyle(radius: 6)).help("选择\(title)").accessibilityLabel("选择\(title)")
         }.padding(12)
     }
 }

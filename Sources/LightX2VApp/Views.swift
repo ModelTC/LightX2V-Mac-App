@@ -20,7 +20,7 @@ struct IconButton: View {
     var body: some View {
         Button(action: action) { Image(systemName: symbol).font(.system(size: 14)).frame(width: 30, height: 30)
                 .background(active ? Palette.selection : .clear, in: RoundedRectangle(cornerRadius: 7)) }
-            .buttonStyle(.plain).foregroundStyle(Palette.muted).help(label).accessibilityLabel(label)
+            .buttonStyle(HoverButtonStyle(radius: 7)).foregroundStyle(Palette.muted).help(label).accessibilityLabel(label)
     }
 }
 
@@ -88,7 +88,7 @@ struct SidebarView: View {
                     .font(.system(size: 13, weight: .medium)).padding(12)
                     .background(Palette.surface, in: RoundedRectangle(cornerRadius: 9))
                     .overlay(RoundedRectangle(cornerRadius: 9).stroke(Palette.line, lineWidth: 1))
-            }.buttonStyle(.plain).padding(.horizontal, 14)
+            }.buttonStyle(HoverButtonStyle(radius: 9, border: true)).padding(.horizontal, 14)
             HStack { Text("最近创作"); Spacer(); Text("\(store.generations.count)").monospacedDigit() }
                 .font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.muted)
                 .padding(.horizontal, 24).padding(.top, 24).padding(.bottom, 10)
@@ -115,7 +115,7 @@ struct SidebarView: View {
                                 Spacer(minLength: 0)
                             }.padding(11).frame(maxWidth: .infinity, alignment: .leading)
                                 .background(store.selectedID == job.id ? Palette.selection : .clear, in: RoundedRectangle(cornerRadius: 8))
-                        }.buttonStyle(.plain).padding(.horizontal, 10)
+                        }.buttonStyle(HoverButtonStyle()).padding(.horizontal, 10)
                             .contextMenu {
                                 Button("复用提示词和参数") { store.reuse(job) }
                                 Button("在 Finder 中显示") { store.reveal(job) }
@@ -129,7 +129,7 @@ struct SidebarView: View {
                 Button { store.selectedID = store.activeID } label: {
                     HStack { ProgressView().controlSize(.mini); Text("返回正在生成的图片").font(.system(size: 11)); Spacer() }
                         .padding(12).background(Palette.surface, in: RoundedRectangle(cornerRadius: 8))
-                }.buttonStyle(.plain).padding(12)
+                }.buttonStyle(HoverButtonStyle()).padding(12)
             }
             Rectangle().fill(Palette.line).frame(height: 1).padding(.horizontal, 18)
             HStack(spacing: 10) {
@@ -184,7 +184,7 @@ struct WelcomeView: View {
                                 }.padding(15).frame(maxWidth: .infinity, alignment: .leading)
                                     .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
                                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line, lineWidth: 1))
-                            }.buttonStyle(.plain).help(item.2)
+                            }.buttonStyle(HoverButtonStyle(radius: 12, border: true)).help(item.2)
                         }
                     }.frame(maxWidth: 470).padding(.top, 40)
                 }.frame(maxWidth: .infinity).frame(minHeight: geometry.size.height).padding(.horizontal, 32).subtleScrollbars()
@@ -210,13 +210,13 @@ struct ComposerView: View {
                         Button { store.stop() } label: {
                             HStack(spacing: 6) { Image(systemName: "stop.fill").font(.system(size: 9)); Text(store.isStopping ? "停止中" : "停止生成").font(.system(size: 11, weight: .medium)) }
                                 .foregroundStyle(Palette.onButton).padding(.horizontal, 12).frame(height: 32).background(Palette.button, in: Capsule())
-                        }.buttonStyle(.plain).disabled(store.isStopping)
+                        }.buttonStyle(HoverButtonStyle(radius: 16, bright: true)).disabled(store.isStopping)
                     } else {
                         Button { store.generate() } label: {
                             Image(systemName: "arrow.up").font(.system(size: 15, weight: .semibold))
                                 .foregroundStyle(store.canGenerate ? Palette.onButton : Palette.disabledInk).frame(width: 32, height: 32)
                                 .background(store.canGenerate ? Palette.button : Palette.disabledFill, in: Circle())
-                        }.buttonStyle(.plain).disabled(!store.canGenerate).keyboardShortcut(.return, modifiers: .command).help("生成图片 ⌘↵").accessibilityLabel("生成图片")
+                        }.buttonStyle(HoverButtonStyle(radius: 16, bright: true, dimsWhenDisabled: false)).disabled(!store.canGenerate).keyboardShortcut(.return, modifiers: .command).help("生成图片 ⌘↵").accessibilityLabel("生成图片")
                     }
                 }.onHover { inside in if inside { NSCursor.arrow.set() } }
             }.padding(14).background(Palette.surface, in: RoundedRectangle(cornerRadius: 17))
@@ -250,6 +250,7 @@ struct ModelSelector: View {
         .fixedSize()
         .padding(.horizontal, 8).frame(height: 30)
         .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 7))
+        .hoverSurface(radius: 7, border: false)
         .disabled(store.busy)
         .help("选择生成模型")
         .accessibilityLabel("选择模型")
@@ -325,7 +326,7 @@ struct GenerationView: View {
                                             .frame(width: 25, height: 4)
                                     }
                                 }
-                                Button("查看实时日志") { store.showLogs = true }.buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(Palette.muted)
+                                Button("查看实时日志") { store.showLogs = true }.buttonStyle(HoverButtonStyle()).font(.system(size: 11)).foregroundStyle(Palette.muted)
                             }.frame(maxWidth: .infinity).frame(height: 260)
                                 .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 12))
                                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line, style: StrokeStyle(lineWidth: 1, dash: [5])))
@@ -383,7 +384,7 @@ struct GenerationView: View {
             .help("更多操作").accessibilityLabel("图片更多操作")
         }
         .font(.system(size: 11, weight: .medium)).foregroundStyle(Palette.muted)
-        .buttonStyle(ImageActionButtonStyle())
+        .buttonStyle(HoverButtonStyle(radius: 6))
     }
 
     private func failure(_ message: String, symbol: String) -> some View {
@@ -394,21 +395,8 @@ struct GenerationView: View {
                 Button("复用参数重试") { store.reuse(job) }
                 Button("查看日志") { store.showLogs = true }
                 Button("打开任务文件夹") { store.reveal(job) }
-            }.buttonStyle(.plain).font(.system(size: 11))
+            }.buttonStyle(HoverButtonStyle()).font(.system(size: 11))
         }.padding(20).frame(maxWidth: .infinity, alignment: .leading).background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 12))
-    }
-}
-
-private struct ImageActionButtonStyle: ButtonStyle {
-    @State private var hovered = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(hovered ? Palette.ink : Palette.muted)
-            .background(configuration.isPressed ? Palette.selection : hovered ? Palette.hover : .clear,
-                        in: RoundedRectangle(cornerRadius: 6))
-            .contentShape(RoundedRectangle(cornerRadius: 6))
-            .onHover { hovered = $0 }
     }
 }
 

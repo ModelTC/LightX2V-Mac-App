@@ -59,7 +59,7 @@ jobs:
       - name: Check workspace setup and discovery
         run: swift run LightX2VSetupChecks
 
-      - name: Check prompt input and IME layout
+      - name: Check native input, cursors and scrollbars
         run: bash scripts/check-prompt-editor.sh
 
       - name: Run Python bridge integration tests
@@ -85,7 +85,7 @@ jobs:
             printf '[Download latest APP](%s)\n\n' "$DOWNLOAD_URL"
             printf -- '- Build commit: `%s`\n' "$GITHUB_SHA"
             printf -- '- Target: macOS 14+, arm64\n'
-            printf -- '- Tests: Swift core, native prompt editor and Python bridge checks passed\n'
+            printf -- '- Tests: Swift core, native input/cursor/scrollbar and Python bridge checks passed\n'
             printf -- '- Signing: ad-hoc (not notarized)\n'
             printf -- '- Retention: no expiry; only the latest successful APP package is kept\n'
             printf -- '- This stable URL always serves the latest package, including from older run summaries\n'
