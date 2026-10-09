@@ -201,6 +201,8 @@ final class AppStore: ObservableObject {
                 try process.start(python: settings.python, bridge: bridgePath, mode: "run", request: requestURL.path,
                                   onEvent: { [weak self] event in self?.receive(event, for: id) },
                                   onExit: { [weak self] code in self?.exited(code, for: id) })
+                // Clear only after launch succeeds; the submitted prompt remains in history.
+                prompt = ""
             } catch {
                 markFinished(id, status: .failed, message: error.localizedDescription)
                 isRunning = false; runner = nil; activeID = nil

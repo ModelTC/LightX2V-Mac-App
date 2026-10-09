@@ -83,7 +83,7 @@ private struct AspectRatioButton: View {
             }
             .contentShape(RoundedRectangle(cornerRadius: 8))
         }
-        .buttonStyle(.plain).focusable().focused($focused)
+        .buttonStyle(.plain).focusable().focusEffectDisabled().focused($focused)
         .onKeyPress(.space) { action(); return .handled }
         .onHover { hovered = $0 }
         .help("\(resolution.rawValue) · \(dimensions.width) × \(dimensions.height) 像素")

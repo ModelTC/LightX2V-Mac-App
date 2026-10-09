@@ -329,7 +329,7 @@ struct GenerationView: View {
                     if job.status == .completed {
                         if let image = NSImage(contentsOfFile: job.request.output) {
                             Image(nsImage: image).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: 470)
-                                .background(Checkerboard()).clipShape(RoundedRectangle(cornerRadius: 12))
+                                .background(Palette.sidebar.opacity(0.4)).clipShape(RoundedRectangle(cornerRadius: 12))
                                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line, lineWidth: 1))
                                 .onDrag { NSItemProvider(contentsOf: URL(fileURLWithPath: job.request.output)) ?? NSItemProvider() }
                                 .contextMenu { Button("复制图片") { store.copyImage(job) }; Button("另存为…") { store.export(job) }; Button("在 Finder 中显示") { store.reveal(job) } }
@@ -377,19 +377,6 @@ struct GenerationView: View {
                 Button("打开任务文件夹") { store.reveal(job) }
             }.buttonStyle(.plain).font(.system(size: 11))
         }.padding(20).frame(maxWidth: .infinity, alignment: .leading).background(.white, in: RoundedRectangle(cornerRadius: 12))
-    }
-}
-
-struct Checkerboard: View {
-    var body: some View {
-        Canvas { context, size in
-            let tile: CGFloat = 16
-            for row in 0...Int(size.height / tile) {
-                for col in 0...Int(size.width / tile) {
-                    context.fill(Path(CGRect(x: CGFloat(col) * tile, y: CGFloat(row) * tile, width: tile, height: tile)), with: .color((row + col) % 2 == 0 ? .white : Color(white: 0.95)))
-                }
-            }
-        }
     }
 }
 
