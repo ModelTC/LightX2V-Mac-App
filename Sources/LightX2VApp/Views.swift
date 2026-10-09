@@ -5,6 +5,7 @@ import LightX2VCore
 enum Palette {
     static let canvas = Color(red: 0.985, green: 0.981, blue: 0.971)
     static let sidebar = Color(red: 0.946, green: 0.941, blue: 0.925)
+    static let prompt = Color(red: 0.914, green: 0.937, blue: 0.913)
     static let ink = Color(red: 0.17, green: 0.18, blue: 0.17)
     static let muted = Color(red: 0.49, green: 0.50, blue: 0.47)
     static let line = Color.black.opacity(0.075)
@@ -276,17 +277,45 @@ struct ModelSelector: View {
     }
 }
 
+private struct PromptMessageView: View {
+    let prompt: String
+    let createdAt: Date
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            Spacer(minLength: 48)
+            VStack(alignment: .trailing, spacing: 7) {
+                Text(prompt)
+                    .font(.system(size: 14))
+                    .foregroundStyle(Palette.ink)
+                    .lineSpacing(5)
+                    .multilineTextAlignment(.leading)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 13)
+                    .background(Palette.prompt, in: UnevenRoundedRectangle(
+                        topLeadingRadius: 18, bottomLeadingRadius: 18,
+                        bottomTrailingRadius: 5, topTrailingRadius: 18, style: .continuous
+                    ))
+                Text(createdAt, style: .time)
+                    .font(.system(size: 10))
+                    .foregroundStyle(Palette.muted)
+                    .padding(.trailing, 4)
+            }
+            .frame(maxWidth: 620, alignment: .trailing)
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+}
+
 struct GenerationView: View {
     @EnvironmentObject var store: AppStore
     let job: Generation
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 23) {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack { Text("你").fontWeight(.semibold); Spacer(); Text(job.createdAt, style: .time).foregroundStyle(Palette.muted) }.font(.system(size: 11))
-                    Text(job.request.prompt).font(.system(size: 14)).lineSpacing(5).textSelection(.enabled)
-                }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Palette.sidebar.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
+                PromptMessageView(prompt: job.request.prompt, createdAt: job.createdAt)
                 VStack(alignment: .leading, spacing: 15) {
                     HStack(spacing: 9) {
                         BrandMark(size: 23)
