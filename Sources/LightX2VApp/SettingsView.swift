@@ -4,7 +4,6 @@ import LightX2VCore
 
 struct InspectorView: View {
     @EnvironmentObject var store: AppStore
-    private let presets = [("1:1", 1024, 1024), ("4:3", 1152, 864), ("3:4", 864, 1152), ("16:9", 1536, 864)]
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollViewReader { proxy in
@@ -17,57 +16,13 @@ struct InspectorView: View {
                         Rectangle().fill(Palette.line).frame(height: 1).padding(.horizontal, -20)
                         HStack { Text("生成参数").font(.system(size: 12, weight: .semibold)); Spacer(); Image(systemName: "slider.horizontal.3").foregroundStyle(Palette.muted) }
                             .padding(.top, 22).padding(.bottom, 20)
-                        VStack(alignment: .leading, spacing: 25) {
-                            VStack(alignment: .leading, spacing: 12) {
-                                sectionLabel("画面尺寸")
-                                HStack(spacing: 5) {
-                                    ForEach(presets, id: \.0) { preset in
-                                        Button {
-                                            store.width = preset.1
-                                            store.height = preset.2
-                                        } label: {
-                                            VStack(spacing: 7) {
-                                                RoundedRectangle(cornerRadius: 2).stroke(lineWidth: 1)
-                                                    .frame(width: preset.1 >= preset.2 ? 20 : 14, height: preset.1 > preset.2 ? 14 : 20).frame(height: 20)
-                                                Text(preset.0).font(.system(size: 9))
-                                            }.frame(maxWidth: .infinity).padding(.vertical, 10)
-                                                .foregroundStyle(isPreset(preset) ? Palette.ink : Palette.muted)
-                                                .background(isPreset(preset) ? Palette.sidebar : Color.white, in: RoundedRectangle(cornerRadius: 7))
-                                                .overlay(RoundedRectangle(cornerRadius: 7).stroke(isPreset(preset) ? Palette.ink.opacity(0.3) : Palette.line, lineWidth: 1))
-                                        }.buttonStyle(.plain)
-                                    }
-                                }
-                                HStack(spacing: 8) {
-                                    dimension("宽", value: $store.width)
-                                    Text("×").foregroundStyle(Palette.muted).padding(.top, 18)
-                                    dimension("高", value: $store.height)
-                                }
-                            }
-                            VStack(alignment: .leading, spacing: 12) {
-                                sectionLabel("随机种子")
-                                HStack {
-                                    TextField("42", text: $store.seedText).textFieldStyle(.plain).font(.system(size: 12, design: .monospaced)).disabled(store.randomSeed).accessibilityLabel("随机种子")
-                                    Button { store.seedText = String(Int64.random(in: 0...4294967295)) } label: { Image(systemName: "dice").foregroundStyle(Palette.muted) }.buttonStyle(.plain).help("随机选择一个种子").disabled(store.randomSeed)
-                                }.padding(10).background(.white, in: RoundedRectangle(cornerRadius: 7)).overlay(RoundedRectangle(cornerRadius: 7).stroke(Palette.line, lineWidth: 1))
-                                Toggle("每次使用随机种子", isOn: $store.randomSeed).toggleStyle(.switch).controlSize(.mini).font(.system(size: 11)).tint(Palette.ink)
-                            }
-                        }.padding(.bottom, 23)
+                        GenerationParametersView().padding(.bottom, 23)
                     }
                 }.onChange(of: store.modelPreparationFocus) { _, _ in
                     withAnimation { proxy.scrollTo("model-preparation", anchor: .top) }
                 }
             }
         }.padding(.horizontal, 20).background(Color(red: 0.972, green: 0.969, blue: 0.958))
-    }
-    private func isPreset(_ preset: (String, Int, Int)) -> Bool { store.width == preset.1 && store.height == preset.2 }
-    private func sectionLabel(_ title: String) -> some View { Text(title).font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.muted) }
-    private func dimension(_ name: String, value: Binding<Int>) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(name).font(.system(size: 10)).foregroundStyle(Palette.muted)
-            TextField(name, value: value, format: .number.grouping(.never)).textFieldStyle(.plain).font(.system(size: 12, design: .monospaced))
-                .padding(10).background(.white, in: RoundedRectangle(cornerRadius: 7))
-                .overlay(RoundedRectangle(cornerRadius: 7).stroke(Palette.line, lineWidth: 1)).accessibilityLabel(name == "宽" ? "图片宽度" : "图片高度")
-        }
     }
 }
 

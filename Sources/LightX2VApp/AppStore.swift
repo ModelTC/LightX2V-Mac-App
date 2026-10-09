@@ -23,8 +23,7 @@ final class AppStore: ObservableObject {
     @Published var selectedID: UUID? { didSet { loadSelectedLog() } }
     @Published var prompt = ""
     @Published var selectedModel: GenerationModel = .qwenImage21
-    @Published var width = 1024
-    @Published var height = 1024
+    @Published var generationSize = GenerationSize()
     @Published var seedText = "42"
     @Published var randomSeed = false
     @Published var search = ""
@@ -55,7 +54,15 @@ final class AppStore: ObservableObject {
     var selected: Generation? { generations.first { $0.id == selectedID } }
     var busy: Bool { isRunning || isChecking }
     var hasUnsavedModelSettings: Bool { modelDirectory != settings.model || modelConfig != settings.config }
-    var canGenerate: Bool { !busy && !hasUnsavedModelSettings && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var width: Int {
+        get { generationSize.dimensions.width }
+        set { generationSize.setDimensions(width: newValue, height: height) }
+    }
+    var height: Int {
+        get { generationSize.dimensions.height }
+        set { generationSize.setDimensions(width: width, height: newValue) }
+    }
+    var canGenerate: Bool { !busy && !hasUnsavedModelSettings && generationSize.dimensions.isValid && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var filteredGenerations: [Generation] {
         search.isEmpty ? generations : generations.filter { $0.request.prompt.localizedCaseInsensitiveContains(search) }
     }
@@ -92,13 +99,13 @@ final class AppStore: ObservableObject {
         catch { errorMessage = "无法保存应用状态：\(error.localizedDescription)" }
     }
 
-    func newGeneration() { selectedID = nil; prompt = ""; showLogs = false }
+    func newGeneration() { selectedID = nil; prompt = ""; showLogs = false; generationSize = GenerationSize() }
 
     func usePrompt(_ value: String) { selectedID = nil; prompt = value }
 
     func reuse(_ generation: Generation) {
         prompt = generation.request.prompt
-        width = generation.request.width; height = generation.request.height
+        generationSize = GenerationSize(width: generation.request.width, height: generation.request.height)
         seedText = String(generation.request.seed); randomSeed = false
         selectedID = nil
     }

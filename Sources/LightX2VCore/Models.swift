@@ -54,8 +54,8 @@ public struct InferenceRequest: Codable {
         guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, prompt.count <= 20000 else {
             throw AppError.message("请输入 1–20000 字的提示词。")
         }
-        guard (256...2048).contains(width), (256...2048).contains(height), width % 32 == 0, height % 32 == 0 else {
-            throw AppError.message("宽和高须为 256–2048 之间的 32 的倍数。")
+        guard ImageDimensions(width: width, height: height).isValid else {
+            throw AppError.message(ImageDimensions.validationMessage)
         }
         guard (0...4294967295).contains(seed) else { throw AppError.message("种子须介于 0 和 4294967295 之间。") }
         repository = settings.repository; model = settings.model; config = settings.config

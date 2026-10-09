@@ -52,7 +52,7 @@ struct WorkspaceView: View {
             }.frame(minWidth: 490).background(Palette.canvas)
             if store.showInspector {
                 Rectangle().fill(Palette.line).frame(width: 1)
-                InspectorView().frame(width: 250)
+                InspectorView().frame(width: 280)
             }
         }
         .foregroundStyle(Palette.ink)

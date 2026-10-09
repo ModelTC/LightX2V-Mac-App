@@ -112,6 +112,40 @@ class BridgeTests(unittest.TestCase):
         self.request_path.write_text(json.dumps(self.request))
         with self.assertRaises(ValueError): bridge.load_request(self.request_path)
 
+    def test_all_1k_and_2k_presets_reach_cli_in_height_width_order(self):
+        sizes = [(1024, 1024), (1184, 896), (896, 1184), (1248, 832),
+                 (832, 1248), (1376, 768), (768, 1376), (2048, 2048),
+                 (2400, 1792), (1792, 2400), (2528, 1696), (1696, 2528),
+                 (2752, 1536), (1536, 2752)]
+        for width, height in sizes:
+            with self.subTest(width=width, height=height):
+                self.request.update(width=width, height=height)
+                args = bridge.arguments(self.request, self.config)
+                index = args.index('--size')
+                self.assertEqual(args[index + 1:index + 3], [str(height), str(width)])
+
+    def test_2k_landscape_and_portrait_complete_with_exact_dimensions(self):
+        for width, height in [(2752, 1536), (1536, 2752)]:
+            with self.subTest(width=width, height=height):
+                output = self.root / f'run-{width}-{height}/image.png'
+                self.request.update(width=width, height=height, output=str(output))
+                child = self.start()
+                out, err = child.communicate(timeout=15)
+                self.assertEqual(child.returncode, 0, err + out)
+                self.assertEqual(json.loads(out.splitlines()[-1])['status'], 'completed')
+                received = json.loads((output.parent / 'received.json').read_text())
+                self.assertEqual(received['size'], [height, width])
+                bridge.validate_image(output, width, height)
+                self.assertEqual(json.loads((output.parent / 'config.json').read_text()), self.cfg)
+
+    def test_dimension_boundaries_and_types_are_validated(self):
+        for value in (224, 2784, 1200, 1024.0, True, '1024'):
+            for axis in ('width', 'height'):
+                with self.subTest(value=value, axis=axis):
+                    request = {**self.request, axis: value}
+                    with self.assertRaises(ValueError):
+                        bridge.arguments(request, self.config)
+
     def test_existing_output_is_never_overwritten(self):
         output=Path(self.request['output']); output.parent.mkdir(); output.write_bytes(b'keep me')
         child=self.start(); out,err=child.communicate(timeout=15)

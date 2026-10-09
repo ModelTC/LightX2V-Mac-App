@@ -65,8 +65,8 @@ def arguments(request, config_path):
         raise ValueError("请输入 1–20000 字的提示词")
     for key in ("width", "height"):
         n = request.get(key)
-        if type(n) is not int or not 256 <= n <= 2048 or n % 32:
-            raise ValueError("尺寸必须是 256–2048 之间的 32 的倍数")
+        if type(n) is not int or not 256 <= n <= 2752 or n % 32:
+            raise ValueError("尺寸必须是 256–2752 之间的 32 的倍数")
     seed = request.get("seed")
     if type(seed) is not int or not 0 <= seed <= 4294967295:
         raise ValueError("种子必须介于 0 和 4294967295 之间")
