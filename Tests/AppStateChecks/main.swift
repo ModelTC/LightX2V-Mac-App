@@ -41,6 +41,10 @@ struct AppStateChecks {
         let image = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 40, pixelsHigh: 30, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 160, bitsPerPixel: 32)!
         let original = root.appendingPathComponent("原图, 测试.png")
         try image.representation(using: .png, properties: [:])!.write(to: original)
+        let preview = await LocalImagePreview.load(original.path, maximumDimension: 20)
+        try check(preview?.size == NSSize(width: 20, height: 15), "background preview preserves aspect ratio and limits decode size")
+        let missingPreview = await LocalImagePreview.load(root.appendingPathComponent("missing.png").path, maximumDimension: 180)
+        try check(missingPreview == nil, "missing preview fails without blocking app state")
         try check(store.selectedModel == nil && !store.modelPreparationExpanded && !store.generationParametersExpanded, "launch requires model selection with folded inspector")
         store.addInputImages([original])
         try check(!store.isImportingImages && store.inputImages.isEmpty, "no model rejects attachment import")

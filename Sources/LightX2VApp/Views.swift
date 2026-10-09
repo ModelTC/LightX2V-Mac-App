@@ -344,10 +344,11 @@ private struct PromptMessageView: View {
 struct GenerationView: View {
     @EnvironmentObject var store: AppStore
     let job: Generation
+    @State private var image: NSImage?
+    @State private var loadingImage = true
     var body: some View {
         GeometryReader { geometry in
             ScrollView {
-                let image = job.status == .completed ? NSImage(contentsOfFile: job.request.output) : nil
                 let previewHeight = min(500, max(280, geometry.size.height - 235))
                 // Keep the header and actions attached to the actual image width.
                 let replyWidth = image.map { min(620, max(220, previewHeight * $0.size.width / max(1, $0.size.height))) } ?? 620
@@ -362,8 +363,10 @@ struct GenerationView: View {
                                     .onDrag { NSItemProvider(object: URL(fileURLWithPath: job.request.output) as NSURL) }
                                     .contextMenu { Button("复制图片") { store.copyImage(job) }; Button("另存为…") { store.export(job) }; Button("在 Finder 中显示") { store.reveal(job) } }
                                 imageActions
+                            } else if loadingImage {
+                                ProgressView("正在读取图片…").controlSize(.small).padding(.vertical, 30)
                             } else {
-                                failure("图片文件已移动或删除。", symbol: "photo.badge.exclamationmark")
+                                failure("无法读取图片，请检查文件位置和访问权限。", symbol: "photo.badge.exclamationmark")
                             }
                         } else if job.status == .running {
                             VStack(spacing: 17) {
@@ -390,6 +393,14 @@ struct GenerationView: View {
                 .padding(.horizontal, 28).padding(.vertical, 24)
                 .frame(maxWidth: 800).frame(maxWidth: .infinity).subtleScrollbars()
             }
+        }.task(id: job.status == .completed ? job.request.output : nil) {
+            image = nil
+            loadingImage = true
+            guard job.status == .completed else { return }
+            let loaded = await LocalImagePreview.load(job.request.output, maximumDimension: 1800)
+            guard !Task.isCancelled else { return }
+            image = loaded
+            loadingImage = false
         }
     }
 

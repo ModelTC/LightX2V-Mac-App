@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-import ImageIO
 import LightX2VCore
 
 struct InputImageStrip: View {
@@ -51,13 +50,9 @@ private struct InputThumbnail: View {
             if let thumbnail { Image(nsImage: thumbnail).resizable().scaledToFill() }
             else { Image(systemName: "photo").foregroundStyle(Palette.muted) }
         }.task(id: image.path) {
-            let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
-                                           kCGImageSourceCreateThumbnailWithTransform: true,
-                                           kCGImageSourceThumbnailMaxPixelSize: 180]
-            if let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: image.path) as CFURL, nil),
-               let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) {
-                thumbnail = NSImage(cgImage: cgImage, size: .zero)
-            } else { thumbnail = nil }
+            thumbnail = nil
+            let loaded = await LocalImagePreview.load(image.path, maximumDimension: 180)
+            if !Task.isCancelled { thumbnail = loaded }
         }
     }
 }

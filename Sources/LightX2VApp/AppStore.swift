@@ -373,11 +373,9 @@ final class AppStore: ObservableObject {
             if selectedID == id { logs = activeLog }
         case "done":
             receivedDone = true
-            var status = GenerationStatus(rawValue: event["status"] as? String ?? "failed") ?? .failed
-            var message = event["message"] as? String
-            if status == .completed, let job = generations.first(where: { $0.id == id }), NSImage(contentsOfFile: job.request.output) == nil {
-                status = .failed; message = "推理已退出，但输出图片无法读取。"
-            }
+            // The bridge validates PNG decoding and dimensions before completion.
+            let status = GenerationStatus(rawValue: event["status"] as? String ?? "failed") ?? .failed
+            let message = event["message"] as? String
             markFinished(id, status: status, message: message, duration: event["duration"] as? Double)
         default: break
         }
