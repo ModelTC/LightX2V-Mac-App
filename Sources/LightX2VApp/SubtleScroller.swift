@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Draw only the thumb; AppKit retains scrolling, dragging and accessibility.
 final class SubtleScroller: NSScroller {
-    private var hovered = false
+    private(set) var hovered = false
     private var dragging = false
     private var pointerArea: NSTrackingArea?
 
@@ -14,6 +14,9 @@ final class SubtleScroller: NSScroller {
 
     override func drawKnob() {
         guard isEnabled, knobProportion < 1 else { return }
+        // Overlay scrollers can change their tracking regions while the pointer
+        // is stationary. Resolve the actual position again before painting.
+        if let window { refreshHover(at: window.mouseLocationOutsideOfEventStream) }
         var thumb = rect(for: .knob)
         guard !thumb.isEmpty else { return }
         // A six-point visual thumb inside the full native drag target.
@@ -29,21 +32,46 @@ final class SubtleScroller: NSScroller {
     }
 
     override func updateTrackingAreas() {
-        if let pointerArea { removeTrackingArea(pointerArea) }
         super.updateTrackingAreas()
-        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
-        addTrackingArea(area)
-        pointerArea = area
+        // inVisibleRect follows resizing itself. Replacing this area on every
+        // layout can send an exit for the old area while the mouse is still here.
+        if pointerArea == nil {
+            let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self)
+            addTrackingArea(area)
+            pointerArea = area
+        }
+        if let window { refreshHover(at: window.mouseLocationOutsideOfEventStream) }
     }
 
-    override func mouseEntered(with event: NSEvent) { hovered = true; needsDisplay = true; NSCursor.arrow.set() }
-    override func mouseExited(with event: NSEvent) { hovered = false; needsDisplay = true }
+    override func mouseEntered(with event: NSEvent) {
+        if event.trackingArea !== pointerArea { super.mouseEntered(with: event) }
+        refreshHover(at: event.locationInWindow)
+        NSCursor.arrow.set()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        if event.trackingArea !== pointerArea { super.mouseExited(with: event) }
+        // NSScroller also owns tracking areas for its knob and slot. Leaving one
+        // of those areas does not mean the pointer has left the whole scroller.
+        refreshHover(at: event.locationInWindow)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        refreshHover(at: event.locationInWindow)
+    }
+
+    private func refreshHover(at windowPoint: NSPoint) {
+        let inside = !isHiddenOrHasHiddenAncestor && visibleRect.contains(convert(windowPoint, from: nil))
+        if hovered != inside { hovered = inside; needsDisplay = true }
+    }
 
     override func mouseDown(with event: NSEvent) {
         dragging = true
         needsDisplay = true
         super.mouseDown(with: event)
         dragging = false
+        if let window { refreshHover(at: window.mouseLocationOutsideOfEventStream) }
         needsDisplay = true
     }
 

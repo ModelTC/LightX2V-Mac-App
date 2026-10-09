@@ -54,3 +54,23 @@ editor.undoManager?.undo()
 scroll.updateTextLayout()
 check(editor.string.isEmpty && scroll.measuredHeight == 28, "undo restores empty prompt and compact height")
 print("Prompt editor checks passed")
+
+// Reproduce an internal NSScroller exit while the pointer remains on its thumb.
+// This window is never presented; events are delivered directly to the component.
+let hoverWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 220),
+                           styleMask: .borderless, backing: .buffered, defer: false)
+let hoverScroller = SubtleScroller(frame: NSRect(x: 180, y: 10, width: 15, height: 180))
+hoverWindow.contentView!.addSubview(hoverScroller)
+hoverScroller.knobProportion = 0.3
+func pointerEvent(_ type: NSEvent.EventType, _ point: NSPoint) -> NSEvent {
+    NSEvent.enterExitEvent(with: type, location: point, modifierFlags: [], timestamp: 0,
+                          windowNumber: hoverWindow.windowNumber, context: nil,
+                          eventNumber: 0, trackingNumber: 0, userData: nil)!
+}
+hoverScroller.mouseEntered(with: pointerEvent(.mouseEntered, NSPoint(x: 187, y: 100)))
+check(hoverScroller.hovered, "pointer entering scrollbar enables hover")
+hoverScroller.mouseExited(with: pointerEvent(.mouseExited, NSPoint(x: 187, y: 100)))
+check(hoverScroller.hovered, "internal tracking-area exit preserves hover while pointer stays inside")
+hoverScroller.mouseExited(with: pointerEvent(.mouseExited, NSPoint(x: 150, y: 100)))
+check(!hoverScroller.hovered, "leaving the scrollbar clears hover")
+print("Scrollbar hover checks passed")
