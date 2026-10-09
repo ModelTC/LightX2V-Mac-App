@@ -31,7 +31,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(store.needsGeneralSetup ? "欢迎使用 LightX2V" : "通用设置")
                         .font(.system(size: 20, weight: .semibold))
-                    Text("一个工作目录，收纳你的创作与运行数据。")
+                    Text(store.needsGeneralSetup ? "仅需首次配置，后续无需重复填写。" : "配置已保存，可随时在此修改。")
                         .font(.system(size: 11)).foregroundStyle(Palette.muted)
                 }
                 Spacer()
