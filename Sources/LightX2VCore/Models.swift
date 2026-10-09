@@ -35,14 +35,20 @@ public struct AppSettings: Codable, Equatable {
     }
 
     public func validateGeneralPaths() throws {
-        try WorkspaceLayout.validate(workingDirectory)
+        for step in GeneralSetupStep.allCases { try validateGeneralPath(step) }
+    }
+
+    public func validateGeneralPath(_ step: GeneralSetupStep) throws {
+        if step == .workspace { try WorkspaceLayout.validate(workingDirectory); return }
         let fm = FileManager.default
-        for (label, value) in [("LightX2V 源码目录", repository), ("PyTorch 环境", python)] {
-            guard !value.isEmpty else { throw AppError.message("请选择\(label)。") }
-            guard value.hasPrefix("/") else { throw AppError.message("\(label)必须使用绝对路径。") }
-        }
-        guard fm.fileExists(atPath: repository + "/lightx2v/infer.py") else {
-            throw AppError.message("源码目录中找不到 lightx2v/infer.py，请选择正确的 LightX2V 目录。")
+        let (label, value) = step == .source ? ("LightX2V 源码目录", repository) : ("PyTorch 环境", python)
+        guard !value.isEmpty else { throw AppError.message("请选择\(label)。") }
+        guard value.hasPrefix("/") else { throw AppError.message("\(label)必须使用绝对路径。") }
+        if step == .source {
+            guard fm.fileExists(atPath: repository + "/lightx2v/infer.py") else {
+                throw AppError.message("源码目录中找不到 lightx2v/infer.py，请选择正确的 LightX2V 目录。")
+            }
+            return
         }
         var directory: ObjCBool = false
         guard fm.fileExists(atPath: python, isDirectory: &directory), !directory.boolValue,

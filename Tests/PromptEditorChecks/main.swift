@@ -313,3 +313,35 @@ inputHost.removeFromSuperview()
 check(!inputBounds.hovered && inputBounds.cursor(for: inputMiddle) == nil,
       "input hover: detaching view releases both highlight and cursor")
 print("Synchronized input hover checks passed")
+
+// Completing a path, rather than each keystroke, advances the setup guide.
+let commitWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 450, height: 120),
+                            styleMask: .borderless, backing: .buffered, defer: false)
+var draftPath = ""
+var pathCommits = 0
+let commitHost = NSHostingView(rootView: PathInputField(
+    title: "工作目录", placeholder: "路径", symbol: "folder",
+    text: Binding(get: { draftPath }, set: { draftPath = $0 }),
+    onCommit: { pathCommits += 1 }))
+commitHost.frame = NSRect(x: 10, y: 50, width: 400, height: 44)
+commitWindow.contentView!.addSubview(commitHost)
+commitHost.layoutSubtreeIfNeeded()
+let commitField = descendants(commitHost, of: NSTextField.self).first!
+func settleInput() { RunLoop.current.run(until: Date().addingTimeInterval(0.03)) }
+commitWindow.makeFirstResponder(commitField)
+settleInput()
+let pathEditor = commitField.currentEditor() as! NSTextView
+pathEditor.insertText("/tmp/", replacementRange: NSRange(location: NSNotFound, length: 0))
+pathEditor.insertText("workspace", replacementRange: NSRange(location: NSNotFound, length: 0))
+settleInput()
+check(draftPath == "/tmp/workspace" && pathCommits == 0, "setup input: typing updates draft without advancing guide")
+commitWindow.makeFirstResponder(nil)
+settleInput()
+check(pathCommits == 1, "setup input: leaving field commits guide exactly once")
+commitWindow.makeFirstResponder(commitField)
+settleInput()
+(commitField.currentEditor() as! NSTextView).insertNewline(nil)
+settleInput()
+check(pathCommits > 1, "setup input: Return commits guide")
+commitWindow.makeFirstResponder(nil)
+commitHost.removeFromSuperview()

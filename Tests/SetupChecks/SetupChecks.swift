@@ -34,6 +34,8 @@ func rejects(_ body: () throws -> Void) throws {
             print("PASS local environment search")
             return
         }
+        try setupGuide(root)
+        print("PASS setup guide ordering, path validation, clearing and reopening")
         try workspaceSwitching(root)
         print("PASS empty history on workspace switch, unchanged original data and macOS locator")
         try migrationFailure(root)
@@ -44,7 +46,59 @@ func rejects(_ body: () throws -> Void) throws {
         print("PASS separate venv identities and alias deduplication")
         try await commands(root)
         print("PASS probe result parsing, missing torch, timeout and cancellation")
-        print("5 setup checks passed")
+        print("6 setup checks passed")
+    }
+
+    static func setupGuide(_ root: URL) throws {
+        let fm = FileManager.default
+        let workspace = root.appendingPathComponent("guide workspace")
+        let source = root.appendingPathComponent("guide source")
+        let python = root.appendingPathComponent("guide python")
+        try fm.createDirectory(at: source.appendingPathComponent("lightx2v"), withIntermediateDirectories: true)
+        try Data().write(to: source.appendingPathComponent("lightx2v/infer.py"))
+        try Data("#!/bin/sh\n".utf8).write(to: python)
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: python.path)
+
+        var settings = AppSettings.defaults
+        var progress = GeneralSetupProgress(settings: settings)
+        try expect(progress.current == .workspace && progress.completed.isEmpty, "first launch must start at step 1")
+        settings.workingDirectory = workspace.path
+        // Taking a snapshot on commit keeps partially typed input from moving the guide.
+        try expect(progress.current == .workspace, "draft text changed committed progress")
+        progress = GeneralSetupProgress(settings: settings)
+        try expect(progress.current == .source && progress.completed == [.workspace], "workspace should advance to source")
+        try expect(!fm.fileExists(atPath: workspace.path), "guide must not create folders")
+        settings.repository = root.path
+        try expect(GeneralSetupProgress(settings: settings).current == .source, "unrelated folder accepted as source")
+        settings.repository = source.path
+        progress = GeneralSetupProgress(settings: settings)
+        try expect(progress.current == .python && progress.completed.count == 2, "source should advance to Python")
+        settings.python = source.path
+        try expect(GeneralSetupProgress(settings: settings).current == .python, "directory accepted as Python")
+        settings.python = python.path
+        try settings.validateGeneralPaths()
+        let complete = GeneralSetupProgress(settings: settings)
+        try expect(complete.current == nil && complete.completed.count == 3, "complete settings should end guide")
+        let reopened = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
+        try expect(GeneralSetupProgress(settings: reopened) == complete, "reopening must not replay completed steps")
+        settings.repository = ""
+        progress = GeneralSetupProgress(settings: settings)
+        try expect(progress.current == .source && progress.completed == [.workspace, .python], "clearing source should return to step 2 and retain Python")
+        settings.workingDirectory = ""
+        try expect(GeneralSetupProgress(settings: settings).current == .workspace, "out-of-order entries should still guide to earliest missing step")
+        settings.repository = source.path
+        settings.workingDirectory = "relative/path"
+        try expect(GeneralSetupProgress(settings: settings).current == .workspace, "relative workspace accepted")
+        settings.workingDirectory = "/"
+        try expect(GeneralSetupProgress(settings: settings).current == .workspace, "root accepted as workspace")
+        settings.workingDirectory = " \(workspace.path)\n"
+        settings.repository = " \(source.path) "
+        settings.python = "\n\(python.path) "
+        try expect(GeneralSetupProgress(settings: settings) == complete, "guide normalization differs from Save")
+        try fm.setAttributes([.posixPermissions: 0o644], ofItemAtPath: python.path)
+        try expect(GeneralSetupProgress(settings: settings).current == .python, "non-executable Python accepted")
+        try fm.removeItem(at: source.appendingPathComponent("lightx2v/infer.py"))
+        try expect(GeneralSetupProgress(settings: settings).current == .source, "missing source after reopening should return to step 2")
     }
 
     static func workspaceSwitching(_ root: URL) throws {

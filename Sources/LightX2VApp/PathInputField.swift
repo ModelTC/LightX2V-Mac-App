@@ -7,6 +7,7 @@ struct PathInputField: View {
     let placeholder: String
     let symbol: String
     @Binding var text: String
+    var onCommit: () -> Void = {}
     @Environment(\.isEnabled) private var enabled
     @FocusState private var focused: Bool
     @State private var hovered = false
@@ -18,6 +19,7 @@ struct PathInputField: View {
                 .textFieldStyle(.plain).font(.system(size: 11))
                 .accessibilityLabel(title).help(text)
                 .focused($focused)
+                .onSubmit(onCommit)
         }
         .padding(.horizontal, 10)
         .frame(maxWidth: .infinity, minHeight: 44)
@@ -26,5 +28,8 @@ struct PathInputField: View {
         .inputHoverSurface(hovered: hovered)
         .background(OutsideClickObserver(isEditing: focused, isEnabled: enabled,
                                         onHoverChange: { hovered = $0 }, cornerRadius: 8))
+        .onChange(of: focused) { wasFocused, isFocused in
+            if wasFocused && !isFocused { onCommit() }
+        }
     }
 }
