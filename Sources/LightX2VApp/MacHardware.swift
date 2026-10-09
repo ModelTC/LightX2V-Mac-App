@@ -4,9 +4,8 @@ import Darwin
 enum MacHardware {
     /// Read once on the running Mac, independently of Python or model checks.
     static let sidebarDescription: String = {
-        guard let brand = cpuBrand(), brand.hasPrefix("Apple ") else { return "Apple Silicon" }
-        let chip = brand.dropFirst("Apple ".count).trimmingCharacters(in: .whitespacesAndNewlines)
-        return chip.isEmpty ? "Apple Silicon" : "Apple Silicon · \(chip)"
+        guard let brand = cpuBrand(), brand.hasPrefix("Apple ") else { return "Apple Silicon · MPS" }
+        return "\(brand) · MPS"
     }()
 
     private static func cpuBrand() -> String? {
