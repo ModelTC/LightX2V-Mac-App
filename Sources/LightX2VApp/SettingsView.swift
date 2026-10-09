@@ -28,34 +28,124 @@ struct InspectorView: View {
 
 struct ModelPreparationView: View {
     @EnvironmentObject var store: AppStore
+    @State private var showsDetails = false
+
+    private var statusTitle: String {
+        if store.isChecking { return "正在检查环境" }
+        if store.hasUnsavedModelSettings { return "有未保存的修改" }
+        if store.environmentReady { return "环境就绪" }
+        return store.environmentMessage == "尚未检查运行环境" ? "尚未检查" : "检查未通过"
+    }
+
+    private var statusColor: Color {
+        if store.isChecking { return Palette.muted }
+        return store.environmentReady && !store.hasUnsavedModelSettings ? Palette.green : Palette.accent
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(spacing: 14) {
-                PathSettingField(title: "模型目录", value: $store.modelDirectory, directory: true, compact: true)
-                PathSettingField(title: "Config 配置", value: $store.modelConfig, directory: false, compact: true)
-            }.disabled(store.busy)
-            HStack {
-                if store.hasUnsavedModelSettings {
-                    Button("撤销修改") { store.discardModelSettings() }.buttonStyle(.plain).foregroundStyle(Palette.muted)
-                }
-                Spacer(minLength: 0)
-                Button(store.hasUnsavedModelSettings ? "保存并检查" : "检查模型") { store.applyModelSettings() }
-                    .buttonStyle(.borderedProminent).tint(Palette.ink)
-            }.font(.system(size: 10)).controlSize(.small).disabled(store.busy)
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    if store.isChecking { ProgressView().controlSize(.mini) }
-                    else { Image(systemName: store.hasUnsavedModelSettings ? "pencil.circle" : store.environmentReady ? "checkmark.circle.fill" : "exclamationmark.circle")
-                        .foregroundStyle(!store.hasUnsavedModelSettings && store.environmentReady ? Palette.green : Palette.accent) }
-                    Text(store.isChecking ? "检查中…" : store.hasUnsavedModelSettings ? "模型设置待保存" : store.environmentReady ? "运行环境可用" : "运行环境需要检查")
-                        .font(.system(size: 10, weight: .medium))
-                }
-                Text(store.hasUnsavedModelSettings ? "保存并检查后可开始生成。" : store.environmentMessage)
-                    .font(.system(size: 9)).foregroundStyle(Palette.muted).lineLimit(3)
-                    .help(store.hasUnsavedModelSettings ? "保存并检查后可开始生成。" : store.environmentMessage)
+            VStack(spacing: 0) {
+                ModelResourceRow(title: "模型目录", value: $store.modelDirectory, directory: true)
+                Rectangle().fill(Palette.line).frame(height: 1).padding(.horizontal, 12)
+                ModelResourceRow(title: "Config 配置", value: $store.modelConfig, directory: false)
             }
+            .background(.white.opacity(0.85), in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Palette.line, lineWidth: 1))
+            .disabled(store.busy)
+
+            HStack(spacing: 7) {
+                Group {
+                    if store.isChecking { ProgressView().controlSize(.mini) }
+                    else {
+                        Image(systemName: store.hasUnsavedModelSettings ? "pencil.circle" : store.environmentReady ? "checkmark.circle.fill" : "exclamationmark.circle")
+                            .foregroundStyle(statusColor)
+                    }
+                }.frame(width: 14, height: 14)
+                Text(statusTitle).font(.system(size: 10, weight: .medium))
+                Spacer(minLength: 4)
+                if store.hasUnsavedModelSettings {
+                    Button("撤销") { store.discardModelSettings() }
+                        .disabled(store.busy).accessibilityLabel("撤销模型设置修改")
+                } else {
+                    Button("详情") { showsDetails = true }
+                        .accessibilityLabel("查看环境检查详情")
+                        .popover(isPresented: $showsDetails, arrowEdge: .leading) {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("环境检查").font(.system(size: 13, weight: .semibold))
+                                ScrollView {
+                                    Text(store.environmentMessage).font(.system(size: 11))
+                                        .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                                }.frame(maxHeight: 180)
+                                Text("检查路径、配置与 MPS 可用性，不加载模型权重。")
+                                    .font(.system(size: 10)).foregroundStyle(Palette.muted)
+                            }.padding(18).frame(width: 320)
+                        }
+                }
+            }.font(.system(size: 10)).buttonStyle(.plain).foregroundStyle(Palette.muted)
+
+            if !store.isChecking && !store.environmentReady && !store.hasUnsavedModelSettings && store.environmentMessage != "尚未检查运行环境" {
+                Text(store.environmentMessage).font(.system(size: 10)).foregroundStyle(Palette.accent)
+                    .lineLimit(2).fixedSize(horizontal: false, vertical: true).help(store.environmentMessage)
+            }
+
+            Button { store.applyModelSettings() } label: {
+                HStack(spacing: 7) {
+                    if !store.isChecking { Image(systemName: "arrow.clockwise").font(.system(size: 10, weight: .medium)) }
+                    Text(store.isChecking ? "正在检查…" : store.hasUnsavedModelSettings ? "保存并检查" : "检查模型")
+                }
+                .font(.system(size: 11, weight: .medium)).frame(maxWidth: .infinity).frame(height: 26)
+            }.buttonStyle(.borderedProminent).tint(Palette.ink).disabled(store.busy)
         }
+    }
+}
+
+private struct ModelResourceRow: View {
+    let title: String
+    @Binding var value: String
+    let directory: Bool
+    @State private var showsEditor = false
+
+    private var name: String {
+        value.isEmpty ? "选择\(title)" : URL(fileURLWithPath: value).lastPathComponent
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button { showsEditor = true } label: {
+                HStack(alignment: .top, spacing: 9) {
+                    Image(systemName: directory ? "cube.transparent" : "doc.text")
+                        .font(.system(size: 14)).foregroundStyle(Palette.muted)
+                        .frame(width: 18).padding(.top, 2)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(title).font(.system(size: 10)).foregroundStyle(Palette.muted)
+                        Text(name).font(.system(size: 11, weight: .medium)).foregroundStyle(Palette.ink)
+                            .lineLimit(1).truncationMode(.middle)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).accessibilityLabel("编辑\(title)：\(name)")
+            .help("\(value)\n点击编辑完整路径")
+            .popover(isPresented: $showsEditor, arrowEdge: .leading) {
+                VStack(alignment: .leading, spacing: 14) {
+                    PathSettingField(title: title, value: $value, directory: directory)
+                    HStack {
+                        Spacer()
+                        Button("完成") { showsEditor = false }.keyboardShortcut(.defaultAction)
+                    }
+                }.padding(18).frame(width: 420)
+            }
+            Button {
+                let panel = NSOpenPanel()
+                panel.canChooseDirectories = directory; panel.canChooseFiles = !directory
+                panel.allowsMultipleSelection = false; panel.canCreateDirectories = false
+                panel.directoryURL = URL(fileURLWithPath: value).deletingLastPathComponent()
+                if panel.runModal() == .OK, let url = panel.url { value = url.path }
+            } label: {
+                Image(systemName: "folder").font(.system(size: 12)).foregroundStyle(Palette.muted)
+                    .frame(width: 28, height: 28).contentShape(RoundedRectangle(cornerRadius: 6))
+            }.buttonStyle(.plain).help("选择\(title)").accessibilityLabel("选择\(title)")
+        }.padding(12)
     }
 }
 
@@ -106,14 +196,13 @@ struct PathSettingField: View {
     let title: String
     @Binding var value: String
     let directory: Bool
-    var compact = false
     var allowsCreatingDirectories = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text(title).font(.system(size: compact ? 10 : 11, weight: .medium))
+            Text(title).font(.system(size: 11, weight: .medium))
             HStack(spacing: 8) {
-                TextField(title, text: $value).font(.system(size: compact ? 10 : 11, design: .monospaced)).textFieldStyle(.roundedBorder)
+                TextField(title, text: $value).font(.system(size: 11, design: .monospaced)).textFieldStyle(.roundedBorder)
                     .accessibilityLabel(title).help(value)
                     .dismissEditingOnOutsideClick()
                 Button {
@@ -123,8 +212,7 @@ struct PathSettingField: View {
                     panel.directoryURL = URL(fileURLWithPath: value).deletingLastPathComponent()
                     if panel.runModal() == .OK, let url = panel.url { value = url.path }
                 } label: {
-                    if compact { Image(systemName: "folder").frame(width: 16, height: 16) }
-                    else { Text("选择…") }
+                    Text("选择…")
                 }.font(.system(size: 11)).help("选择\(title)").accessibilityLabel("选择\(title)")
             }
         }
