@@ -329,8 +329,6 @@ struct GenerationView: View {
                     if job.status == .completed {
                         if let image = NSImage(contentsOfFile: job.request.output) {
                             Image(nsImage: image).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: 470)
-                                .background(Palette.sidebar.opacity(0.4)).clipShape(RoundedRectangle(cornerRadius: 12))
-                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line, lineWidth: 1))
                                 .onDrag { NSItemProvider(contentsOf: URL(fileURLWithPath: job.request.output)) ?? NSItemProvider() }
                                 .contextMenu { Button("复制图片") { store.copyImage(job) }; Button("另存为…") { store.export(job) }; Button("在 Finder 中显示") { store.reveal(job) } }
                             HStack(spacing: 14) {
