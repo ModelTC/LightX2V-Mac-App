@@ -25,7 +25,7 @@ setText("A quiet forest")
 check(!editor.showsPlaceholder && scroll.measuredHeight == 28, "one line keeps the compact height")
 let oneLine = scroll.measuredHeight
 setText("A quiet forest\n")
-check(scroll.measuredHeight > oneLine && !scroll.hasVerticalScroller, "Return grows the editor including its empty final line")
+check(scroll.measuredHeight > oneLine && !scroll.hasVerticalScroller, "newline grows the editor including its empty final line")
 setText(String(repeating: "自然光下的森林与玻璃小屋。", count: 8))
 let wideHeight = scroll.measuredHeight
 scroll.setFrameSize(NSSize(width: 260, height: 28))
@@ -55,6 +55,98 @@ editor.undoManager?.undo()
 scroll.updateTextLayout()
 check(editor.string.isEmpty && scroll.measuredHeight == 28, "undo restores empty prompt and compact height")
 print("Prompt editor checks passed")
+
+// Use the actual SwiftUI/AppKit bridge, with native key events delivered directly
+// to this unpresented component (no OS input injection or model inference).
+let keyboardWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 160),
+                              styleMask: .borderless, backing: .buffered, defer: false)
+var keyboardDraft = ""
+var keyboardHeight = PromptScrollView.minimumHeight
+var keyboardFocused = false
+var keyboardComposing = false
+var keyboardBusy = false
+var sentPrompts: [String] = []
+let keyboardHost = NSHostingView(rootView: PromptEditor(
+    text: Binding(get: { keyboardDraft }, set: { keyboardDraft = $0 }),
+    height: Binding(get: { keyboardHeight }, set: { keyboardHeight = $0 }),
+    focused: Binding(get: { keyboardFocused }, set: { keyboardFocused = $0 }),
+    composing: Binding(get: { keyboardComposing }, set: { keyboardComposing = $0 })) {
+        if !keyboardBusy && !keyboardComposing { sentPrompts.append(keyboardDraft) }
+    })
+keyboardHost.frame = NSRect(x: 0, y: 0, width: 500, height: 160)
+keyboardWindow.contentView!.addSubview(keyboardHost)
+keyboardHost.layoutSubtreeIfNeeded()
+let keyboardScroll = descendants(keyboardHost, of: PromptScrollView.self).first!
+let keyboardEditor = keyboardScroll.editor
+keyboardWindow.makeFirstResponder(keyboardEditor)
+func keyboardText(_ value: String) {
+    keyboardEditor.string = value
+    keyboardEditor.setSelectedRange(NSRange(location: (value as NSString).length, length: 0))
+    keyboardEditor.didChangeText()
+}
+func pressReturn(_ modifiers: NSEvent.ModifierFlags = [], keypad: Bool = false, repeatKey: Bool = false) {
+    let character = keypad ? "\u{3}" : "\r"
+    let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers,
+                               timestamp: 0, windowNumber: keyboardWindow.windowNumber, context: nil,
+                               characters: character, charactersIgnoringModifiers: character,
+                               isARepeat: repeatKey, keyCode: keypad ? 76 : 36)!
+    keyboardEditor.keyDown(with: event)
+}
+keyboardText("A quiet forest")
+pressReturn()
+check(sentPrompts == ["A quiet forest"] && keyboardDraft == "A quiet forest",
+      "prompt Return: submits current binding once without inserting a newline")
+pressReturn(repeatKey: true)
+check(sentPrompts.count == 1 && keyboardDraft == "A quiet forest", "prompt Return: held key cannot resend")
+pressReturn(.shift)
+check(sentPrompts.count == 1 && keyboardDraft == "A quiet forest\n", "prompt Shift+Return: inserts newline without sending")
+check(keyboardScroll.measuredHeight > PromptScrollView.minimumHeight, "prompt Shift+Return: editor grows for the new line")
+keyboardEditor.insertText("第二行", replacementRange: NSRange(location: NSNotFound, length: 0))
+pressReturn()
+check(sentPrompts.last == "A quiet forest\n第二行" && sentPrompts.count == 2,
+      "prompt Return: submits the complete multiline Chinese/English draft")
+pressReturn(.numericPad, keypad: true)
+check(sentPrompts.count == 3, "prompt keypad Enter: sends once")
+pressReturn([.numericPad, .shift], keypad: true)
+check(sentPrompts.count == 3 && keyboardDraft.hasSuffix("第二行\n"), "prompt Shift+keypad Enter: inserts newline")
+keyboardText("")
+pressReturn()
+keyboardText(" \n\t")
+pressReturn()
+check(sentPrompts.count == 3 && keyboardDraft == " \n\t", "prompt Return: blank and whitespace-only drafts do not send or grow")
+keyboardText("保留草稿")
+keyboardBusy = true
+pressReturn()
+check(sentPrompts.count == 3 && keyboardDraft == "保留草稿", "prompt Return: unavailable send leaves draft unchanged")
+pressReturn(.shift)
+check(keyboardDraft == "保留草稿\n", "prompt Shift+Return: still edits a draft while generation is busy")
+keyboardBusy = false
+keyboardText("已有提示词 ")
+keyboardEditor.setMarkedText("zhongwen", selectedRange: NSRange(location: 8, length: 0),
+                             replacementRange: NSRange(location: NSNotFound, length: 0))
+check(keyboardComposing && keyboardEditor.hasMarkedText(), "prompt IME: bridge observes candidate composition")
+pressReturn()
+check(sentPrompts.count == 3, "prompt IME: candidate-confirming Return never submits an existing draft")
+// The selected candidate is supplied by the input method; finish that step here
+// independently of which keyboard/input source the test runner has installed.
+if keyboardEditor.hasMarkedText() { keyboardEditor.unmarkText() }
+keyboardText("已有提示词 中文")
+pressReturn()
+check(sentPrompts.count == 4 && sentPrompts.last == "已有提示词 中文" && !keyboardComposing,
+      "prompt IME: next Return after composition submits confirmed text")
+keyboardText("前后")
+keyboardEditor.setSelectedRange(NSRange(location: 1, length: 0))
+pressReturn(.shift)
+check(keyboardDraft == "前\n后" && sentPrompts.count == 4, "prompt Shift+Return: inserts at the caret")
+keyboardEditor.setSelectedRange(NSRange(location: 0, length: 1))
+pressReturn(.shift)
+check(keyboardDraft == "\n\n后" && sentPrompts.count == 4, "prompt Shift+Return: replaces selection using native editing")
+keyboardText("")
+keyboardEditor.insertText("粘贴第一行\n粘贴第二行", replacementRange: NSRange(location: NSNotFound, length: 0))
+check(keyboardDraft == "粘贴第一行\n粘贴第二行" && sentPrompts.count == 4, "prompt paste: embedded newlines never submit")
+keyboardWindow.makeFirstResponder(nil)
+keyboardHost.removeFromSuperview()
+print("Prompt keyboard checks passed")
 
 // Native component checks: these windows are never presented, and no operating
 // system mouse input is synthesized. Use actual NSScroller geometry and events.

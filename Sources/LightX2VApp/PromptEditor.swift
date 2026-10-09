@@ -7,6 +7,7 @@ struct PromptEditor: NSViewRepresentable {
     @Binding var height: CGFloat
     @Binding var focused: Bool
     @Binding var composing: Bool
+    var onSubmit: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -14,6 +15,10 @@ struct PromptEditor: NSViewRepresentable {
         let view = PromptScrollView()
         view.editor.delegate = context.coordinator
         view.editor.onInputChange = { [weak coordinator = context.coordinator] in coordinator?.readInput() }
+        view.editor.onSubmit = { [weak coordinator = context.coordinator] in
+            coordinator?.readInput()
+            coordinator?.parent.onSubmit()
+        }
         view.editor.onFocusChange = { [weak coordinator = context.coordinator] value in
             coordinator?.parent.focused = value
         }
@@ -138,8 +143,32 @@ final class PromptScrollView: NSScrollView {
 final class PromptTextView: NSTextView {
     var onInputChange: (() -> Void)?
     var onFocusChange: ((Bool) -> Void)?
+    var onSubmit: (() -> Void)?
     private var pointerArea: NSTrackingArea?
     var showsPlaceholder: Bool { string.isEmpty && !hasMarkedText() }
+
+    override func keyDown(with event: NSEvent) {
+        let isReturn = event.keyCode == 36 || event.keyCode == 76
+        let modifiers = event.modifierFlags.intersection([.shift, .control, .option, .command])
+        // Decide before the input method commits marked text. Checking only in
+        // insertNewline would risk sending the Return used to confirm a candidate.
+        if isReturn, !hasMarkedText() {
+            if modifiers == .shift, isEditable {
+                // Keypad Enter has a different default AppKit binding. Give
+                // both Enter keys the same native newline/undo behavior.
+                super.insertNewline(nil)
+                inputChanged()
+                return
+            }
+            if modifiers.isEmpty, let onSubmit {
+                if isEditable, !event.isARepeat, !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    onSubmit()
+                }
+                return
+            }
+        }
+        super.keyDown(with: event)
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)

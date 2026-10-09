@@ -201,7 +201,9 @@ struct ComposerView: View {
         VStack(spacing: 9) {
             VStack(alignment: .leading, spacing: 8) {
                 PromptEditor(text: $store.prompt, height: $editorHeight, focused: $focused,
-                             composing: $store.isComposingPrompt)
+                             composing: $store.isComposingPrompt) {
+                    if store.canGenerate { store.generate() }
+                }
                     .frame(height: editorHeight)
                 HStack(spacing: 7) {
                     ModelSelector()
@@ -216,7 +218,7 @@ struct ComposerView: View {
                             Image(systemName: "arrow.up").font(.system(size: 15, weight: .semibold))
                                 .foregroundStyle(store.canGenerate ? Palette.onButton : Palette.disabledInk).frame(width: 32, height: 32)
                                 .background(store.canGenerate ? Palette.button : Palette.disabledFill, in: Circle())
-                        }.buttonStyle(HoverButtonStyle(radius: 16, bright: true, dimsWhenDisabled: false)).disabled(!store.canGenerate).keyboardShortcut(.return, modifiers: .command).help("生成图片 ⌘↵").accessibilityLabel("生成图片")
+                        }.buttonStyle(HoverButtonStyle(radius: 16, bright: true, dimsWhenDisabled: false)).disabled(!store.canGenerate).keyboardShortcut(.return, modifiers: .command).help("生成图片").accessibilityLabel("生成图片")
                     }
                 }.onHover { inside in if inside { NSCursor.arrow.set() } }
             }.padding(14).background(Palette.surface, in: RoundedRectangle(cornerRadius: 17))
@@ -225,7 +227,6 @@ struct ComposerView: View {
             HStack {
                 Text(store.isChecking ? "正在检查本地推理环境…" : "所有图像与提示词均保存在本机")
                 Spacer()
-                Text("⌘ ↵ 生成").font(.system(size: 10))
             }.font(.system(size: 10)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
         }.frame(maxWidth: 850)
     }
