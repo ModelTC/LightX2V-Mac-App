@@ -50,6 +50,12 @@ public struct WorkspaceLocation: Codable {
 }
 
 public enum WorkspaceStorage {
+    /// macOS per-user app information; stores location.json so the workspace is remembered across launches.
+    public static var applicationSupportRoot: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("LightX2V APP")
+    }
+
     public static func stateURL(locatorRoot: URL) throws -> URL {
         let locator = locatorRoot.appendingPathComponent("location.json")
         if FileManager.default.fileExists(atPath: locator.path) {
@@ -64,7 +70,7 @@ public enum WorkspaceStorage {
         return locatorRoot.appendingPathComponent("workspace.json")
     }
 
-    /// Copy before switching; never delete originals or overwrite another workspace.
+    /// A different workspace starts with empty history. Original records and outputs stay in place.
     public static func save(_ snapshot: WorkspaceData, previousState: URL, locatorRoot: URL) throws -> WorkspaceData {
         let fm = FileManager.default
         var data = snapshot
@@ -103,27 +109,7 @@ public enum WorkspaceStorage {
                     }
                 }
             }
-            for index in data.generations.indices {
-                var job = data.generations[index]
-                let source = URL(fileURLWithPath: job.directory)
-                let destination = layout.outputs.appendingPathComponent(job.id.uuidString)
-                if source.standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(layout.outputs.path + "/") { continue }
-                guard !fm.fileExists(atPath: destination.path) else {
-                    throw AppError.message("目标目录已有同名作品，未覆盖：\(destination.lastPathComponent)")
-                }
-                try fm.createDirectory(at: destination, withIntermediateDirectories: true)
-                created.append(destination)
-                // Copy known app-owned files only, not an arbitrary legacy parent directory.
-                let imageName = URL(fileURLWithPath: job.request.output).lastPathComponent
-                for name in Set([imageName, "config.json", "inference.log", "invocation.json"]) {
-                    let file = source.appendingPathComponent(name)
-                    if fm.fileExists(atPath: file.path) { try fm.copyItem(at: file, to: destination.appendingPathComponent(name)) }
-                }
-                job.request.output = destination.appendingPathComponent(imageName).path
-                try JSONFile.write(job.request, to: destination.appendingPathComponent("request.json"))
-                try JSONFile.write(job, to: destination.appendingPathComponent("generation.json"))
-                data.generations[index] = job
-            }
+            if switching { data.generations = [] }
             try JSONFile.write(data, to: layout.state)
             wroteState = true
             // Commit the pointer last. A failed migration leaves the previous workspace usable.

@@ -38,7 +38,7 @@ struct SettingsView: View {
                     SettingsSection(number: "1", title: "LightX2V 工作目录", subtitle: "配置、历史、图片、日志和缓存都保存在这里。") {
                         pathRow("LightX2V 工作目录", value: $settings.workingDirectory, directory: true, create: true)
                         if !store.generations.isEmpty && normalized(settings.workingDirectory) != store.settings.workingDirectory {
-                            Text("保存时会复制现有 \(store.generations.count) 条创作记录及作品，原文件保留。")
+                            Text("更换后从空历史开始，原有记录与作品留在旧目录。")
                                 .font(.system(size: 10)).foregroundStyle(Palette.muted)
                         }
                     }

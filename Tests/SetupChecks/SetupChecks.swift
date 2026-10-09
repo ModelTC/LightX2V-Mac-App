@@ -34,8 +34,8 @@ func rejects(_ body: () throws -> Void) throws {
             print("PASS local environment search")
             return
         }
-        try migration(root)
-        print("PASS legacy migration, restart locator, managed source and output preservation")
+        try workspaceSwitching(root)
+        print("PASS empty history on workspace switch, unchanged original data and macOS locator")
         try migrationFailure(root)
         print("PASS destination collision and failed locator rollback")
         try archiveValidation()
@@ -47,7 +47,7 @@ func rejects(_ body: () throws -> Void) throws {
         print("5 setup checks passed")
     }
 
-    static func migration(_ root: URL) throws {
+    static func workspaceSwitching(_ root: URL) throws {
         let fm = FileManager.default
         let support = root.appendingPathComponent("support")
         let oldOutput = root.appendingPathComponent("old output/job")
@@ -68,30 +68,43 @@ func rejects(_ body: () throws -> Void) throws {
         let saved = try WorkspaceStorage.save(snapshot, previousState: previous, locatorRoot: support)
         let location = try WorkspaceStorage.stateURL(locatorRoot: support)
         let reopened = try JSONFile.read(WorkspaceData.self, from: location)
-        try expect(reopened.generations[0].id == job.id, "history identity lost")
         try expect(reopened.settings.outputDirectory == saved.settings.workingDirectory + "/outputs", "outputs not derived")
-        let copied = try Data(contentsOf: URL(fileURLWithPath: saved.generations[0].request.output))
-        try expect(copied == image, "image changed")
-        try expect(fm.fileExists(atPath: job.request.output), "original removed")
-        let recorded = try JSONFile.read(InferenceRequest.self, from: URL(fileURLWithPath: saved.generations[0].directory).appendingPathComponent("request.json"))
-        try expect(recorded.output == saved.generations[0].request.output, "migrated request has stale output")
+        try expect(reopened.generations.isEmpty && saved.generations.isEmpty, "old history was imported into new workspace")
+        let outputFiles = try fm.contentsOfDirectory(atPath: saved.settings.outputDirectory)
+        try expect(outputFiles.isEmpty, "old outputs were copied")
+        let originalImage = try Data(contentsOf: URL(fileURLWithPath: job.request.output))
+        try expect(originalImage == image, "original image changed")
+        let originalLog = try String(contentsOf: oldOutput.appendingPathComponent("inference.log"), encoding: .utf8)
+        try expect(originalLog == "log", "original log changed")
+        let originalHistory = try JSONFile.read(WorkspaceData.self, from: previous)
+        try expect(originalHistory.generations.first?.id == job.id, "old workspace history was changed")
+        let locator = try JSONFile.read(WorkspaceLocation.self, from: support.appendingPathComponent("location.json"))
+        try expect(locator.workingDirectory == saved.settings.workingDirectory, "system app directory lost workspace pointer")
+        let expectedSupport = fm.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/LightX2V APP")
+        try expect(WorkspaceStorage.applicationSupportRoot.standardizedFileURL == expectedSupport.standardizedFileURL, "locator is not in macOS user app information")
+        // Saving in the same workspace preserves its own history, even if an old output is unavailable.
+        var withHistory = saved
+        withHistory.generations = [job]
+        let same = try WorkspaceStorage.save(withHistory, previousState: location, locatorRoot: support)
+        try expect(same.generations.first?.id == job.id && same.generations.first?.request.output == job.request.output, "same-directory save changed history")
         // A later workspace change also carries its downloaded source/config with it.
         let managed = WorkspaceLayout(saved.settings.workingDirectory).code.appendingPathComponent("LightX2V-abc")
         try fm.createDirectory(at: managed, withIntermediateDirectories: true)
         try Data("{}".utf8).write(to: managed.appendingPathComponent("config.json"))
-        var next = saved; next.settings.repository = managed.path; next.settings.config = managed.appendingPathComponent("config.json").path
+        var next = same; next.settings.repository = managed.path; next.settings.config = managed.appendingPathComponent("config.json").path
         try JSONFile.write(next, to: location)
         next.settings.workingDirectory = root.appendingPathComponent("second workspace").path
         let moved = try WorkspaceStorage.save(next, previousState: location, locatorRoot: support)
         try expect(moved.settings.repository.hasPrefix(next.settings.workingDirectory + "/code/"), "managed source not moved")
         try expect(fm.fileExists(atPath: moved.settings.config), "config not rebased")
         try expect(fm.fileExists(atPath: managed.path), "original source removed")
+        try expect(moved.generations.isEmpty, "later workspace switch kept old records")
+        let previousAfterSwitch = try JSONFile.read(WorkspaceData.self, from: location)
+        try expect(previousAfterSwitch.generations.first?.id == job.id, "switch modified previous workspace history")
+        let secondOutputs = try fm.contentsOfDirectory(atPath: moved.settings.outputDirectory)
+        try expect(secondOutputs.isEmpty, "later workspace switch copied images")
         let unchanged = try WorkspaceStorage.save(moved, previousState: WorkspaceLayout(moved.settings.workingDirectory).state, locatorRoot: support)
-        try expect(unchanged.generations[0].request.output == moved.generations[0].request.output, "same workspace save recopied outputs")
-        // Choosing the old Application Support folder itself still imports legacy external outputs.
-        var sameFolder = old; sameFolder.settings.workingDirectory = support.path
-        let sameSaved = try WorkspaceStorage.save(sameFolder, previousState: previous, locatorRoot: support)
-        try expect(sameSaved.generations[0].request.output.hasPrefix(support.path + "/outputs/"), "same-path legacy import skipped images")
+        try expect(unchanged.generations.isEmpty, "empty history changed on repeated save")
         try expect(WorkspaceLayout(moved.settings.workingDirectory).environment.values.filter { $0 != "1" }.allSatisfy { $0.hasPrefix(moved.settings.workingDirectory + "/") }, "cache outside workspace")
     }
 

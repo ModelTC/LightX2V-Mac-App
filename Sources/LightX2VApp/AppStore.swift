@@ -67,7 +67,7 @@ final class AppStore: ObservableObject {
     init() {
         let fm = FileManager.default
         let root = ProcessInfo.processInfo.environment["LIGHTX2V_APP_STATE_DIR"].map { URL(fileURLWithPath: $0) }
-            ?? fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("LightX2V APP")
+            ?? WorkspaceStorage.applicationSupportRoot
         locatorRoot = root
         stateURL = root.appendingPathComponent("workspace.json")
         var data = WorkspaceData()
@@ -130,7 +130,9 @@ final class AppStore: ObservableObject {
         let saved = try await Task.detached(priority: .userInitiated) {
             try WorkspaceStorage.save(snapshot, previousState: previous, locatorRoot: locator)
         }.value
+        let changedWorkspace = stateURL.standardizedFileURL.resolvingSymlinksInPath() != WorkspaceLayout(saved.settings.workingDirectory).state
         settings = saved.settings; generations = saved.generations
+        if changedWorkspace { selectedID = nil; logs = ""; showLogs = false }
         if !preserveModelDraft { modelDirectory = settings.model; modelConfig = settings.config }
         stateURL = WorkspaceLayout(settings.workingDirectory).state
         canPersist = true; hasCompletedGeneralSetup = true; environmentReady = false

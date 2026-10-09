@@ -42,3 +42,10 @@
 - Local discovery found the MPS-capable Conda environment and explained Python environments without PyTorch. Probe timeout, cancellation and distinct venv symlink identities are covered by checks.
 - Native UI verified first-launch setup, download autofill, environment selection, saving, restarting without onboarding, cancelling drafts and migrating a legacy history entry.
 - Existing prompt/IME, scrollbar, resolution and bridge integration checks remain passing.
+
+## Revised workspace switching behavior
+
+- Switching to a new directory starts with empty history. Existing history, images and logs are not imported, copied or deleted.
+- Saving settings for the current workspace preserves its own history and output paths.
+- The active directory is remembered in the user's macOS app information directory: `~/Library/Application Support/LightX2V APP/location.json`.
+- Checks now verify empty new history, untouched original files, same-workspace history preservation and restart lookup through the system locator.
