@@ -78,7 +78,7 @@ func rejects(_ body: () throws -> Void) throws {
         try expect(originalLog == "log", "original log changed")
         let originalHistory = try JSONFile.read(WorkspaceData.self, from: previous)
         try expect(originalHistory.generations.first?.id == job.id, "old workspace history was changed")
-        let locator = try JSONFile.read(WorkspaceLocation.self, from: support.appendingPathComponent("location.json"))
+        let locator = try JSONFile.read(WorkspaceLocation.self, from: support.appendingPathComponent("workspace_location.json"))
         try expect(locator.workingDirectory == saved.settings.workingDirectory, "system app directory lost workspace pointer")
         let expectedSupport = fm.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/LightX2V APP")
         try expect(WorkspaceStorage.applicationSupportRoot.standardizedFileURL == expectedSupport.standardizedFileURL, "locator is not in macOS user app information")
@@ -123,7 +123,7 @@ func rejects(_ body: () throws -> Void) throws {
         try rejects { _ = try WorkspaceStorage.save(data, previousState: root.appendingPathComponent("other.json"), locatorRoot: blocked) }
         try expect(!fm.fileExists(atPath: WorkspaceLayout(data.settings.workingDirectory).state.path), "failed commit left active state")
         let unavailable = root.appendingPathComponent("unavailable")
-        try JSONFile.write(WorkspaceLocation(workingDirectory: root.appendingPathComponent("missing").path), to: unavailable.appendingPathComponent("location.json"))
+        try JSONFile.write(WorkspaceLocation(workingDirectory: root.appendingPathComponent("missing").path), to: unavailable.appendingPathComponent("workspace_location.json"))
         try rejects { _ = try WorkspaceStorage.stateURL(locatorRoot: unavailable) }
     }
 

@@ -47,5 +47,5 @@
 
 - Switching to a new directory starts with empty history. Existing history, images and logs are not imported, copied or deleted.
 - Saving settings for the current workspace preserves its own history and output paths.
-- The active directory is remembered in the user's macOS app information directory: `~/Library/Application Support/LightX2V APP/location.json`.
+- The active directory is remembered in the user's macOS app information directory: `~/Library/Application Support/LightX2V APP/workspace_location.json`.
 - Checks now verify empty new history, untouched original files, same-workspace history preservation and restart lookup through the system locator.

@@ -50,14 +50,14 @@ public struct WorkspaceLocation: Codable {
 }
 
 public enum WorkspaceStorage {
-    /// macOS per-user app information; stores location.json so the workspace is remembered across launches.
+    /// macOS per-user app information; stores workspace_location.json so the workspace is remembered across launches.
     public static var applicationSupportRoot: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("LightX2V APP")
     }
 
     public static func stateURL(locatorRoot: URL) throws -> URL {
-        let locator = locatorRoot.appendingPathComponent("location.json")
+        let locator = locatorRoot.appendingPathComponent("workspace_location.json")
         if FileManager.default.fileExists(atPath: locator.path) {
             let location = try JSONFile.read(WorkspaceLocation.self, from: locator)
             try WorkspaceLayout.validate(location.workingDirectory)
@@ -113,7 +113,7 @@ public enum WorkspaceStorage {
             try JSONFile.write(data, to: layout.state)
             wroteState = true
             // Commit the pointer last. A failed migration leaves the previous workspace usable.
-            let locator = locatorRoot.appendingPathComponent("location.json")
+            let locator = locatorRoot.appendingPathComponent("workspace_location.json")
             let current = try? JSONFile.read(WorkspaceLocation.self, from: locator)
             if current?.workingDirectory != layout.root.path {
                 try JSONFile.write(WorkspaceLocation(workingDirectory: layout.root.path), to: locator)
