@@ -55,22 +55,115 @@ scroll.updateTextLayout()
 check(editor.string.isEmpty && scroll.measuredHeight == 28, "undo restores empty prompt and compact height")
 print("Prompt editor checks passed")
 
-// Reproduce an internal NSScroller exit while the pointer remains on its thumb.
-// This window is never presented; events are delivered directly to the component.
-let hoverWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 220),
+// Native component checks: these windows are never presented, and no operating
+// system mouse input is synthesized. Use actual NSScroller geometry and events.
+let hoverWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 300),
                            styleMask: .borderless, backing: .buffered, defer: false)
-let hoverScroller = SubtleScroller(frame: NSRect(x: 180, y: 10, width: 15, height: 180))
-hoverWindow.contentView!.addSubview(hoverScroller)
-hoverScroller.knobProportion = 0.3
-func pointerEvent(_ type: NSEvent.EventType, _ point: NSPoint) -> NSEvent {
-    NSEvent.enterExitEvent(with: type, location: point, modifierFlags: [], timestamp: 0,
-                          windowNumber: hoverWindow.windowNumber, context: nil,
-                          eventNumber: 0, trackingNumber: 0, userData: nil)!
+let otherWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 300),
+                           styleMask: .borderless, backing: .buffered, defer: false)
+func pointerEvent(_ point: NSPoint, in window: NSWindow = hoverWindow,
+                  type: NSEvent.EventType = .mouseMoved) -> NSEvent {
+    NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: 0,
+                      windowNumber: window.windowNumber, context: nil,
+                      eventNumber: 0, clickCount: 0, pressure: 0)!
 }
-hoverScroller.mouseEntered(with: pointerEvent(.mouseEntered, NSPoint(x: 187, y: 100)))
-check(hoverScroller.hovered, "pointer entering scrollbar enables hover")
-hoverScroller.mouseExited(with: pointerEvent(.mouseExited, NSPoint(x: 187, y: 100)))
-check(hoverScroller.hovered, "internal tracking-area exit preserves hover while pointer stays inside")
-hoverScroller.mouseExited(with: pointerEvent(.mouseExited, NSPoint(x: 150, y: 100)))
-check(!hoverScroller.hovered, "leaving the scrollbar clears hover")
+for horizontal in [false, true] {
+    let name = horizontal ? "horizontal" : "vertical"
+    let scroller = SubtleScroller(frame: horizontal
+        ? NSRect(x: 30, y: 30, width: 180, height: 15)
+        : NSRect(x: 30, y: 30, width: 15, height: 180))
+    hoverWindow.contentView!.addSubview(scroller)
+    scroller.isEnabled = true
+    scroller.knobProportion = 0.25
+    scroller.doubleValue = 0.5
+    let thumb = scroller.thumbRect
+    check(!thumb.isEmpty && (horizontal ? thumb.height : thumb.width) == 6, "\(name): six-point thumb has native geometry")
+    let center = NSPoint(x: thumb.midX, y: thumb.midY)
+    let left = NSPoint(x: thumb.minX - 1, y: thumb.midY)
+    let right = NSPoint(x: thumb.maxX + 1, y: thumb.midY)
+    let below = NSPoint(x: thumb.midX, y: thumb.minY - 1)
+    let above = NSPoint(x: thumb.midX, y: thumb.maxY + 1)
+    func move(_ local: NSPoint) {
+        let event = pointerEvent(scroller.convert(local, to: nil))
+        scroller.mouseMoved(with: event)
+    }
+    for (direction, path) in [("left to right", [left, center, right]),
+                              ("right to left", [right, center, left]),
+                              ("bottom to top", [below, center, above]),
+                              ("top to bottom", [above, center, below])] {
+        move(path[0]); check(!scroller.hovered, "\(name) \(direction): outside is pale")
+        move(path[1]); check(scroller.hovered, "\(name) \(direction): thumb is highlighted")
+        scroller.needsDisplay = false
+        move(path[2]); check(!scroller.hovered && scroller.needsDisplay, "\(name) \(direction): crossing the far edge clears AND repaints")
+    }
+    func paintedThumbColor() -> NSColor {
+        let image = NSImage(size: scroller.bounds.size)
+        image.lockFocus()
+        NSColor.white.setFill(); scroller.bounds.fill()
+        scroller.drawKnob()
+        image.unlockFocus()
+        let bitmap = NSBitmapImageRep(data: image.tiffRepresentation!)!
+        let x = Int(center.x / scroller.bounds.width * CGFloat(bitmap.pixelsWide))
+        let y = Int(center.y / scroller.bounds.height * CGFloat(bitmap.pixelsHigh))
+        return bitmap.colorAt(x: x, y: y)!.usingColorSpace(.deviceRGB)!
+    }
+    move(left); let pale = paintedThumbColor().redComponent
+    move(center); let dark = paintedThumbColor().redComponent
+    move(right); let restored = paintedThumbColor().redComponent
+    check(dark < pale - 0.08 && abs(restored - pale) < 0.01,
+          "\(name): rendered pixels darken on thumb and return to the original pale color")
+    // Leaving only the painted thumb must reset, even inside the native hit area.
+    let trackMargin = horizontal ? above : right
+    check(scroller.bounds.contains(trackMargin), "\(name): regression point remains inside native drag target")
+    move(center)
+    scroller.observePointerEvent(pointerEvent(scroller.convert(trackMargin, to: nil)))
+    check(!scroller.hovered, "\(name): window monitor clears hover without any mouseExited event")
+    for _ in 0..<20 { move(center); move(right) }
+    check(!scroller.hovered, "\(name): rapid repeated crossings do not leave hover stuck")
+    move(center)
+    let internalExit = NSEvent.enterExitEvent(with: .mouseExited,
+        location: scroller.convert(center, to: nil), modifierFlags: [], timestamp: 0,
+        windowNumber: hoverWindow.windowNumber, context: nil, eventNumber: 0,
+        trackingNumber: 0, userData: nil)!
+    scroller.mouseExited(with: internalExit)
+    check(scroller.hovered, "\(name): internal tracking exit does not cancel a real thumb hover")
+    scroller.observePointerEvent(pointerEvent(scroller.convert(right, to: nil), type: .leftMouseDragged))
+    check(!scroller.hovered, "\(name): drag outside clears underlying hover")
+    scroller.observePointerEvent(pointerEvent(scroller.convert(center, to: nil), type: .leftMouseUp))
+    check(scroller.hovered, "\(name): release inside restores hover")
+    scroller.observePointerEvent(pointerEvent(scroller.convert(right, to: nil), type: .leftMouseUp))
+    check(!scroller.hovered, "\(name): release outside restores pale state")
+    move(center)
+    scroller.observePointerEvent(pointerEvent(scroller.convert(center, to: nil), in: otherWindow))
+    check(!scroller.hovered, "\(name): moving into another window clears hover")
+    move(center)
+    NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: hoverWindow)
+    check(!scroller.hovered, "\(name): switching windows clears hover")
+    move(center)
+    NotificationCenter.default.post(name: NSApplication.didResignActiveNotification, object: app)
+    check(!scroller.hovered, "\(name): switching apps clears hover")
+    move(center)
+    scroller.isHidden = true
+    move(center)
+    check(!scroller.hovered, "\(name): hidden scrollbar cannot hover")
+    scroller.isHidden = false
+    scroller.isEnabled = false
+    move(center)
+    check(!scroller.hovered, "\(name): disabled scrollbar cannot hover")
+    scroller.isEnabled = true
+    scroller.knobProportion = 1
+    move(center)
+    check(!scroller.hovered, "\(name): content without overflow cannot hover")
+    scroller.knobProportion = 0.25
+    move(center)
+    scroller.doubleValue = 0
+    // Drawing must re-evaluate the moved thumb, even without pointer movement.
+    let image = NSImage(size: scroller.bounds.size)
+    image.lockFocus(); scroller.drawKnob(); image.unlockFocus()
+    check(!scroller.hovered, "\(name): scrolling thumb away from stationary pointer clears hover")
+    scroller.doubleValue = 0.5
+    move(center)
+    scroller.removeFromSuperview()
+    check(!scroller.hovered, "\(name): removing scrollbar clears hover and detaches observers")
+}
 print("Scrollbar hover checks passed")

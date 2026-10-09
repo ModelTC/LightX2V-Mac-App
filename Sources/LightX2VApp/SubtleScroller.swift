@@ -5,21 +5,18 @@ import SwiftUI
 final class SubtleScroller: NSScroller {
     private(set) var hovered = false
     private var dragging = false
-    private var pointerArea: NSTrackingArea?
+    private var pointerLocation: NSPoint?
+    private var eventMonitor: Any?
+    private var windowObservers: [NSObjectProtocol] = []
+    private var windowArea: NSTrackingArea?
+    private weak var trackingView: NSView?
 
     override class var isCompatibleWithOverlayScrollers: Bool { true }
 
-    override func draw(_ dirtyRect: NSRect) { drawKnob() }
-    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {}
-
-    override func drawKnob() {
-        guard isEnabled, knobProportion < 1 else { return }
-        // Overlay scrollers can change their tracking regions while the pointer
-        // is stationary. Resolve the actual position again before painting.
-        if let window { refreshHover(at: window.mouseLocationOutsideOfEventStream) }
+    /// The visual hover target is the thumb, not NSScroller's wider drag target.
+    var thumbRect: NSRect {
         var thumb = rect(for: .knob)
-        guard !thumb.isEmpty else { return }
-        // A six-point visual thumb inside the full native drag target.
+        guard !thumb.isEmpty else { return .zero }
         if bounds.height >= bounds.width {
             thumb.origin.x = bounds.midX - 3
             thumb.size.width = 6
@@ -27,43 +24,104 @@ final class SubtleScroller: NSScroller {
             thumb.origin.y = bounds.midY - 3
             thumb.size.height = 6
         }
-        NSColor(Palette.scrollThumb).withAlphaComponent(dragging ? 0.7 : hovered ? 0.5 : 0.25).setFill()
-        NSBezierPath(roundedRect: thumb, xRadius: 3, yRadius: 3).fill()
+        return thumb.intersection(visibleRect)
     }
 
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        // inVisibleRect follows resizing itself. Replacing this area on every
-        // layout can send an exit for the old area while the mouse is still here.
-        if pointerArea == nil {
-            let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self)
-            addTrackingArea(area)
-            pointerArea = area
+    override func draw(_ dirtyRect: NSRect) { drawKnob() }
+    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {}
+
+    override func drawKnob() {
+        // Scrolling or resizing can move the thumb under a stationary pointer.
+        refreshHover()
+        guard isEnabled, knobProportion < 1, !thumbRect.isEmpty else { return }
+        NSColor(Palette.scrollThumb).withAlphaComponent(dragging ? 0.7 : hovered ? 0.5 : 0.25).setFill()
+        NSBezierPath(roundedRect: thumbRect, xRadius: 3, yRadius: 3).fill()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        stopObservingPointer()
+        guard let window, let contentView = window.contentView else { return }
+        window.acceptsMouseMovedEvents = true
+        // Observe moves throughout the window: overlay scrollers can replace their
+        // own tracking regions, so their mouseExited events are not a reliable reset.
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [
+            .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged,
+            .leftMouseDown, .leftMouseUp, .scrollWheel
+        ]) { [weak self] event in
+            self?.observePointerEvent(event)
+            return event
         }
-        if let window { refreshHover(at: window.mouseLocationOutsideOfEventStream) }
+        let area = NSTrackingArea(rect: .zero,
+                                 options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                 owner: self)
+        contentView.addTrackingArea(area)
+        trackingView = contentView
+        windowArea = area
+        for name in [NSWindow.didResignKeyNotification, NSWindow.willCloseNotification] {
+            windowObservers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                self?.clearPointer()
+            })
+        }
+        windowObservers.append(NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.clearPointer()
+        })
+    }
+
+    deinit { stopObservingPointer() }
+
+    private func stopObservingPointer() {
+        if let eventMonitor { NSEvent.removeMonitor(eventMonitor) }
+        eventMonitor = nil
+        if let windowArea { trackingView?.removeTrackingArea(windowArea) }
+        windowArea = nil
+        trackingView = nil
+        windowObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        windowObservers.removeAll()
+        clearPointer()
+    }
+
+    // Kept separate from the monitor to exercise real AppKit geometry in tests.
+    func observePointerEvent(_ event: NSEvent) {
+        guard let window, event.window === window else { clearPointer(); return }
+        pointerLocation = event.locationInWindow
+        refreshHover()
+    }
+
+    private func refreshHover() {
+        let inside: Bool
+        if let pointerLocation, window != nil, isEnabled, knobProportion < 1,
+           !isHiddenOrHasHiddenAncestor {
+            inside = thumbRect.contains(convert(pointerLocation, from: nil))
+        } else {
+            inside = false
+        }
+        if hovered != inside { hovered = inside; needsDisplay = true }
+    }
+
+    private func clearPointer() {
+        pointerLocation = nil
+        refreshHover()
     }
 
     override func mouseEntered(with event: NSEvent) {
-        if event.trackingArea !== pointerArea { super.mouseEntered(with: event) }
-        refreshHover(at: event.locationInWindow)
-        NSCursor.arrow.set()
+        if event.trackingArea !== windowArea { super.mouseEntered(with: event) }
+        observePointerEvent(event)
+        if hovered { NSCursor.arrow.set() }
     }
 
     override func mouseExited(with event: NSEvent) {
-        if event.trackingArea !== pointerArea { super.mouseExited(with: event) }
-        // NSScroller also owns tracking areas for its knob and slot. Leaving one
-        // of those areas does not mean the pointer has left the whole scroller.
-        refreshHover(at: event.locationInWindow)
+        if event.trackingArea === windowArea {
+            clearPointer()
+        } else {
+            super.mouseExited(with: event)
+            observePointerEvent(event)
+        }
     }
 
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
-        refreshHover(at: event.locationInWindow)
-    }
-
-    private func refreshHover(at windowPoint: NSPoint) {
-        let inside = !isHiddenOrHasHiddenAncestor && visibleRect.contains(convert(windowPoint, from: nil))
-        if hovered != inside { hovered = inside; needsDisplay = true }
+        observePointerEvent(event)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -71,7 +129,10 @@ final class SubtleScroller: NSScroller {
         needsDisplay = true
         super.mouseDown(with: event)
         dragging = false
-        if let window { refreshHover(at: window.mouseLocationOutsideOfEventStream) }
+        // Native dragging runs its own tracking loop. Reconcile after release,
+        // including a release outside the thumb or outside this window.
+        pointerLocation = window?.mouseLocationOutsideOfEventStream
+        refreshHover()
         needsDisplay = true
     }
 
