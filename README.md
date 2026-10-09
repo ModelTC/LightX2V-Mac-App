@@ -11,7 +11,7 @@
 需要 **M 系列芯片的 Mac、macOS 14+**，以及本地 LightX2V 源码、模型权重和支持 PyTorch MPS 的 Python 环境。安装包不包含模型和推理环境。
 
 1. 下载并解压，将 `LightX2V APP.app` 放入「应用程序」。
-2. 点击左下角齿轮，设置 **LightX2V 源码目录、Python 可执行文件、生成结果目录**。
+2. 首次打开时，设置 **LightX2V 源码目录、Python 可执行文件、生成结果目录**。保存后会自动记住，之后可通过左下角齿轮修改。
 3. 在右侧「模型准备」选择模型目录和 Config，点击「保存并检查」。配置使用 LightX2V 中的 `configs/platforms/mps/qwen_image_21_viggle_v03.json`，模型使用对应的 merged 权重。
 4. 输入提示词，选择尺寸，点击「生成」或按 **⌘ Return**。
 

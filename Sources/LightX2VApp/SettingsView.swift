@@ -29,16 +29,18 @@ struct InspectorView: View {
 struct ModelPreparationView: View {
     @EnvironmentObject var store: AppStore
     @State private var showsDetails = false
+    private var needsModelSelection: Bool { store.modelDirectory.isEmpty || store.modelConfig.isEmpty }
 
     private var statusTitle: String {
         if store.isChecking { return "正在检查环境" }
         if store.hasUnsavedModelSettings { return "有未保存的修改" }
+        if needsModelSelection { return "待准备模型" }
         if store.environmentReady { return "环境就绪" }
         return store.environmentMessage == "尚未检查运行环境" ? "尚未检查" : "检查未通过"
     }
 
     private var statusColor: Color {
-        if store.isChecking { return Palette.muted }
+        if store.isChecking || needsModelSelection { return Palette.muted }
         return store.environmentReady && !store.hasUnsavedModelSettings ? Palette.green : Palette.accent
     }
 
@@ -57,7 +59,7 @@ struct ModelPreparationView: View {
                 Group {
                     if store.isChecking { ProgressView().controlSize(.mini) }
                     else {
-                        Image(systemName: store.hasUnsavedModelSettings ? "pencil.circle" : store.environmentReady ? "checkmark.circle.fill" : "exclamationmark.circle")
+                        Image(systemName: store.hasUnsavedModelSettings ? "pencil.circle" : needsModelSelection ? "cube.transparent" : store.environmentReady ? "checkmark.circle.fill" : "exclamationmark.circle")
                             .foregroundStyle(statusColor)
                     }
                 }.frame(width: 14, height: 14)
@@ -84,7 +86,7 @@ struct ModelPreparationView: View {
             }.font(.system(size: 10)).buttonStyle(.plain).foregroundStyle(Palette.muted)
 
             if !store.isChecking && !store.environmentReady && !store.hasUnsavedModelSettings && store.environmentMessage != "尚未检查运行环境" {
-                Text(store.environmentMessage).font(.system(size: 10)).foregroundStyle(Palette.accent)
+                Text(store.environmentMessage).font(.system(size: 10)).foregroundStyle(needsModelSelection ? Palette.muted : Palette.accent)
                     .lineLimit(2).fixedSize(horizontal: false, vertical: true).help(store.environmentMessage)
             }
 
@@ -139,7 +141,7 @@ private struct ModelResourceRow: View {
                 let panel = NSOpenPanel()
                 panel.canChooseDirectories = directory; panel.canChooseFiles = !directory
                 panel.allowsMultipleSelection = false; panel.canCreateDirectories = false
-                panel.directoryURL = URL(fileURLWithPath: value).deletingLastPathComponent()
+                panel.directoryURL = value.isEmpty ? FileManager.default.homeDirectoryForCurrentUser : URL(fileURLWithPath: value).deletingLastPathComponent()
                 if panel.runModal() == .OK, let url = panel.url { value = url.path }
             } label: {
                 Image(systemName: "folder").font(.system(size: 12)).foregroundStyle(Palette.muted)
@@ -149,15 +151,35 @@ private struct ModelResourceRow: View {
     }
 }
 
+struct FirstLaunchSetupView: View {
+    @EnvironmentObject var store: AppStore
+    var body: some View {
+        SettingsView(settings: store.settings)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Palette.line, lineWidth: 1))
+            .shadow(color: .black.opacity(0.03), radius: 20, y: 6)
+            .padding(40)
+            .frame(minWidth: 760, minHeight: 540)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Palette.sidebar)
+            .overlay(alignment: .top) { WindowDragArea(isNativeTitleBar: true).frame(height: 28) }
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject var store: AppStore
     @Environment(\.dismiss) var dismiss
     @State var settings: AppSettings
+    @State private var saveError: String?
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             HStack(spacing: 12) {
                 BrandMark(size: 36)
-                VStack(alignment: .leading, spacing: 4) { Text("通用设置").font(.system(size: 20, weight: .semibold)); Text("配置本地运行环境与生成结果的保存位置").font(.system(size: 11)).foregroundStyle(Palette.muted) }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(store.needsGeneralSetup ? "欢迎使用 LightX2V" : "通用设置").font(.system(size: 20, weight: .semibold))
+                    Text(store.needsGeneralSetup ? "先完成通用设置，保存后下次打开即可直接使用。" : "配置本地运行环境与生成结果的保存位置")
+                        .font(.system(size: 11)).foregroundStyle(Palette.muted)
+                }
                 Spacer()
             }
             VStack(spacing: 16) {
@@ -165,30 +187,44 @@ struct SettingsView: View {
                 PathSettingField(title: "Python 可执行文件", value: $settings.python, directory: false)
                 PathSettingField(title: "生成结果目录", value: $settings.outputDirectory, directory: true, allowsCreatingDirectories: true)
             }.disabled(store.busy)
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    if store.isChecking { ProgressView().controlSize(.mini) }
-                    else { Image(systemName: store.environmentReady ? "checkmark.circle.fill" : "exclamationmark.circle").foregroundStyle(store.environmentReady ? Palette.green : Palette.accent) }
-                    Text(store.isChecking ? "检查中…" : store.environmentReady ? "运行环境可用" : "运行环境需要检查").font(.system(size: 12, weight: .medium))
-                    Spacer()
-                    Button("重新检查已保存设置") { store.checkEnvironment() }.disabled(store.busy).font(.system(size: 11))
-                }
-                ScrollView { Text(store.environmentMessage).font(.system(size: 11, design: .monospaced)).foregroundStyle(Palette.muted).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).subtleScrollbars() }.frame(maxHeight: 75)
-            }.padding(14).background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10))
+            if !store.needsGeneralSetup {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        if store.isChecking { ProgressView().controlSize(.mini) }
+                        else { Image(systemName: store.environmentReady ? "checkmark.circle.fill" : "exclamationmark.circle").foregroundStyle(store.environmentReady ? Palette.green : Palette.accent) }
+                        Text(store.isChecking ? "检查中…" : store.environmentReady ? "运行环境可用" : "运行环境需要检查").font(.system(size: 12, weight: .medium))
+                        Spacer()
+                        Button("重新检查已保存设置") { store.checkEnvironment() }.disabled(store.busy).font(.system(size: 11))
+                    }
+                    ScrollView { Text(store.environmentMessage).font(.system(size: 11, design: .monospaced)).foregroundStyle(Palette.muted).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).subtleScrollbars() }.frame(maxHeight: 75)
+                }.padding(14).background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10))
+            }
             Text("模型目录与 Config 配置请在主界面右侧的「模型准备」中设置。")
                 .font(.system(size: 11)).foregroundStyle(Palette.muted)
+            if let saveError {
+                Label(saveError, systemImage: "exclamationmark.circle")
+                    .font(.system(size: 11)).foregroundStyle(Palette.accent)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack {
-                Button("恢复默认路径") {
-                    let defaults = AppSettings.defaults
-                    settings.repository = defaults.repository
-                    settings.python = defaults.python
-                    settings.outputDirectory = defaults.outputDirectory
-                }.disabled(store.busy)
                 Spacer()
-                Button("取消") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("保存并检查") { store.applyGeneralSettings(settings); dismiss() }.keyboardShortcut(.defaultAction).disabled(store.busy).buttonStyle(.borderedProminent).tint(Palette.button)
+                if store.needsGeneralSetup {
+                    Button("退出") { NSApp.terminate(nil) }
+                } else {
+                    Button("取消") { dismiss() }.keyboardShortcut(.cancelAction)
+                }
+                Button(store.needsGeneralSetup ? "保存并开始" : "保存并检查") {
+                    let firstSetup = store.needsGeneralSetup
+                    do {
+                        try store.applyGeneralSettings(settings)
+                        if !firstSetup { dismiss() }
+                    }
+                    catch { saveError = error.localizedDescription }
+                }.keyboardShortcut(.defaultAction).disabled(store.busy || !settings.hasGeneralPaths)
+                    .buttonStyle(.borderedProminent).tint(Palette.button)
             }
         }.padding(28).frame(width: 660).background(Palette.canvas).foregroundStyle(Palette.ink)
+            .onChange(of: settings) { _, _ in saveError = nil }
     }
 }
 
@@ -209,7 +245,7 @@ struct PathSettingField: View {
                     let panel = NSOpenPanel()
                     panel.canChooseDirectories = directory; panel.canChooseFiles = !directory; panel.allowsMultipleSelection = false
                     panel.canCreateDirectories = allowsCreatingDirectories
-                    panel.directoryURL = URL(fileURLWithPath: value).deletingLastPathComponent()
+                    panel.directoryURL = value.isEmpty ? FileManager.default.homeDirectoryForCurrentUser : URL(fileURLWithPath: value).deletingLastPathComponent()
                     if panel.runModal() == .OK, let url = panel.url { value = url.path }
                 } label: {
                     Text("选择…")

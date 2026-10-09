@@ -34,6 +34,7 @@ final class AppStore: ObservableObject {
     @Published var logs = ""
     @Published var errorMessage: String?
     @Published var showSettings = false
+    @Published private(set) var hasCompletedGeneralSetup = false
     @Published var showLogs = false
     @Published var showInspector = true
     @Published var modelPreparationFocus = 0
@@ -48,10 +49,11 @@ final class AppStore: ObservableObject {
 
     var selected: Generation? { generations.first { $0.id == selectedID } }
     var busy: Bool { isRunning || isChecking }
+    var needsGeneralSetup: Bool { !hasCompletedGeneralSetup || !settings.hasGeneralPaths }
     var hasUnsavedModelSettings: Bool { modelDirectory != settings.model || modelConfig != settings.config }
     var width: Int { generationSize.dimensions.width }
     var height: Int { generationSize.dimensions.height }
-    var canGenerate: Bool { !busy && !isComposingPrompt && !hasUnsavedModelSettings && generationSize.dimensions.isValid && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var canGenerate: Bool { !needsGeneralSetup && !busy && !isComposingPrompt && !hasUnsavedModelSettings && generationSize.dimensions.isValid && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var bridgePath: String {
         (Bundle.main.url(forResource: "bridge", withExtension: "py")
          ?? Bundle.module.url(forResource: "bridge", withExtension: "py")!).path
@@ -77,11 +79,12 @@ final class AppStore: ObservableObject {
         data.recoverInterrupted()
         settings = data.settings; generations = data.generations
         modelDirectory = data.settings.model; modelConfig = data.settings.config
+        hasCompletedGeneralSetup = data.hasCompletedGeneralSetup
         errorMessage = readError
     }
 
     func persist() {
-        do { try JSONFile.write(WorkspaceData(settings: settings, generations: generations), to: stateURL) }
+        do { try JSONFile.write(WorkspaceData(settings: settings, generations: generations, hasCompletedGeneralSetup: hasCompletedGeneralSetup), to: stateURL) }
         catch { errorMessage = "无法保存应用状态：\(error.localizedDescription)" }
     }
 
@@ -95,12 +98,22 @@ final class AppStore: ObservableObject {
         selectedID = nil
     }
 
-    func applyGeneralSettings(_ value: AppSettings) {
+    func applyGeneralSettings(_ value: AppSettings) throws {
+        guard !busy else { throw AppError.message("请等待当前任务结束后再保存设置。") }
         var updated = settings
-        updated.repository = value.repository
-        updated.python = value.python
-        updated.outputDirectory = value.outputDirectory
-        applySettings(updated)
+        func path(_ value: String) -> String {
+            (value.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath
+        }
+        updated.repository = path(value.repository)
+        updated.python = path(value.python)
+        updated.outputDirectory = path(value.outputDirectory)
+        try updated.validateGeneralPaths()
+        // Commit first: a failed write must leave onboarding open and retryable.
+        try JSONFile.write(WorkspaceData(settings: updated, generations: generations, hasCompletedGeneralSetup: true), to: stateURL)
+        if needsGeneralSetup { showSettings = false }
+        settings = updated; hasCompletedGeneralSetup = true
+        environmentReady = false
+        checkEnvironment()
     }
 
     func applyModelSettings() {
@@ -122,11 +135,21 @@ final class AppStore: ObservableObject {
 
     private func applySettings(_ value: AppSettings) {
         guard !busy else { return }
+        guard !needsGeneralSetup else { showSettings = true; return }
         settings = value; environmentReady = false; persist(); checkEnvironment()
     }
 
     func checkEnvironment() {
         guard !busy else { return }
+        guard !needsGeneralSetup else {
+            environmentMessage = "请先完成通用设置。"
+            return
+        }
+        guard !settings.model.isEmpty, !settings.config.isEmpty else {
+            environmentReady = false
+            environmentMessage = "请在右侧「模型准备」中选择模型目录和 Config 配置。"
+            return
+        }
         do {
             try settings.validatePaths()
             let requestURL = stateURL.deletingLastPathComponent().appendingPathComponent("environment-check.json")
@@ -165,6 +188,7 @@ final class AppStore: ObservableObject {
 
     func generate() {
         guard !busy, !isComposingPrompt else { return }
+        guard !needsGeneralSetup else { showSettings = true; return }
         guard !hasUnsavedModelSettings else {
             showModelPreparation()
             errorMessage = "请先在右侧「模型准备」中保存并检查模型设置。"

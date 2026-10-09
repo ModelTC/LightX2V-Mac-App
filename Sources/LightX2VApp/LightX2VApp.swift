@@ -8,7 +8,10 @@ struct LightX2VApplication: App {
 
     var body: some Scene {
         Window("LightX2V APP", id: "main") {
-            WorkspaceView().environmentObject(store)
+            Group {
+                if store.needsGeneralSetup { FirstLaunchSetupView() }
+                else { WorkspaceView() }
+            }.environmentObject(store)
                 .preferredColorScheme(.light)
                 .background(ScreenFittingWindow())
                 .onAppear { delegate.store = store; NSApp.setActivationPolicy(.regular); NSApp.activate(ignoringOtherApps: true) }

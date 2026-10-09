@@ -13,14 +13,35 @@ public struct AppSettings: Codable, Equatable {
     }
 
     public static var defaults: AppSettings {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let repo = home + "/Documents/x2v/LightX2V"
-        let candidates = ["/opt/miniconda3/envs/torch/bin/python", repo + "/.venv/bin/python",
-                          home + "/miniforge3/envs/torch/bin/python", "/opt/homebrew/bin/python3", "/usr/bin/python3"]
-        return AppSettings(repository: repo, model: home + "/Documents/x2v/models/Qwen/Qwen-Image-2.1-merged",
-                           config: repo + "/configs/platforms/mps/qwen_image_21_viggle_v03.json",
-                           python: candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) ?? "/usr/bin/python3",
-                           outputDirectory: home + "/Pictures/LightX2V")
+        AppSettings(repository: "", model: "", config: "", python: "", outputDirectory: "")
+    }
+
+    public var hasGeneralPaths: Bool {
+        [repository, python, outputDirectory].allSatisfy { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
+    /// Validate general settings independently of model preparation. A new output
+    /// directory may be created later, provided its nearest existing parent is writable.
+    public func validateGeneralPaths() throws {
+        let fm = FileManager.default
+        for (label, value) in [("LightX2V 源码目录", repository), ("Python 可执行文件", python), ("生成结果目录", outputDirectory)] {
+            guard !value.isEmpty else { throw AppError.message("请选择\(label)。") }
+            guard value.hasPrefix("/") else { throw AppError.message("\(label)必须使用绝对路径。") }
+        }
+        guard fm.fileExists(atPath: repository + "/lightx2v/infer.py") else {
+            throw AppError.message("源码目录中找不到 lightx2v/infer.py，请选择正确的 LightX2V 目录。")
+        }
+        var isDirectory: ObjCBool = false
+        guard fm.fileExists(atPath: python, isDirectory: &isDirectory), !isDirectory.boolValue,
+              fm.isExecutableFile(atPath: python) else {
+            throw AppError.message("请选择可执行的 Python 文件，例如环境目录中的 bin/python。")
+        }
+        var output = URL(fileURLWithPath: outputDirectory).standardizedFileURL
+        while !fm.fileExists(atPath: output.path), output.path != "/" { output.deleteLastPathComponent() }
+        guard fm.fileExists(atPath: output.path, isDirectory: &isDirectory), isDirectory.boolValue,
+              fm.isWritableFile(atPath: output.path) else {
+            throw AppError.message("生成结果目录不可写，请选择有写入权限的文件夹。")
+        }
     }
 
     public func validatePaths() throws {
@@ -93,8 +114,18 @@ public struct Generation: Codable, Identifiable {
 public struct WorkspaceData: Codable {
     public var settings: AppSettings
     public var generations: [Generation]
-    public init(settings: AppSettings = .defaults, generations: [Generation] = []) {
+    public var hasCompletedGeneralSetup: Bool
+    public init(settings: AppSettings = .defaults, generations: [Generation] = [], hasCompletedGeneralSetup: Bool = false) {
         self.settings = settings; self.generations = generations
+        self.hasCompletedGeneralSetup = hasCompletedGeneralSetup
+    }
+    private enum CodingKeys: String, CodingKey { case settings, generations, hasCompletedGeneralSetup }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        settings = try values.decode(AppSettings.self, forKey: .settings)
+        generations = try values.decode([Generation].self, forKey: .generations)
+        // Existing installations predate the setup flag. Preserve their saved paths.
+        hasCompletedGeneralSetup = try values.decodeIfPresent(Bool.self, forKey: .hasCompletedGeneralSetup) ?? settings.hasGeneralPaths
     }
     public mutating func recoverInterrupted() {
         for index in generations.indices where generations[index].status == .running {

@@ -21,7 +21,11 @@ struct CoreChecks {
         print("PASS all 14 resolution presets and tier switches")
         try sizeSelectionAndRestoration()
         print("PASS preset-only selection and legacy history normalization")
-        print("6 core checks passed")
+        try setupPersistenceAndMigration()
+        print("PASS first-launch, incomplete, completed and legacy setup persistence")
+        try generalSettingsValidation()
+        print("PASS general path validation independent of model preparation")
+        print("8 core checks passed")
     }
     static func invalidRequests() throws {
         for (prompt, width, height, seed) in [("", 1024, 1024, Int64(42)), ("test", 720, 1280, 42),
@@ -63,6 +67,69 @@ struct CoreChecks {
         try expect(loaded.generations[0].id == workspace.generations[0].id, "history identity changed")
         try expect(loaded.generations[0].request.height == 768, "history parameters changed")
         try expect(loaded.settings == workspace.settings, "settings changed")
+    }
+
+    static func setupPersistenceAndMigration() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("workspace.json")
+        let fresh = WorkspaceData()
+        try expect(!fresh.hasCompletedGeneralSetup && !fresh.settings.hasGeneralPaths, "new installation skipped setup")
+        try expect([fresh.settings.repository, fresh.settings.python, fresh.settings.outputDirectory].allSatisfy(\.isEmpty), "new setup contains machine-specific defaults")
+        try JSONFile.write(fresh, to: url)
+        let unfinished = try JSONFile.read(WorkspaceData.self, from: url)
+        try expect(!unfinished.hasCompletedGeneralSetup, "quitting before setup marked it complete")
+
+        let settings = AppSettings(repository: "/custom/LightX2V", model: "", config: "", python: "/custom/env/bin/python", outputDirectory: "/custom/images")
+        let request = try InferenceRequest(settings: settings, prompt: "保留历史", width: 1024, height: 1024, seed: 42, output: "/custom/images/image.png")
+        let history = Generation(request: request)
+        let completed = WorkspaceData(settings: settings, generations: [history], hasCompletedGeneralSetup: true)
+        try JSONFile.write(completed, to: url)
+        let reopened = try JSONFile.read(WorkspaceData.self, from: url)
+        try expect(reopened.hasCompletedGeneralSetup && reopened.settings == settings, "reopening lost completed setup or paths")
+        try expect(reopened.generations.first?.id == history.id, "saving setup lost history")
+
+        var legacy = try JSONSerialization.jsonObject(with: JSONEncoder().encode(completed)) as! [String: Any]
+        legacy.removeValue(forKey: "hasCompletedGeneralSetup")
+        let migrated = try JSONDecoder().decode(WorkspaceData.self, from: JSONSerialization.data(withJSONObject: legacy))
+        try expect(migrated.hasCompletedGeneralSetup && migrated.settings == settings, "upgrade forced existing user through setup")
+        try expect(migrated.generations.first?.id == history.id, "migration lost history")
+        legacy["hasCompletedGeneralSetup"] = false
+        let explicitIncomplete = try JSONDecoder().decode(WorkspaceData.self, from: JSONSerialization.data(withJSONObject: legacy))
+        try expect(!explicitIncomplete.hasCompletedGeneralSetup, "explicit incomplete flag was ignored")
+        legacy.removeValue(forKey: "hasCompletedGeneralSetup")
+        var partial = legacy["settings"] as! [String: Any]; partial["python"] = " "; legacy["settings"] = partial
+        let incompleteLegacy = try JSONDecoder().decode(WorkspaceData.self, from: JSONSerialization.data(withJSONObject: legacy))
+        try expect(!incompleteLegacy.hasCompletedGeneralSetup, "incomplete legacy paths skipped setup")
+    }
+
+    static func generalSettingsValidation() throws {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? fm.removeItem(at: dir) }
+        let repo = dir.appendingPathComponent("LightX2V")
+        try fm.createDirectory(at: repo.appendingPathComponent("lightx2v"), withIntermediateDirectories: true)
+        try Data().write(to: repo.appendingPathComponent("lightx2v/infer.py"))
+        let python = dir.appendingPathComponent("python")
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: python)
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: python.path)
+        let output = dir.appendingPathComponent("new/images")
+        let valid = AppSettings(repository: repo.path, model: "", config: "", python: python.path, outputDirectory: output.path)
+        try valid.validateGeneralPaths()
+        try expect(!fm.fileExists(atPath: output.path), "validation unexpectedly created output folders")
+        let invalid: [(WritableKeyPath<AppSettings, String>, String)] = [
+            (\.repository, ""), (\.python, ""), (\.outputDirectory, ""),
+            (\.repository, "relative/repo"), (\.python, "relative/python"), (\.outputDirectory, "relative/output"),
+            (\.repository, dir.path), (\.python, repo.path), (\.python, dir.appendingPathComponent("missing").path),
+            (\.python, repo.appendingPathComponent("lightx2v/infer.py").path),
+            (\.outputDirectory, python.path), (\.outputDirectory, python.appendingPathComponent("images").path)
+        ]
+        for (key, value) in invalid {
+            var settings = valid; settings[keyPath: key] = value
+            var rejected = false
+            do { try settings.validateGeneralPaths() } catch { rejected = true }
+            try expect(rejected, "invalid general path accepted: \(value)")
+        }
     }
 
     static func resolutionPresets() throws {
