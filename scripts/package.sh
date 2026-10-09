@@ -7,6 +7,7 @@ ARCHIVE="${2:-$ROOT/dist/LightX2V-APP-macOS-arm64.zip}"
 test -f "$APP/Contents/Info.plist"
 test -x "$APP/Contents/MacOS/LightX2VApp"
 test -f "$APP/Contents/Resources/bridge.py"
+test -f "$APP/Contents/Resources/qwen_image_edit.py"
 test "$(lipo -archs "$APP/Contents/MacOS/LightX2VApp")" = arm64
 plutil -lint "$APP/Contents/Info.plist"
 codesign --verify --deep --strict "$APP"
@@ -23,7 +24,9 @@ RESTORED_APP="$VERIFY_DIR/$(basename "$APP")"
 test -x "$RESTORED_APP/Contents/MacOS/LightX2VApp"
 codesign --verify --deep --strict "$RESTORED_APP"
 cmp "$APP/Contents/MacOS/LightX2VApp" "$RESTORED_APP/Contents/MacOS/LightX2VApp"
-cmp "$APP/Contents/Resources/bridge.py" "$RESTORED_APP/Contents/Resources/bridge.py"
+for resource in bridge.py qwen_image_edit.py; do
+    cmp "$APP/Contents/Resources/$resource" "$RESTORED_APP/Contents/Resources/$resource"
+done
 
 (
     cd "$(dirname "$ARCHIVE")"

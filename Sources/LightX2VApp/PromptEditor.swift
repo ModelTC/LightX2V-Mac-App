@@ -7,6 +7,9 @@ struct PromptEditor: NSViewRepresentable {
     @Binding var height: CGFloat
     @Binding var focused: Bool
     @Binding var composing: Bool
+    var placeholder = "描述你想生成的画面…"
+    var onDropFiles: (([URL]) -> Void)?
+    var onDropHover: ((Bool) -> Void)?
     var onSubmit: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -37,6 +40,9 @@ struct PromptEditor: NSViewRepresentable {
 
     func updateNSView(_ view: PromptScrollView, context: Context) {
         context.coordinator.parent = self
+        view.editor.placeholder = placeholder
+        view.editor.onDropFiles = onDropFiles
+        view.editor.onDropHover = onDropHover
         // SwiftUI updates also occur while the IME is still selecting a candidate.
         // Never replace that live text storage or move its selection.
         if !view.editor.hasMarkedText(), view.editor.string != text {
@@ -89,6 +95,7 @@ final class PromptScrollView: NSScrollView {
         contentView.drawsBackground = false
         editor.isRichText = false
         editor.importsGraphics = false
+        editor.registerForDraggedTypes([.fileURL])
         editor.allowsUndo = true
         editor.drawsBackground = false
         editor.font = .systemFont(ofSize: 14)
@@ -144,8 +151,45 @@ final class PromptTextView: NSTextView {
     var onInputChange: (() -> Void)?
     var onFocusChange: ((Bool) -> Void)?
     var onSubmit: (() -> Void)?
+    var placeholder = "描述你想生成的画面…" { didSet { if oldValue != placeholder { needsDisplay = true } } }
+    var onDropFiles: (([URL]) -> Void)?
+    var onDropHover: ((Bool) -> Void)?
     private var pointerArea: NSTrackingArea?
     var showsPlaceholder: Bool { string.isEmpty && !hasMarkedText() }
+
+    private func isFileDrop(_ sender: NSDraggingInfo) -> Bool {
+        sender.draggingPasteboard.types?.contains(.fileURL) == true
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard isFileDrop(sender) else { return super.draggingEntered(sender) }
+        let accepted = onDropFiles != nil
+        onDropHover?(accepted)
+        return accepted ? .copy : []
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        isFileDrop(sender) ? draggingEntered(sender) : super.draggingUpdated(sender)
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        onDropHover?(false)
+        super.draggingExited(sender)
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        isFileDrop(sender) ? onDropFiles != nil : super.prepareForDragOperation(sender)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard isFileDrop(sender) else { return super.performDragOperation(sender) }
+        onDropHover?(false)
+        guard let onDropFiles,
+              let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self],
+                  options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty else { return false }
+        onDropFiles(urls)
+        return true
+    }
 
     override func keyDown(with event: NSEvent) {
         let isReturn = event.keyCode == 36 || event.keyCode == 76
@@ -175,7 +219,7 @@ final class PromptTextView: NSTextView {
         guard showsPlaceholder else { return }
         let origin = NSPoint(x: textContainerOrigin.x + (textContainer?.lineFragmentPadding ?? 0),
                              y: textContainerOrigin.y)
-        ("描述你想生成的画面…" as NSString).draw(at: origin, withAttributes: [
+        (placeholder as NSString).draw(at: origin, withAttributes: [
             .font: font ?? NSFont.systemFont(ofSize: 14), .foregroundColor: NSColor(Palette.muted)
         ])
     }

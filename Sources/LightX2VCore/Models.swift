@@ -6,27 +6,24 @@ public struct AppSettings: Codable, Equatable {
     public var config: String
     public var python: String
     public var workingDirectory: String
-    // Retained only to import pre-workspace installations.
-    public var outputDirectory: String
+    public var outputDirectory: String { workingDirectory.isEmpty ? "" : WorkspaceLayout(workingDirectory).outputs.path }
 
-    public init(repository: String, model: String, config: String, python: String, outputDirectory: String = "", workingDirectory: String = "") {
+    public init(repository: String, model: String, config: String, python: String, workingDirectory: String = "") {
         self.repository = repository; self.model = model; self.config = config
         self.python = python; self.workingDirectory = workingDirectory
-        self.outputDirectory = workingDirectory.isEmpty ? outputDirectory : WorkspaceLayout(workingDirectory).outputs.path
     }
 
     public static var defaults: AppSettings {
-        AppSettings(repository: "", model: "", config: "", python: "", outputDirectory: "")
+        AppSettings(repository: "", model: "", config: "", python: "")
     }
 
-    private enum CodingKeys: String, CodingKey { case repository, model, config, python, outputDirectory, workingDirectory }
+    private enum CodingKeys: String, CodingKey { case repository, model, config, python, workingDirectory }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         self.init(repository: try values.decode(String.self, forKey: .repository),
                   model: try values.decode(String.self, forKey: .model),
                   config: try values.decode(String.self, forKey: .config),
                   python: try values.decode(String.self, forKey: .python),
-                  outputDirectory: try values.decodeIfPresent(String.self, forKey: .outputDirectory) ?? "",
                   workingDirectory: try values.decodeIfPresent(String.self, forKey: .workingDirectory) ?? "")
     }
 
@@ -59,11 +56,10 @@ public struct AppSettings: Codable, Equatable {
 
     public func validatePaths() throws {
         let fm = FileManager.default
-        for (label, value) in [("LightX2V", repository), ("模型", model), ("配置", config), ("Python", python), ("输出目录", outputDirectory)] {
+        try validateGeneralPaths()
+        for (label, value) in [("模型", model), ("配置", config)] {
             guard value.hasPrefix("/") else { throw AppError.message("\(label)必须使用绝对路径") }
         }
-        guard fm.fileExists(atPath: repository + "/lightx2v/infer.py") else { throw AppError.message("找不到 lightx2v/infer.py，请在设置中选择正确的 LightX2V 目录。") }
-        guard fm.isExecutableFile(atPath: python) else { throw AppError.message("Python 不可执行，请在设置中选择现有的 Python 环境。") }
         guard fm.fileExists(atPath: config) else { throw AppError.message("找不到 MPS 推理配置。") }
         guard fm.fileExists(atPath: model + "/model_index.json") else { throw AppError.message("模型目录缺少 model_index.json。") }
     }
@@ -83,8 +79,9 @@ public struct InferenceRequest: Codable {
     public var height: Int
     public var seed: Int64
     public var output: String
+    public var inputImages: [InputImage]
 
-    public init(settings: AppSettings, prompt: String, width: Int, height: Int, seed: Int64, output: String) throws {
+    public init(settings: AppSettings, prompt: String, width: Int, height: Int, seed: Int64, output: String, inputImages: [InputImage] = []) throws {
         guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, prompt.count <= 20000 else {
             throw AppError.message("请输入 1–20000 字的提示词。")
         }
@@ -92,8 +89,24 @@ public struct InferenceRequest: Codable {
             throw AppError.message(ImageDimensions.validationMessage)
         }
         guard (0...4294967295).contains(seed) else { throw AppError.message("种子须介于 0 和 4294967295 之间。") }
+        try InputImages.validate(inputImages)
         repository = settings.repository; model = settings.model; config = settings.config
         self.prompt = prompt; self.width = width; self.height = height; self.seed = seed; self.output = output
+        self.inputImages = inputImages
+    }
+
+    private enum CodingKeys: String, CodingKey { case repository, model, config, prompt, width, height, seed, output, inputImages }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        repository = try values.decode(String.self, forKey: .repository)
+        model = try values.decode(String.self, forKey: .model)
+        config = try values.decode(String.self, forKey: .config)
+        prompt = try values.decode(String.self, forKey: .prompt)
+        width = try values.decode(Int.self, forKey: .width)
+        height = try values.decode(Int.self, forKey: .height)
+        seed = try values.decode(Int64.self, forKey: .seed)
+        output = try values.decode(String.self, forKey: .output)
+        inputImages = try values.decodeIfPresent([InputImage].self, forKey: .inputImages) ?? []
     }
 }
 

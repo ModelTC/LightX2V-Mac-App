@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import LightX2VCore
+import UniformTypeIdentifiers
 
 struct BrandMark: View {
     var size: CGFloat = 30
@@ -87,7 +88,7 @@ struct SidebarView: View {
                     .font(.system(size: 13, weight: .medium)).padding(12)
                     .background(Palette.surface, in: RoundedRectangle(cornerRadius: 9))
                     .overlay(RoundedRectangle(cornerRadius: 9).stroke(Palette.line, lineWidth: 1))
-            }.buttonStyle(HoverButtonStyle(radius: 9, border: true)).padding(.horizontal, 14)
+            }.buttonStyle(HoverButtonStyle(radius: 9, border: true)).disabled(store.isImportingImages).padding(.horizontal, 14)
             Text("最近创作")
                 .font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.muted)
                 .padding(.horizontal, 24).padding(.top, 24).padding(.bottom, 10)
@@ -116,7 +117,7 @@ struct SidebarView: View {
                                 .background(store.selectedID == job.id ? Palette.selection : .clear, in: RoundedRectangle(cornerRadius: 8))
                         }.buttonStyle(HoverButtonStyle()).padding(.horizontal, 10)
                             .contextMenu {
-                                Button("复用提示词和参数") { store.reuse(job) }
+                                Button("复用创作") { store.reuse(job) }.disabled(store.isImportingImages)
                                 Button("在 Finder 中显示") { store.reveal(job) }
                                 if job.status != .running { Button("从历史中移除（保留文件）") { store.removeFromHistory(job) } }
                             }
@@ -201,39 +202,74 @@ struct ComposerView: View {
     @EnvironmentObject var store: AppStore
     @State private var focused = false
     @State private var editorHeight = PromptScrollView.minimumHeight
+    @State private var dropTargeted = false
+    @State private var editorDropTargeted = false
+    private var highlightingDrop: Bool { store.canAddImages && (dropTargeted || editorDropTargeted) }
     var body: some View {
         VStack(spacing: 9) {
             VStack(alignment: .leading, spacing: 8) {
-                PromptEditor(text: $store.prompt, height: $editorHeight, focused: $focused,
-                             composing: $store.isComposingPrompt) {
-                    if store.canGenerate { store.generate() }
+                if !store.inputImages.isEmpty {
+                    InputImageStrip(images: store.inputImages, remove: store.removeInputImage)
+                        .disabled(store.isImportingImages)
                 }
-                    .frame(height: editorHeight)
-                HStack(spacing: 7) {
-                    ModelSelector()
-                    Spacer()
-                    if store.isRunning {
-                        Button { store.stop() } label: {
-                            HStack(spacing: 6) { Image(systemName: "stop.fill").font(.system(size: 9)); Text(store.isStopping ? "停止中" : "停止生成").font(.system(size: 11, weight: .medium)) }
-                                .foregroundStyle(Palette.onButton).padding(.horizontal, 12).frame(height: 32).background(Palette.button, in: Capsule())
-                        }.buttonStyle(HoverButtonStyle(radius: 16, bright: true)).disabled(store.isStopping)
-                    } else {
-                        Button { store.generate() } label: {
-                            Image(systemName: "arrow.up").font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(store.canGenerate ? Palette.onButton : Palette.disabledInk).frame(width: 32, height: 32)
-                                .background(store.canGenerate ? Palette.button : Palette.disabledFill, in: Circle())
-                        }.buttonStyle(HoverButtonStyle(radius: 16, bright: true, dimsWhenDisabled: false)).disabled(!store.canGenerate).keyboardShortcut(.return, modifiers: .command).help("生成图片").accessibilityLabel("生成图片")
-                    }
-                }.onHover { inside in if inside { NSCursor.arrow.set() } }
+                promptEditor
+                composerActions
             }.padding(14).background(Palette.surface, in: RoundedRectangle(cornerRadius: 17))
-                .overlay(RoundedRectangle(cornerRadius: 17).stroke(focused ? Palette.focus : Palette.line, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 17).stroke(highlightingDrop ? Palette.ink : focused ? Palette.focus : Palette.line, lineWidth: highlightingDrop ? 2 : 1))
                 .shadow(color: .black.opacity(0.025), radius: 12, y: 4)
+                .onDrop(of: [UTType.fileURL], isTargeted: $dropTargeted, perform: store.receiveImageDrop)
             HStack {
                 Text(store.isChecking ? "正在检查本地推理环境…" : "所有图像与提示词均保存在本机")
                 Spacer()
             }.font(.system(size: 10)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
         }.frame(maxWidth: 850)
     }
+
+    private var promptEditor: some View {
+        PromptEditor(text: $store.prompt, height: $editorHeight, focused: $focused,
+                     composing: $store.isComposingPrompt,
+                     placeholder: store.inputImages.isEmpty ? "描述你想生成的画面…" : "描述你想如何修改图片…",
+                     onDropFiles: store.canAddImages ? { store.addInputImages($0) } : nil,
+                     onDropHover: { editorDropTargeted = $0 },
+                     onSubmit: { if store.canGenerate { store.generate() } })
+            .frame(height: editorHeight)
+    }
+
+    private var composerActions: some View {
+        HStack(spacing: 7) {
+            if store.selectedModel == .qwenImage21 { attachmentButton }
+            ModelSelector()
+            Spacer()
+            if store.isRunning {
+                Button { store.stop() } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "stop.fill").font(.system(size: 9))
+                        Text(store.isStopping ? "停止中" : "停止生成").font(.system(size: 11, weight: .medium))
+                    }.foregroundStyle(Palette.onButton).padding(.horizontal, 12).frame(height: 32)
+                        .background(Palette.button, in: Capsule())
+                }.buttonStyle(HoverButtonStyle(radius: 16, bright: true)).disabled(store.isStopping)
+            } else {
+                Button { store.generate() } label: {
+                    Image(systemName: "arrow.up").font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(store.canGenerate ? Palette.onButton : Palette.disabledInk).frame(width: 32, height: 32)
+                        .background(store.canGenerate ? Palette.button : Palette.disabledFill, in: Circle())
+                }.buttonStyle(HoverButtonStyle(radius: 16, bright: true, dimsWhenDisabled: false))
+                    .disabled(!store.canGenerate).keyboardShortcut(.return, modifiers: .command)
+                    .help("生成图片").accessibilityLabel("生成图片")
+            }
+        }.onHover { inside in if inside { NSCursor.arrow.set() } }
+    }
+
+    private var attachmentButton: some View {
+        Button { store.chooseInputImages() } label: {
+            Group {
+                if store.isImportingImages { ProgressView().controlSize(.small) }
+                else { Image(systemName: "plus").font(.system(size: 16, weight: .regular)) }
+            }.frame(width: 30, height: 30)
+        }.buttonStyle(HoverButtonStyle(radius: 7)).disabled(!store.canAddImages)
+            .help("添加图片").accessibilityLabel("添加图片")
+    }
+
 }
 
 struct ModelSelector: View {
@@ -272,11 +308,15 @@ struct ModelSelector: View {
 private struct PromptMessageView: View {
     let prompt: String
     let createdAt: Date
+    let inputImages: [InputImage]
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             Spacer(minLength: 48)
             VStack(alignment: .trailing, spacing: 7) {
+                if !inputImages.isEmpty {
+                    InputImageStrip(images: inputImages).frame(maxWidth: CGFloat(inputImages.count * 82 - 10))
+                }
                 Text(prompt)
                     .font(.system(size: 14))
                     .foregroundStyle(Palette.onPrompt)
@@ -313,13 +353,13 @@ struct GenerationView: View {
                 let replyWidth = image.map { min(620, max(220, previewHeight * $0.size.width / max(1, $0.size.height))) } ?? 620
 
                 VStack(alignment: .leading, spacing: 28) {
-                    PromptMessageView(prompt: job.request.prompt, createdAt: job.createdAt)
+                    PromptMessageView(prompt: job.request.prompt, createdAt: job.createdAt, inputImages: job.request.inputImages)
                     VStack(alignment: .leading, spacing: 12) {
                         replyHeader
                         if job.status == .completed {
                             if let image {
                                 Image(nsImage: image).resizable().scaledToFit()
-                                    .onDrag { NSItemProvider(contentsOf: URL(fileURLWithPath: job.request.output)) ?? NSItemProvider() }
+                                    .onDrag { NSItemProvider(object: URL(fileURLWithPath: job.request.output) as NSURL) }
                                     .contextMenu { Button("复制图片") { store.copyImage(job) }; Button("另存为…") { store.export(job) }; Button("在 Finder 中显示") { store.reveal(job) } }
                                 imageActions
                             } else {
@@ -386,7 +426,7 @@ struct GenerationView: View {
                     .padding(.horizontal, 9).frame(height: 28)
             }.help("保存图片到其他位置")
             Menu {
-                Button("复用提示词与尺寸") { store.reuse(job) }
+                Button("复用创作") { store.reuse(job) }.disabled(store.isImportingImages)
                 Button("在 Finder 中显示") { store.reveal(job) }
             } label: {
                 Image(systemName: "ellipsis").frame(width: 28, height: 28)
@@ -403,7 +443,7 @@ struct GenerationView: View {
             Label(job.status.label, systemImage: symbol).font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.accent)
             Text(message).font(.system(size: 11)).foregroundStyle(Palette.muted).lineLimit(7).textSelection(.enabled)
             HStack(spacing: 18) {
-                Button("复用参数重试") { store.reuse(job) }
+                Button("复用参数重试") { store.reuse(job) }.disabled(store.isImportingImages)
                 Button("查看日志") { store.showLogs = true }
                 Button("打开任务文件夹") { store.reveal(job) }
             }.buttonStyle(HoverButtonStyle()).font(.system(size: 11))

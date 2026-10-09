@@ -77,7 +77,6 @@ public enum WorkspaceStorage {
         let layout = WorkspaceLayout(data.settings.workingDirectory)
         try layout.prepare()
         data.settings.workingDirectory = layout.root.path
-        data.settings.outputDirectory = layout.outputs.path
         let switching = previousState.standardizedFileURL.resolvingSymlinksInPath() != layout.state
         if switching, fm.fileExists(atPath: layout.state.path) {
             throw AppError.message("这个目录已包含另一个工作区。请另选一个文件夹，以免覆盖其中的设置和作品。")

@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import LightX2VCore
+import UniformTypeIdentifiers
 
 enum GenerationModel: String, CaseIterable, Identifiable {
     case qwenImage21
@@ -19,6 +20,8 @@ final class AppStore: ObservableObject {
     @Published var generations: [Generation]
     @Published var selectedID: UUID? { didSet { loadSelectedLog() } }
     @Published var prompt = ""
+    @Published private(set) var inputImages: [InputImage] = []
+    @Published private(set) var isImportingImages = false
     @Published var isComposingPrompt = false
     @Published private(set) var selectedModel: GenerationModel?
     @Published var modelPreparationExpanded = false
@@ -34,7 +37,6 @@ final class AppStore: ObservableObject {
     @Published var environmentMessage = "尚未检查运行环境"
     @Published var phase = "准备就绪"
     @Published var currentStep = 0
-    @Published var totalSteps = 6
     @Published var activeID: UUID?
     @Published var logs = ""
     @Published var errorMessage: String?
@@ -53,9 +55,11 @@ final class AppStore: ObservableObject {
     private var stateURL: URL
     private let locatorRoot: URL
     private var canPersist = true
+    private var draftImageDirectory: URL?
 
     var selected: Generation? { generations.first { $0.id == selectedID } }
-    var busy: Bool { isRunning || isChecking || isPreparingWorkspace || isPreparingResources }
+    var busy: Bool { isRunning || isChecking || isPreparingWorkspace || isPreparingResources || isImportingImages }
+    var canAddImages: Bool { selectedModel == .qwenImage21 && !needsGeneralSetup && !isPreparingWorkspace && !isImportingImages }
     var needsGeneralSetup: Bool { !hasCompletedGeneralSetup || !settings.hasGeneralPaths }
     var hasUnsavedModelSettings: Bool { modelDirectory != settings.model || modelConfig != settings.config }
     var width: Int { generationSize.dimensions.width }
@@ -94,7 +98,79 @@ final class AppStore: ObservableObject {
         catch { errorMessage = "无法保存应用状态：\(error.localizedDescription)" }
     }
 
-    func newGeneration() { selectedID = nil; prompt = ""; showLogs = false; generationSize = GenerationSize() }
+    func newGeneration() {
+        guard !isImportingImages else { return }
+        selectedID = nil; prompt = ""; showLogs = false; generationSize = GenerationSize()
+        clearInputImages()
+    }
+
+    func chooseInputImages() {
+        guard canAddImages else { return }
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.prompt = "添加图片"
+        panel.message = "选择用于编辑的图片"
+        panel.begin { [weak self] response in
+            if response == .OK { self?.addInputImages(panel.urls) }
+        }
+    }
+
+    func addInputImages(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        importImages { urls }
+    }
+
+    func receiveImageDrop(_ providers: [NSItemProvider]) -> Bool {
+        guard canAddImages, !providers.isEmpty else { return false }
+        importImages {
+            var urls: [URL] = []
+            for provider in providers {
+                let url: URL = try await withCheckedThrowingContinuation { continuation in
+                    provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                        let url = (item as? URL) ?? (item as? Data).flatMap { URL(dataRepresentation: $0, relativeTo: nil) }
+                        if let url, url.isFileURL { continuation.resume(returning: url) }
+                        else { continuation.resume(throwing: AppError.message("无法读取拖入的图片，请从 Finder 拖入图片文件。")) }
+                    }
+                }
+                urls.append(url)
+            }
+            return urls
+        }
+        return true
+    }
+
+    private func importImages(_ load: @escaping () async throws -> [URL]) {
+        guard canAddImages else { return }
+        let directory = draftImageDirectory ?? WorkspaceLayout(settings.workingDirectory).temporary
+            .appendingPathComponent("input-draft-" + UUID().uuidString)
+        draftImageDirectory = directory
+        let existing = inputImages
+        isImportingImages = true
+        Task {
+            defer { isImportingImages = false; finishTerminationIfNeeded() }
+            do {
+                let urls = try await load()
+                inputImages = try await Task.detached(priority: .userInitiated) {
+                    try InputImages.importing(urls, into: directory, existing: existing)
+                }.value
+            } catch { errorMessage = error.localizedDescription }
+        }
+    }
+
+    func removeInputImage(_ image: InputImage) {
+        guard !isImportingImages else { return }
+        inputImages.removeAll { $0.id == image.id }
+        let url = URL(fileURLWithPath: image.path)
+        if url.deletingLastPathComponent() == draftImageDirectory { try? FileManager.default.removeItem(at: url) }
+    }
+
+    func clearInputImages() {
+        inputImages = []
+        if let directory = draftImageDirectory { try? FileManager.default.removeItem(at: directory) }
+        draftImageDirectory = nil
+    }
 
     func usePrompt(_ value: String) { selectedID = nil; prompt = value }
 
@@ -109,6 +185,9 @@ final class AppStore: ObservableObject {
     }
 
     func reuse(_ generation: Generation) {
+        guard !isImportingImages else { return }
+        clearInputImages()
+        inputImages = generation.request.inputImages
         prompt = generation.request.prompt
         generationSize = GenerationSize(width: generation.request.width, height: generation.request.height)
         selectedID = nil
@@ -123,7 +202,6 @@ final class AppStore: ObservableObject {
         updated.workingDirectory = path(value.workingDirectory)
         updated.repository = path(value.repository)
         updated.python = path(value.python)
-        updated.outputDirectory = WorkspaceLayout(updated.workingDirectory).outputs.path
         // Carry the same relative config to a newly downloaded checkout. Keep custom config choices.
         var suggested: String?
         if updated.config.isEmpty {
@@ -144,7 +222,7 @@ final class AppStore: ObservableObject {
         }.value
         let changedWorkspace = stateURL.standardizedFileURL.resolvingSymlinksInPath() != WorkspaceLayout(saved.settings.workingDirectory).state
         settings = saved.settings; generations = saved.generations
-        if changedWorkspace { selectedID = nil; logs = ""; showLogs = false }
+        if changedWorkspace { selectedID = nil; logs = ""; showLogs = false; clearInputImages() }
         if !preserveModelDraft { modelDirectory = settings.model; modelConfig = settings.config }
         stateURL = WorkspaceLayout(settings.workingDirectory).state
         canPersist = true; hasCompletedGeneralSetup = true; environmentReady = false
@@ -223,7 +301,7 @@ final class AppStore: ObservableObject {
             })
             DispatchQueue.main.asyncAfter(deadline: .now() + 100) { [weak self] in
                 guard let self, self.isChecking, self.checkToken == token else { return }
-                self.environmentMessage = "环境检查超时，请检查 Python 环境。"
+                self.environmentMessage = "环境检查超时。若 macOS 正在请求文件访问权限，请允许后重试；否则请检查 Python 环境。"
                 self.checker?.stop()
             }
         } catch {
@@ -249,9 +327,10 @@ final class AppStore: ObservableObject {
             let formatter = DateFormatter(); formatter.dateFormat = "yyyyMMdd-HHmmss"
             let directory = URL(fileURLWithPath: settings.outputDirectory)
                 .appendingPathComponent(formatter.string(from: Date()) + "-" + id.uuidString.prefix(8))
-            let request = try InferenceRequest(settings: settings, prompt: prompt, width: width, height: height,
-                                               seed: seed, output: directory.appendingPathComponent("image.png").path)
+            var request = try InferenceRequest(settings: settings, prompt: prompt, width: width, height: height,
+                                               seed: seed, output: directory.appendingPathComponent("image.png").path, inputImages: inputImages)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            request.inputImages = try InputImages.snapshot(inputImages, in: directory)
             let requestURL = directory.appendingPathComponent("request.json")
             try JSONFile.write(request, to: requestURL)
             let generation = Generation(id: id, request: request)
@@ -268,6 +347,7 @@ final class AppStore: ObservableObject {
                                   onExit: { [weak self] code in self?.exited(code, for: id) })
                 // Clear only after launch succeeds; the submitted prompt remains in history.
                 prompt = ""
+                clearInputImages()
             } catch {
                 markFinished(id, status: .failed, message: error.localizedDescription)
                 isRunning = false; runner = nil; activeID = nil
@@ -286,7 +366,7 @@ final class AppStore: ObservableObject {
         case "status": if !isStopping { phase = event["message"] as? String ?? phase }
         case "step":
             currentStep = event["step"] as? Int ?? 0
-            totalSteps = event["total"] as? Int ?? 6
+            let totalSteps = event["total"] as? Int ?? 6
             if !isStopping { phase = "正在生成 · 第 \(currentStep) / \(totalSteps) 步" }
         case "error":
             activeLog += "\n" + (event["message"] as? String ?? "未知错误") + "\n"
@@ -339,7 +419,7 @@ final class AppStore: ObservableObject {
     }
 
     private func finishTerminationIfNeeded() {
-        if !busy, let completion = terminationCompletion { terminationCompletion = nil; completion() }
+        if !busy, let completion = terminationCompletion { clearInputImages(); terminationCompletion = nil; completion() }
     }
 
     func elapsed(_ generation: Generation, now: Date = Date()) -> String {

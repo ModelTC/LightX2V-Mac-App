@@ -9,7 +9,7 @@ BIN="$(swift build --package-path "$ROOT" --scratch-path "$SCRATCH" -c release -
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/LightX2VApp" "$APP/Contents/MacOS/LightX2VApp"
 # A .app uses the native Resources directory; SwiftPM's bundle remains a development fallback.
-cp "$BIN/LightX2VAPP_LightX2VApp.bundle/bridge.py" "$APP/Contents/Resources/bridge.py"
+cp "$BIN/LightX2VAPP_LightX2VApp.bundle/"*.py "$APP/Contents/Resources/"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

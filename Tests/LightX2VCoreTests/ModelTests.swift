@@ -25,7 +25,8 @@ struct CoreChecks {
         print("PASS first-launch, incomplete, completed and legacy setup persistence")
         try generalSettingsValidation()
         print("PASS general path validation independent of model preparation")
-        print("8 core checks passed")
+        try inputImageChecks()
+        print("9 core checks passed")
     }
     static func invalidRequests() throws {
         for (prompt, width, height, seed) in [("", 1024, 1024, Int64(42)), ("test", 720, 1280, 42),

@@ -20,7 +20,7 @@ struct LightX2VApplication: App {
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("新建创作") { store.newGeneration() }.keyboardShortcut("n", modifiers: .command)
+                Button("新建创作") { store.newGeneration() }.keyboardShortcut("n", modifiers: .command).disabled(store.isImportingImages)
             }
             CommandGroup(replacing: .appSettings) {
                 Button("设置…") { store.showSettings = true }.keyboardShortcut(",", modifiers: .command)
@@ -41,7 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var store: AppStore?
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let store, store.busy else { store?.persist(); return .terminateNow }
+        guard let store, store.busy else { store?.persist(); store?.clearInputImages(); return .terminateNow }
         if store.isRunning {
             let alert = NSAlert()
             alert.messageText = "停止生成并退出？"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LightX2V APP process supervisor. Stdlib only; all stdout is NDJSON."""
+"""LightX2V APP process supervisor; all stdout is NDJSON."""
 import argparse
 import contextlib
 import importlib.util
@@ -73,12 +73,32 @@ def arguments(request, config_path):
     output = request.get("output", "")
     if not Path(output).is_absolute() or Path(output).suffix.lower() != ".png":
         raise ValueError("输出必须为 PNG 绝对路径")
+    images = request.get("inputImages", [])
+    if not isinstance(images, list) or len(images) > 8:
+        raise ValueError("最多可添加 8 张输入图片")
+    paths = []
+    for image in images:
+        if not isinstance(image, dict) or not isinstance(image.get("path"), str):
+            raise ValueError("输入图片记录无效")
+        path = Path(image["path"])
+        # Relative safe snapshot names avoid CLI comma splitting even when the
+        # user's workspace itself contains commas, Unicode or spaces.
+        if not path.is_absolute() or path.parent != Path(output).parent / "inputs" or "," in path.name:
+            raise ValueError("输入图片必须保存在当前任务的 inputs 目录")
+        from PIL import Image
+        with Image.open(path) as reference:
+            reference.verify()
+        paths.append("inputs/" + path.name)
+    entry = [str(Path(__file__).with_name("qwen_image_edit.py"))] if images else ["-m", "lightx2v.infer"]
     # CLI expects HEIGHT WIDTH, whereas the interface displays WIDTH × HEIGHT.
-    return [sys.executable, "-u", "-m", "lightx2v.infer",
-            "--model_cls", "qwen_image_21", "--task", "t2i",
+    cmd = [sys.executable, "-u", *entry,
+            "--model_cls", "qwen_image_21", "--task", "i2i" if images else "t2i",
             "--model_path", request["model"], "--config_json", str(config_path),
             "--prompt", prompt, "--size", str(request["height"]), str(request["width"]),
             "--seed", str(seed), "--save_result_path", output]
+    if paths:
+        cmd += ["--image_path", ",".join(paths)]
+    return cmd
 
 
 def check(request):

@@ -437,3 +437,42 @@ settleInput()
 check(pathCommits > 1, "setup input: Return commits guide")
 commitWindow.makeFirstResponder(nil)
 commitHost.removeFromSuperview()
+
+// File drops are routed to attachments, never pasted into the prompt as paths.
+final class FileDrag: NSObject, NSDraggingInfo {
+    let draggingPasteboard = NSPasteboard.withUniqueName()
+    var draggingDestinationWindow: NSWindow? { nil }
+    var draggingLocation: NSPoint { .zero }
+    var draggedImageLocation: NSPoint { .zero }
+    var draggedImage: NSImage? { nil }
+    func resetSpringLoading() {}
+    var draggingSource: Any? { nil }
+    var draggingSourceOperationMask: NSDragOperation { .copy }
+    var draggingSequenceNumber: Int { 1 }
+    var draggingFormation: NSDraggingFormation = .default
+    var animatesToDestination = false
+    var numberOfValidItemsForDrop = 0
+    var springLoadingHighlight: NSSpringLoadingHighlight { .none }
+    func slideDraggedImage(to: NSPoint) {}
+    override func namesOfPromisedFilesDropped(atDestination: URL) -> [String]? { nil }
+    func enumerateDraggingItems(options: NSDraggingItemEnumerationOptions = [], for view: NSView?, classes: [AnyClass], searchOptions: [NSPasteboard.ReadingOptionKey: Any] = [:], using block: (NSDraggingItem, Int, UnsafeMutablePointer<ObjCBool>) -> Void) {}
+}
+let fileDrag = FileDrag()
+let droppedFiles = [URL(fileURLWithPath: "/tmp/一, 二.png"), URL(fileURLWithPath: "/tmp/second.png")]
+fileDrag.draggingPasteboard.writeObjects(droppedFiles as [NSURL])
+setText("原有提示词")
+var dropped: [URL] = []
+var dropHovered = false
+editor.onDropHover = { dropHovered = $0 }
+check(editor.draggingEntered(fileDrag).isEmpty && !dropHovered, "drop: no model rejects files without highlight")
+check(!editor.performDragOperation(fileDrag) && editor.string == "原有提示词", "drop: disabled editor never inserts file paths")
+editor.onDropFiles = { dropped = $0 }
+check(editor.draggingEntered(fileDrag) == .copy && dropHovered, "drop: accepting editor highlights")
+check(editor.draggingUpdated(fileDrag) == .copy && dropHovered, "drop: moving over text retains highlight")
+editor.draggingExited(fileDrag)
+check(!dropHovered, "drop: cancelled drag clears highlight")
+_ = editor.draggingEntered(fileDrag)
+check(editor.prepareForDragOperation(fileDrag) && editor.performDragOperation(fileDrag), "drop: native text area accepts files")
+check(dropped == droppedFiles && !dropHovered && editor.string == "原有提示词", "drop: order preserved and prompt unchanged")
+fileDrag.draggingPasteboard.releaseGlobally()
+print("Native file drop checks passed")

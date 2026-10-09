@@ -6,7 +6,6 @@ final class ProcessRunner {
     private let process = Process()
     private let pipe = Pipe()
     private let queue = DispatchQueue(label: "app.lightx2v.process.\(UUID().uuidString)")
-    var isRunning: Bool { process.isRunning }
 
     func start(python: String, bridge: String, mode: String, request: String, workspace: String,
                onEvent: @escaping ([String: Any]) -> Void, onExit: @escaping (Int32) -> Void) throws {
