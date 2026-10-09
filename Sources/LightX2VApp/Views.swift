@@ -36,6 +36,7 @@ struct IconButton: View {
 
 struct WorkspaceView: View {
     @EnvironmentObject var store: AppStore
+    @State private var minimumWindowSize = ScreenFittingWindow.minimumContentSize
     var body: some View {
         HStack(spacing: 0) {
             SidebarView().frame(width: 232)
@@ -49,14 +50,15 @@ struct WorkspaceView: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 if store.showLogs { LogPanel().frame(height: 205) }
                 ComposerView().padding(.horizontal, 30).padding(.top, 12).padding(.bottom, 20)
-            }.frame(minWidth: 490).background(Palette.canvas)
+            // The two sidebars and separators occupy 514 points in total.
+            }.frame(minWidth: max(1, minimumWindowSize.width - 514)).background(Palette.canvas)
             if store.showInspector {
                 Rectangle().fill(Palette.line).frame(width: 1)
                 InspectorView().frame(width: 280)
             }
         }
         .foregroundStyle(Palette.ink)
-        .frame(minWidth: 1000, minHeight: 680)
+        .frame(minWidth: minimumWindowSize.width, minHeight: minimumWindowSize.height)
         .ignoresSafeArea(.container, edges: .top)
         .sheet(isPresented: $store.showSettings) { SettingsView(settings: store.settings).environmentObject(store) }
         .alert("LightX2V APP", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {

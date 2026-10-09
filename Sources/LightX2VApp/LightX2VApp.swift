@@ -10,10 +10,10 @@ struct LightX2VApplication: App {
         Window("LightX2V APP", id: "main") {
             WorkspaceView().environmentObject(store)
                 .preferredColorScheme(.light)
+                .background(ScreenFittingWindow())
                 .onAppear { delegate.store = store; NSApp.setActivationPolicy(.regular); NSApp.activate(ignoringOtherApps: true) }
         }
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 1320, height: 860)
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) {
