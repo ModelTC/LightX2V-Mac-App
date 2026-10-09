@@ -75,6 +75,7 @@ final class PromptScrollView: NSScrollView {
         drawsBackground = false
         borderType = .noBorder
         hasHorizontalScroller = false
+        verticalScroller = SubtleScroller()
         hasVerticalScroller = false
         autohidesScrollers = true
         scrollerStyle = .overlay

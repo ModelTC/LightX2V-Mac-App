@@ -17,7 +17,7 @@ struct InspectorView: View {
                         HStack { Text("生成参数").font(.system(size: 12, weight: .semibold)); Spacer(); Image(systemName: "slider.horizontal.3").foregroundStyle(Palette.muted) }
                             .padding(.top, 22).padding(.bottom, 20)
                         GenerationParametersView().padding(.bottom, 23)
-                    }
+                    }.subtleScrollbars()
                 }.onChange(of: store.modelPreparationFocus) { _, _ in
                     withAnimation { proxy.scrollTo("model-preparation", anchor: .top) }
                 }
@@ -74,7 +74,7 @@ struct ModelPreparationView: View {
                                 Text("环境检查").font(.system(size: 13, weight: .semibold))
                                 ScrollView {
                                     Text(store.environmentMessage).font(.system(size: 11))
-                                        .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                                        .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).subtleScrollbars()
                                 }.frame(maxHeight: 180)
                                 Text("检查路径、配置与 MPS 可用性，不加载模型权重。")
                                     .font(.system(size: 10)).foregroundStyle(Palette.muted)
@@ -173,7 +173,7 @@ struct SettingsView: View {
                     Spacer()
                     Button("重新检查已保存设置") { store.checkEnvironment() }.disabled(store.busy).font(.system(size: 11))
                 }
-                ScrollView { Text(store.environmentMessage).font(.system(size: 11, design: .monospaced)).foregroundStyle(Palette.muted).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }.frame(maxHeight: 75)
+                ScrollView { Text(store.environmentMessage).font(.system(size: 11, design: .monospaced)).foregroundStyle(Palette.muted).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).subtleScrollbars() }.frame(maxHeight: 75)
             }.padding(14).background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10))
             Text("模型目录与 Config 配置请在主界面右侧的「模型准备」中设置。")
                 .font(.system(size: 11)).foregroundStyle(Palette.muted)

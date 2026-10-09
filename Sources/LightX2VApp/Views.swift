@@ -126,7 +126,7 @@ struct SidebarView: View {
                                 if job.status != .running { Button("从历史中移除（保留文件）") { store.removeFromHistory(job) } }
                             }
                     }
-                }
+                }.subtleScrollbars()
             }
             Spacer(minLength: 12)
             if store.isRunning, store.selectedID != store.activeID {
@@ -191,7 +191,7 @@ struct WelcomeView: View {
                             }.buttonStyle(.plain).help(item.2)
                         }
                     }.frame(maxWidth: 470).padding(.top, 40)
-                }.frame(maxWidth: .infinity).frame(minHeight: geometry.size.height).padding(.horizontal, 32)
+                }.frame(maxWidth: .infinity).frame(minHeight: geometry.size.height).padding(.horizontal, 32).subtleScrollbars()
             }
         }
     }
@@ -340,7 +340,7 @@ struct GenerationView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 28).padding(.vertical, 24)
-                .frame(maxWidth: 800).frame(maxWidth: .infinity)
+                .frame(maxWidth: 800).frame(maxWidth: .infinity).subtleScrollbars()
             }
         }
     }
@@ -434,7 +434,7 @@ struct LogPanel: View {
                         Text(store.logs.isEmpty ? "开始生成后，这里会显示真实的 LightX2V 运行日志。" : store.logs)
                             .font(.system(size: 10, design: .monospaced)).textSelection(.enabled).padding(12)
                         Color.clear.frame(height: 1).id("log-end")
-                    }
+                    }.subtleScrollbars()
                 }.onChange(of: store.logs) { _, _ in if store.isRunning, store.selectedID == store.activeID { proxy.scrollTo("log-end", anchor: .bottom) } }
             }
         }.background(Palette.surfaceSubtle).overlay(alignment: .top) { Rectangle().fill(Palette.line).frame(height: 1) }

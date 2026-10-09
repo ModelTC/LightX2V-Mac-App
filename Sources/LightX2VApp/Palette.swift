@@ -18,6 +18,7 @@ enum Palette {
     static let onButton = hex(0xFFFFFF)
     static let disabledFill = hex(0xE8E8E8)
     static let disabledInk = hex(0x8A8A8A)
+    static let scrollThumb = hex(0x8A8A8A)
     static let prompt = hex(0x151515)
     static let onPrompt = hex(0xFAFAFA)
     static let accent = hex(0xA45145)
