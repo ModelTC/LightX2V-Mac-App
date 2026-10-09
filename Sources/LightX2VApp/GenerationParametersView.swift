@@ -5,77 +5,48 @@ struct GenerationParametersView: View {
     @EnvironmentObject var store: AppStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 12) {
-                label("画面尺寸")
-                Picker("分辨率", selection: Binding(
-                    get: { store.generationSize.resolution },
-                    set: { store.generationSize.selectResolution($0) }
-                )) {
-                    Text("1K").tag(ImageResolution.oneK)
-                    Text("2K").tag(ImageResolution.twoK)
-                }
-                .pickerStyle(.segmented).labelsHidden()
-                .accessibilityLabel("分辨率")
-                .help("切换 1K / 2K 并保留画面比例；自定义尺寸会匹配最接近的比例预设")
+        VStack(alignment: .leading, spacing: 12) {
+            label("画面尺寸")
+            Picker("分辨率", selection: Binding(
+                get: { store.generationSize.resolution },
+                set: { store.generationSize.selectResolution($0) }
+            )) {
+                Text("1K").tag(ImageResolution.oneK)
+                Text("2K").tag(ImageResolution.twoK)
+            }
+            .pickerStyle(.segmented).labelsHidden()
+            .accessibilityLabel("分辨率")
+            .help("切换 1K / 2K 并保留画面比例；自定义尺寸会匹配最接近的比例预设")
 
-                HStack {
-                    label("画面比例")
-                    Spacer()
-                    if store.generationSize.aspectRatio == nil {
-                        Text("自定义").font(.system(size: 10)).foregroundStyle(Palette.accent)
-                    }
-                }.padding(.top, 3)
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 6) {
-                    ForEach(ImageAspectRatio.allCases) { ratio in
-                        AspectRatioButton(ratio: ratio, resolution: store.generationSize.resolution,
-                                          selected: store.generationSize.aspectRatio == ratio) {
-                            store.generationSize.selectAspectRatio(ratio)
-                        }
-                    }
+            HStack {
+                label("画面比例")
+                Spacer()
+                if store.generationSize.aspectRatio == nil {
+                    Text("自定义").font(.system(size: 10)).foregroundStyle(Palette.accent)
                 }
-
-                HStack(alignment: .bottom, spacing: 8) {
-                    DimensionField(title: "宽", value: $store.width)
-                    Button { store.generationSize.swapOrientation() } label: {
-                        Image(systemName: "arrow.left.arrow.right")
-                            .font(.system(size: 11, weight: .medium)).foregroundStyle(Palette.muted)
-                            .frame(width: 24, height: 35).contentShape(Rectangle())
-                    }.buttonStyle(.plain).disabled(store.width == store.height)
-                        .help("交换宽高").accessibilityLabel("交换宽高")
-                    DimensionField(title: "高", value: $store.height)
-                }
-                if !store.generationSize.dimensions.isValid {
-                    Text(ImageDimensions.validationMessage)
-                        .font(.system(size: 10)).foregroundStyle(Palette.accent).fixedSize(horizontal: false, vertical: true)
+            }.padding(.top, 3)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 6) {
+                ForEach(ImageAspectRatio.allCases) { ratio in
+                    AspectRatioButton(ratio: ratio, resolution: store.generationSize.resolution,
+                                      selected: store.generationSize.aspectRatio == ratio) {
+                        store.generationSize.selectAspectRatio(ratio)
+                    }
                 }
             }
 
-            Rectangle().fill(Palette.line).frame(height: 1)
-
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    label("随机种子")
-                    Spacer()
-                    Toggle("每次随机", isOn: $store.randomSeed)
-                        .toggleStyle(.switch).controlSize(.mini).font(.system(size: 10)).tint(Palette.ink)
-                        .accessibilityLabel("每次使用随机种子")
-                }
-                HStack(spacing: 8) {
-                    if store.randomSeed {
-                        Text("每次生成时自动选择").font(.system(size: 11)).foregroundStyle(Palette.muted)
-                        Spacer(minLength: 0)
-                        Image(systemName: "dice").foregroundStyle(Palette.muted)
-                    } else {
-                        TextField("42", text: $store.seedText).textFieldStyle(.plain)
-                            .font(.system(size: 12, design: .monospaced)).accessibilityLabel("随机种子")
-                        Button { store.seedText = String(Int64.random(in: 0...4294967295)) } label: {
-                            Image(systemName: "dice").foregroundStyle(Palette.muted)
-                        }.buttonStyle(.plain).help("随机选择一个种子").accessibilityLabel("随机选择一个种子")
-                    }
-                }.frame(height: 16).padding(10)
-                    .background(.white.opacity(store.randomSeed ? 0.4 : 1), in: RoundedRectangle(cornerRadius: 8))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Palette.line, lineWidth: 1))
+            HStack(alignment: .bottom, spacing: 8) {
+                DimensionField(title: "宽", value: $store.width)
+                Button { store.generationSize.swapOrientation() } label: {
+                    Image(systemName: "arrow.left.arrow.right")
+                        .font(.system(size: 11, weight: .medium)).foregroundStyle(Palette.muted)
+                        .frame(width: 24, height: 35).contentShape(Rectangle())
+                }.buttonStyle(.plain).disabled(store.width == store.height)
+                    .help("交换宽高").accessibilityLabel("交换宽高")
+                DimensionField(title: "高", value: $store.height)
+            }
+            if !store.generationSize.dimensions.isValid {
+                Text(ImageDimensions.validationMessage)
+                    .font(.system(size: 10)).foregroundStyle(Palette.accent).fixedSize(horizontal: false, vertical: true)
             }
         }
     }

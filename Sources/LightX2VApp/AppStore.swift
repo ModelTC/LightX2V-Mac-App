@@ -24,8 +24,6 @@ final class AppStore: ObservableObject {
     @Published var prompt = ""
     @Published var selectedModel: GenerationModel = .qwenImage21
     @Published var generationSize = GenerationSize()
-    @Published var seedText = "42"
-    @Published var randomSeed = false
     @Published var search = ""
     @Published var isRunning = false
     @Published var isChecking = false
@@ -106,7 +104,6 @@ final class AppStore: ObservableObject {
     func reuse(_ generation: Generation) {
         prompt = generation.request.prompt
         generationSize = GenerationSize(width: generation.request.width, height: generation.request.height)
-        seedText = String(generation.request.seed); randomSeed = false
         selectedID = nil
     }
 
@@ -188,12 +185,7 @@ final class AppStore: ObservableObject {
         do {
             try settings.validatePaths()
             guard environmentReady else { showModelPreparation(); checkEnvironment(); return }
-            let seed: Int64
-            if randomSeed { seed = Int64.random(in: 0...4294967295) }
-            else {
-                guard let value = Int64(seedText.trimmingCharacters(in: .whitespacesAndNewlines)) else { throw AppError.message("种子必须为整数。") }
-                seed = value
-            }
+            let seed = Int64.random(in: 0...4294967295)
             let id = UUID()
             let formatter = DateFormatter(); formatter.dateFormat = "yyyyMMdd-HHmmss"
             let directory = URL(fileURLWithPath: settings.outputDirectory)
