@@ -211,6 +211,11 @@ struct ComposerView: View {
                 if !store.inputImages.isEmpty {
                     InputImageStrip(images: store.inputImages, remove: store.removeInputImage)
                         .disabled(store.isImportingImages)
+                    if store.inputImages.count > 3 {
+                        Text("参考图较多时画面可能失真，当前模型建议使用 1–3 张。")
+                            .font(.system(size: 10)).foregroundStyle(Palette.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 promptEditor
                 composerActions
@@ -267,7 +272,7 @@ struct ComposerView: View {
                 else { Image(systemName: "plus").font(.system(size: 16, weight: .regular)) }
             }.frame(width: 30, height: 30)
         }.buttonStyle(HoverButtonStyle(radius: 7)).disabled(!store.canAddImages)
-            .help("添加图片").accessibilityLabel("添加图片")
+            .help("添加图片（建议 1–3 张，最多 8 张）").accessibilityLabel("添加图片")
     }
 
 }

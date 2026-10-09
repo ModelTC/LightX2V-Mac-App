@@ -111,7 +111,7 @@ final class AppStore: ObservableObject {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
         panel.prompt = "添加图片"
-        panel.message = "选择用于编辑的图片"
+        panel.message = "选择用于编辑的图片，建议 1–3 张，最多 8 张"
         panel.begin { [weak self] response in
             if response == .OK { self?.addInputImages(panel.urls) }
         }
