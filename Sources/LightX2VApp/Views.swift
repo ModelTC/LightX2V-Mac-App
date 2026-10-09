@@ -208,11 +208,12 @@ struct ComposerView: View {
         VStack(spacing: 9) {
             VStack(alignment: .leading, spacing: 8) {
                 ZStack(alignment: .topLeading) {
-                    if store.prompt.isEmpty { Text("描述你想生成的画面…").foregroundStyle(Palette.muted).padding(.leading, 5).padding(.top, 8).allowsHitTesting(false) }
-                    TextEditor(text: $store.prompt).font(.system(size: 14)).scrollContentBackground(.hidden)
+                    // Match the macOS editor's leading text inset and first-line font.
+                    if store.prompt.isEmpty { Text("描述你想生成的画面…").foregroundStyle(Palette.muted).padding(.leading, 5).allowsHitTesting(false) }
+                    TextEditor(text: $store.prompt).scrollContentBackground(.hidden)
                         .focused($focused).frame(minHeight: 66, maxHeight: 92)
                         .accessibilityLabel("图像提示词")
-                }
+                }.font(.system(size: 14))
                 HStack(spacing: 7) {
                     ModelSelector()
                     Spacer()
