@@ -7,64 +7,74 @@ struct InspectorView: View {
     private let presets = [("1:1", 1024, 1024), ("4:3", 1152, 864), ("3:4", 864, 1152), ("16:9", 1536, 864)]
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack { Text("生成参数").font(.system(size: 12, weight: .semibold)); Spacer(); Image(systemName: "slider.horizontal.3").foregroundStyle(Palette.muted) }
-                .frame(height: 58).padding(.top, 28)
-            Rectangle().fill(Palette.line).frame(height: 1).padding(.horizontal, -20)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 25) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        sectionLabel("画面尺寸")
-                        HStack(spacing: 5) {
-                            ForEach(presets, id: \.0) { preset in
-                                Button {
-                                    store.width = preset.1
-                                    store.height = preset.2
-                                } label: {
-                                    VStack(spacing: 7) {
-                                        RoundedRectangle(cornerRadius: 2).stroke(lineWidth: 1)
-                                            .frame(width: preset.1 >= preset.2 ? 20 : 14, height: preset.1 > preset.2 ? 14 : 20).frame(height: 20)
-                                        Text(preset.0).font(.system(size: 9))
-                                    }.frame(maxWidth: .infinity).padding(.vertical, 10)
-                                        .foregroundStyle(isPreset(preset) ? Palette.ink : Palette.muted)
-                                        .background(isPreset(preset) ? Palette.sidebar : Color.white, in: RoundedRectangle(cornerRadius: 7))
-                                        .overlay(RoundedRectangle(cornerRadius: 7).stroke(isPreset(preset) ? Palette.ink.opacity(0.3) : Palette.line, lineWidth: 1))
-                                }.buttonStyle(.plain)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack { Text("模型准备").font(.system(size: 12, weight: .semibold)); Spacer(); Image(systemName: "cube.transparent").foregroundStyle(Palette.muted) }
+                            .frame(height: 58).padding(.top, 28).id("model-preparation")
+                        Rectangle().fill(Palette.line).frame(height: 1).padding(.horizontal, -20)
+                        ModelPreparationView().padding(.vertical, 20)
+                        Rectangle().fill(Palette.line).frame(height: 1).padding(.horizontal, -20)
+                        HStack { Text("生成参数").font(.system(size: 12, weight: .semibold)); Spacer(); Image(systemName: "slider.horizontal.3").foregroundStyle(Palette.muted) }
+                            .padding(.top, 22).padding(.bottom, 20)
+                        VStack(alignment: .leading, spacing: 25) {
+                            VStack(alignment: .leading, spacing: 12) {
+                                sectionLabel("画面尺寸")
+                                HStack(spacing: 5) {
+                                    ForEach(presets, id: \.0) { preset in
+                                        Button {
+                                            store.width = preset.1
+                                            store.height = preset.2
+                                        } label: {
+                                            VStack(spacing: 7) {
+                                                RoundedRectangle(cornerRadius: 2).stroke(lineWidth: 1)
+                                                    .frame(width: preset.1 >= preset.2 ? 20 : 14, height: preset.1 > preset.2 ? 14 : 20).frame(height: 20)
+                                                Text(preset.0).font(.system(size: 9))
+                                            }.frame(maxWidth: .infinity).padding(.vertical, 10)
+                                                .foregroundStyle(isPreset(preset) ? Palette.ink : Palette.muted)
+                                                .background(isPreset(preset) ? Palette.sidebar : Color.white, in: RoundedRectangle(cornerRadius: 7))
+                                                .overlay(RoundedRectangle(cornerRadius: 7).stroke(isPreset(preset) ? Palette.ink.opacity(0.3) : Palette.line, lineWidth: 1))
+                                        }.buttonStyle(.plain)
+                                    }
+                                }
+                                HStack(spacing: 8) {
+                                    dimension("宽", value: $store.width)
+                                    Text("×").foregroundStyle(Palette.muted).padding(.top, 18)
+                                    dimension("高", value: $store.height)
+                                }
+                                HStack { Text("32 的倍数 · 256–2048 px"); Spacer(); Button("512 测试") { store.width = 512; store.height = 512 } }
+                                    .font(.system(size: 9)).foregroundStyle(Palette.muted).buttonStyle(.plain)
                             }
-                        }
-                        HStack(spacing: 8) {
-                            dimension("宽", value: $store.width)
-                            Text("×").foregroundStyle(Palette.muted).padding(.top, 18)
-                            dimension("高", value: $store.height)
-                        }
-                        HStack { Text("32 的倍数 · 256–2048 px"); Spacer(); Button("512 测试") { store.width = 512; store.height = 512 } }
-                            .font(.system(size: 9)).foregroundStyle(Palette.muted).buttonStyle(.plain)
+                            VStack(alignment: .leading, spacing: 12) {
+                                sectionLabel("随机种子")
+                                HStack {
+                                    TextField("42", text: $store.seedText).textFieldStyle(.plain).font(.system(size: 12, design: .monospaced)).disabled(store.randomSeed).accessibilityLabel("随机种子")
+                                    Button { store.seedText = String(Int64.random(in: 0...4294967295)) } label: { Image(systemName: "dice").foregroundStyle(Palette.muted) }.buttonStyle(.plain).help("随机选择一个种子").disabled(store.randomSeed)
+                                }.padding(10).background(.white, in: RoundedRectangle(cornerRadius: 7)).overlay(RoundedRectangle(cornerRadius: 7).stroke(Palette.line, lineWidth: 1))
+                                Toggle("每次使用随机种子", isOn: $store.randomSeed).toggleStyle(.switch).controlSize(.mini).font(.system(size: 11)).tint(Palette.ink)
+                            }
+                            VStack(alignment: .leading, spacing: 13) {
+                                sectionLabel("推理设置")
+                                infoRow("采样步数", "6 步")
+                                infoRow("引导强度", "1.0 · 无 CFG")
+                                infoRow("运行设备", "Apple MPS")
+                                infoRow("内存策略", "磁盘流式加载")
+                                Text("沿用 Viggle v0.3 的蒸馏配置，步数与噪声调度保持配套。").font(.system(size: 10)).foregroundStyle(Palette.muted).lineSpacing(4)
+                            }
+                            if let selected = store.selected {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    sectionLabel("当前作品")
+                                    infoRow("实际尺寸", "\(selected.request.width) × \(selected.request.height)")
+                                    infoRow("实际种子", String(selected.request.seed))
+                                    infoRow("状态", selected.status.label)
+                                    Button { store.reuse(selected) } label: { Label("将参数带入新创作", systemImage: "arrow.uturn.backward") }.buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(Palette.accent)
+                                }.padding(.top, 5)
+                            }
+                        }.padding(.bottom, 23)
                     }
-                    VStack(alignment: .leading, spacing: 12) {
-                        sectionLabel("随机种子")
-                        HStack {
-                            TextField("42", text: $store.seedText).textFieldStyle(.plain).font(.system(size: 12, design: .monospaced)).disabled(store.randomSeed).accessibilityLabel("随机种子")
-                            Button { store.seedText = String(Int64.random(in: 0...4294967295)) } label: { Image(systemName: "dice").foregroundStyle(Palette.muted) }.buttonStyle(.plain).help("随机选择一个种子").disabled(store.randomSeed)
-                        }.padding(10).background(.white, in: RoundedRectangle(cornerRadius: 7)).overlay(RoundedRectangle(cornerRadius: 7).stroke(Palette.line, lineWidth: 1))
-                        Toggle("每次使用随机种子", isOn: $store.randomSeed).toggleStyle(.switch).controlSize(.mini).font(.system(size: 11)).tint(Palette.ink)
-                    }
-                    VStack(alignment: .leading, spacing: 13) {
-                        sectionLabel("推理设置")
-                        infoRow("采样步数", "6 步")
-                        infoRow("引导强度", "1.0 · 无 CFG")
-                        infoRow("运行设备", "Apple MPS")
-                        infoRow("内存策略", "磁盘流式加载")
-                        Text("沿用 Viggle v0.3 的蒸馏配置，步数与噪声调度保持配套。").font(.system(size: 10)).foregroundStyle(Palette.muted).lineSpacing(4)
-                    }
-                    if let selected = store.selected {
-                        VStack(alignment: .leading, spacing: 12) {
-                            sectionLabel("当前作品")
-                            infoRow("实际尺寸", "\(selected.request.width) × \(selected.request.height)")
-                            infoRow("实际种子", String(selected.request.seed))
-                            infoRow("状态", selected.status.label)
-                            Button { store.reuse(selected) } label: { Label("将参数带入新创作", systemImage: "arrow.uturn.backward") }.buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(Palette.accent)
-                        }.padding(.top, 5)
-                    }
-                }.padding(.vertical, 23)
+                }.onChange(of: store.modelPreparationFocus) { _, _ in
+                    withAnimation { proxy.scrollTo("model-preparation", anchor: .top) }
+                }
             }
             Spacer(minLength: 10)
             VStack(alignment: .leading, spacing: 8) {
@@ -91,6 +101,39 @@ struct InspectorView: View {
     }
 }
 
+struct ModelPreparationView: View {
+    @EnvironmentObject var store: AppStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(spacing: 14) {
+                PathSettingField(title: "模型目录", value: $store.modelDirectory, directory: true, compact: true)
+                PathSettingField(title: "Config 配置", value: $store.modelConfig, directory: false, compact: true)
+            }.disabled(store.busy)
+            HStack {
+                if store.hasUnsavedModelSettings {
+                    Button("撤销修改") { store.discardModelSettings() }.buttonStyle(.plain).foregroundStyle(Palette.muted)
+                }
+                Spacer(minLength: 0)
+                Button(store.hasUnsavedModelSettings ? "保存并检查" : "检查模型") { store.applyModelSettings() }
+                    .buttonStyle(.borderedProminent).tint(Palette.ink)
+            }.font(.system(size: 10)).controlSize(.small).disabled(store.busy)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    if store.isChecking { ProgressView().controlSize(.mini) }
+                    else { Image(systemName: store.hasUnsavedModelSettings ? "pencil.circle" : store.environmentReady ? "checkmark.circle.fill" : "exclamationmark.circle")
+                        .foregroundStyle(!store.hasUnsavedModelSettings && store.environmentReady ? Palette.green : Palette.accent) }
+                    Text(store.isChecking ? "检查中…" : store.hasUnsavedModelSettings ? "模型设置待保存" : store.environmentReady ? "运行环境可用" : "运行环境需要检查")
+                        .font(.system(size: 10, weight: .medium))
+                }
+                Text(store.hasUnsavedModelSettings ? "保存并检查后可开始生成。" : store.environmentMessage)
+                    .font(.system(size: 9)).foregroundStyle(Palette.muted).lineLimit(3)
+                    .help(store.hasUnsavedModelSettings ? "保存并检查后可开始生成。" : store.environmentMessage)
+            }
+        }
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject var store: AppStore
     @Environment(\.dismiss) var dismiss
@@ -99,15 +142,13 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 22) {
             HStack(spacing: 12) {
                 BrandMark(size: 36)
-                VStack(alignment: .leading, spacing: 4) { Text("本地运行设置").font(.system(size: 20, weight: .semibold)); Text("连接你的 LightX2V 与 Qwen-Image-2.1 模型").font(.system(size: 11)).foregroundStyle(Palette.muted) }
+                VStack(alignment: .leading, spacing: 4) { Text("通用设置").font(.system(size: 20, weight: .semibold)); Text("配置本地运行环境与生成结果的保存位置").font(.system(size: 11)).foregroundStyle(Palette.muted) }
                 Spacer()
             }
             VStack(spacing: 16) {
-                pathField("LightX2V 源码目录", value: $settings.repository, directory: true)
-                pathField("Qwen-Image-2.1 模型目录", value: $settings.model, directory: true)
-                pathField("MPS / Viggle v0.3 配置", value: $settings.config, directory: false)
-                pathField("Python 可执行文件", value: $settings.python, directory: false)
-                pathField("生成结果目录", value: $settings.outputDirectory, directory: true)
+                PathSettingField(title: "LightX2V 源码目录", value: $settings.repository, directory: true)
+                PathSettingField(title: "Python 可执行文件", value: $settings.python, directory: false)
+                PathSettingField(title: "生成结果目录", value: $settings.outputDirectory, directory: true, allowsCreatingDirectories: true)
             }.disabled(store.busy)
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
@@ -119,28 +160,46 @@ struct SettingsView: View {
                 }
                 ScrollView { Text(store.environmentMessage).font(.system(size: 11, design: .monospaced)).foregroundStyle(Palette.muted).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }.frame(maxHeight: 75)
             }.padding(14).background(Palette.sidebar, in: RoundedRectangle(cornerRadius: 10))
-            Text("模型与 Python 环境由本机提供。应用不会自动下载权重或安装依赖；所有推理使用本地 MPS。")
+            Text("模型目录与 Config 配置请在主界面右侧的「模型准备」中设置。")
                 .font(.system(size: 11)).foregroundStyle(Palette.muted)
             HStack {
-                Button("恢复默认路径") { settings = .defaults }.disabled(store.busy)
+                Button("恢复默认路径") {
+                    let defaults = AppSettings.defaults
+                    settings.repository = defaults.repository
+                    settings.python = defaults.python
+                    settings.outputDirectory = defaults.outputDirectory
+                }.disabled(store.busy)
                 Spacer()
                 Button("取消") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("保存并检查") { store.applySettings(settings); dismiss() }.keyboardShortcut(.defaultAction).disabled(store.busy).buttonStyle(.borderedProminent).tint(Palette.ink)
+                Button("保存并检查") { store.applyGeneralSettings(settings); dismiss() }.keyboardShortcut(.defaultAction).disabled(store.busy).buttonStyle(.borderedProminent).tint(Palette.ink)
             }
         }.padding(28).frame(width: 660).background(Palette.canvas).foregroundStyle(Palette.ink)
     }
-    private func pathField(_ title: String, value: Binding<String>, directory: Bool) -> some View {
+}
+
+struct PathSettingField: View {
+    let title: String
+    @Binding var value: String
+    let directory: Bool
+    var compact = false
+    var allowsCreatingDirectories = false
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text(title).font(.system(size: 11, weight: .medium))
+            Text(title).font(.system(size: compact ? 10 : 11, weight: .medium))
             HStack(spacing: 8) {
-                TextField(title, text: value).font(.system(size: 11, design: .monospaced)).textFieldStyle(.roundedBorder)
-                Button("选择…") {
+                TextField(title, text: $value).font(.system(size: compact ? 10 : 11, design: .monospaced)).textFieldStyle(.roundedBorder)
+                    .accessibilityLabel(title).help(value)
+                Button {
                     let panel = NSOpenPanel()
                     panel.canChooseDirectories = directory; panel.canChooseFiles = !directory; panel.allowsMultipleSelection = false
-                    panel.canCreateDirectories = directory
-                    panel.directoryURL = URL(fileURLWithPath: value.wrappedValue).deletingLastPathComponent()
-                    if panel.runModal() == .OK, let url = panel.url { value.wrappedValue = url.path }
-                }.font(.system(size: 11))
+                    panel.canCreateDirectories = allowsCreatingDirectories
+                    panel.directoryURL = URL(fileURLWithPath: value).deletingLastPathComponent()
+                    if panel.runModal() == .OK, let url = panel.url { value = url.path }
+                } label: {
+                    if compact { Image(systemName: "folder").frame(width: 16, height: 16) }
+                    else { Text("选择…") }
+                }.font(.system(size: 11)).help("选择\(title)").accessibilityLabel("选择\(title)")
             }
         }
     }

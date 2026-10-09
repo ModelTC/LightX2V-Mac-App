@@ -73,7 +73,7 @@ struct WorkspaceView: View {
             Text(store.selected == nil ? "新建创作" : "图像生成").fontWeight(.medium)
             Spacer()
             IconButton(symbol: "terminal", label: "显示运行日志", active: store.showLogs) { store.showLogs.toggle() }
-            IconButton(symbol: "sidebar.right", label: "显示生成参数", active: store.showInspector) { store.showInspector.toggle() }
+            IconButton(symbol: "sidebar.right", label: "显示模型准备与生成参数", active: store.showInspector) { store.showInspector.toggle() }
         }.font(.system(size: 12)).padding(.horizontal, 24).frame(height: 58).padding(.top, 28)
     }
 }
@@ -253,7 +253,7 @@ struct ModelSelector: View {
             }.pickerStyle(.inline)
             Text(store.selectedModel.detail)
             Divider()
-            Button("模型设置…") { store.showSettings = true }
+            Button("模型准备") { store.showModelPreparation() }
         } label: {
             Label(store.selectedModel.title, systemImage: "cube.transparent")
         }

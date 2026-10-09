@@ -17,6 +17,8 @@ enum GenerationModel: String, CaseIterable, Identifiable {
 @MainActor
 final class AppStore: ObservableObject {
     @Published var settings: AppSettings
+    @Published var modelDirectory: String
+    @Published var modelConfig: String
     @Published var generations: [Generation]
     @Published var selectedID: UUID? { didSet { loadSelectedLog() } }
     @Published var prompt = ""
@@ -40,6 +42,7 @@ final class AppStore: ObservableObject {
     @Published var showSettings = false
     @Published var showLogs = false
     @Published var showInspector = true
+    @Published var modelPreparationFocus = 0
     private var runner: ProcessRunner?
     private var checker: ProcessRunner?
     private var activeLog = ""
@@ -51,7 +54,8 @@ final class AppStore: ObservableObject {
 
     var selected: Generation? { generations.first { $0.id == selectedID } }
     var busy: Bool { isRunning || isChecking }
-    var canGenerate: Bool { !busy && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var hasUnsavedModelSettings: Bool { modelDirectory != settings.model || modelConfig != settings.config }
+    var canGenerate: Bool { !busy && !hasUnsavedModelSettings && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var filteredGenerations: [Generation] {
         search.isEmpty ? generations : generations.filter { $0.request.prompt.localizedCaseInsensitiveContains(search) }
     }
@@ -79,6 +83,7 @@ final class AppStore: ObservableObject {
         }
         data.recoverInterrupted()
         settings = data.settings; generations = data.generations
+        modelDirectory = data.settings.model; modelConfig = data.settings.config
         errorMessage = readError
     }
 
@@ -98,7 +103,32 @@ final class AppStore: ObservableObject {
         selectedID = nil
     }
 
-    func applySettings(_ value: AppSettings) {
+    func applyGeneralSettings(_ value: AppSettings) {
+        var updated = settings
+        updated.repository = value.repository
+        updated.python = value.python
+        updated.outputDirectory = value.outputDirectory
+        applySettings(updated)
+    }
+
+    func applyModelSettings() {
+        var updated = settings
+        updated.model = modelDirectory
+        updated.config = modelConfig
+        applySettings(updated)
+    }
+
+    func discardModelSettings() {
+        guard !busy else { return }
+        modelDirectory = settings.model; modelConfig = settings.config
+    }
+
+    func showModelPreparation() {
+        showInspector = true
+        modelPreparationFocus += 1
+    }
+
+    private func applySettings(_ value: AppSettings) {
         guard !busy else { return }
         settings = value; environmentReady = false; persist(); checkEnvironment()
     }
@@ -143,9 +173,14 @@ final class AppStore: ObservableObject {
 
     func generate() {
         guard !busy else { return }
+        guard !hasUnsavedModelSettings else {
+            showModelPreparation()
+            errorMessage = "请先在右侧「模型准备」中保存并检查模型设置。"
+            return
+        }
         do {
             try settings.validatePaths()
-            guard environmentReady else { showSettings = true; checkEnvironment(); return }
+            guard environmentReady else { showModelPreparation(); checkEnvironment(); return }
             let seed: Int64
             if randomSeed { seed = Int64.random(in: 0...4294967295) }
             else {

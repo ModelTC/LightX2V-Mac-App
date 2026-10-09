@@ -27,7 +27,7 @@ struct LightX2VApplication: App {
                 Button("停止生成") { store.stop() }.keyboardShortcut(".", modifiers: .command).disabled(!store.isRunning || store.isStopping)
                 Divider()
                 Button("显示运行日志") { store.showLogs.toggle() }.keyboardShortcut("l", modifiers: [.command, .shift])
-                Button("显示生成参数") { store.showInspector.toggle() }.keyboardShortcut("i", modifiers: [.command, .option])
+                Button("显示模型准备与生成参数") { store.showInspector.toggle() }.keyboardShortcut("i", modifiers: [.command, .option])
             }
         }
     }
