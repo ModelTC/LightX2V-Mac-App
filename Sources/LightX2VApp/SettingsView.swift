@@ -166,68 +166,6 @@ struct FirstLaunchSetupView: View {
     }
 }
 
-struct SettingsView: View {
-    @EnvironmentObject var store: AppStore
-    @Environment(\.dismiss) var dismiss
-    @State var settings: AppSettings
-    @State private var saveError: String?
-    var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            HStack(spacing: 12) {
-                BrandMark(size: 36)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(store.needsGeneralSetup ? "欢迎使用 LightX2V" : "通用设置").font(.system(size: 20, weight: .semibold))
-                    Text(store.needsGeneralSetup ? "先完成通用设置，保存后下次打开即可直接使用。" : "配置本地运行环境与生成结果的保存位置")
-                        .font(.system(size: 11)).foregroundStyle(Palette.muted)
-                }
-                Spacer()
-            }
-            VStack(spacing: 16) {
-                PathSettingField(title: "LightX2V 源码目录", value: $settings.repository, directory: true)
-                PathSettingField(title: "Python 可执行文件", value: $settings.python, directory: false)
-                PathSettingField(title: "生成结果目录", value: $settings.outputDirectory, directory: true, allowsCreatingDirectories: true)
-            }.disabled(store.busy)
-            if !store.needsGeneralSetup {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        if store.isChecking { ProgressView().controlSize(.mini) }
-                        else { Image(systemName: store.environmentReady ? "checkmark.circle.fill" : "exclamationmark.circle").foregroundStyle(store.environmentReady ? Palette.green : Palette.accent) }
-                        Text(store.isChecking ? "检查中…" : store.environmentReady ? "运行环境可用" : "运行环境需要检查").font(.system(size: 12, weight: .medium))
-                        Spacer()
-                        Button("重新检查已保存设置") { store.checkEnvironment() }.disabled(store.busy).font(.system(size: 11))
-                    }
-                    ScrollView { Text(store.environmentMessage).font(.system(size: 11, design: .monospaced)).foregroundStyle(Palette.muted).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).subtleScrollbars() }.frame(maxHeight: 75)
-                }.padding(14).background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10))
-            }
-            Text("模型目录与 Config 配置请在主界面右侧的「模型准备」中设置。")
-                .font(.system(size: 11)).foregroundStyle(Palette.muted)
-            if let saveError {
-                Label(saveError, systemImage: "exclamationmark.circle")
-                    .font(.system(size: 11)).foregroundStyle(Palette.accent)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            HStack {
-                Spacer()
-                if store.needsGeneralSetup {
-                    Button("退出") { NSApp.terminate(nil) }
-                } else {
-                    Button("取消") { dismiss() }.keyboardShortcut(.cancelAction)
-                }
-                Button(store.needsGeneralSetup ? "保存并开始" : "保存并检查") {
-                    let firstSetup = store.needsGeneralSetup
-                    do {
-                        try store.applyGeneralSettings(settings)
-                        if !firstSetup { dismiss() }
-                    }
-                    catch { saveError = error.localizedDescription }
-                }.keyboardShortcut(.defaultAction).disabled(store.busy || !settings.hasGeneralPaths)
-                    .buttonStyle(.borderedProminent).tint(Palette.button)
-            }
-        }.padding(28).frame(width: 660).background(Palette.canvas).foregroundStyle(Palette.ink)
-            .onChange(of: settings) { _, _ in saveError = nil }
-    }
-}
-
 struct PathSettingField: View {
     let title: String
     @Binding var value: String

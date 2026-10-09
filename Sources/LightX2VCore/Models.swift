@@ -5,42 +5,49 @@ public struct AppSettings: Codable, Equatable {
     public var model: String
     public var config: String
     public var python: String
+    public var workingDirectory: String
+    // Retained only to import pre-workspace installations.
     public var outputDirectory: String
 
-    public init(repository: String, model: String, config: String, python: String, outputDirectory: String) {
+    public init(repository: String, model: String, config: String, python: String, outputDirectory: String = "", workingDirectory: String = "") {
         self.repository = repository; self.model = model; self.config = config
-        self.python = python; self.outputDirectory = outputDirectory
+        self.python = python; self.workingDirectory = workingDirectory
+        self.outputDirectory = workingDirectory.isEmpty ? outputDirectory : WorkspaceLayout(workingDirectory).outputs.path
     }
 
     public static var defaults: AppSettings {
         AppSettings(repository: "", model: "", config: "", python: "", outputDirectory: "")
     }
 
-    public var hasGeneralPaths: Bool {
-        [repository, python, outputDirectory].allSatisfy { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private enum CodingKeys: String, CodingKey { case repository, model, config, python, outputDirectory, workingDirectory }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(repository: try values.decode(String.self, forKey: .repository),
+                  model: try values.decode(String.self, forKey: .model),
+                  config: try values.decode(String.self, forKey: .config),
+                  python: try values.decode(String.self, forKey: .python),
+                  outputDirectory: try values.decodeIfPresent(String.self, forKey: .outputDirectory) ?? "",
+                  workingDirectory: try values.decodeIfPresent(String.self, forKey: .workingDirectory) ?? "")
     }
 
-    /// Validate general settings independently of model preparation. A new output
-    /// directory may be created later, provided its nearest existing parent is writable.
+    public var hasGeneralPaths: Bool {
+        [workingDirectory, repository, python].allSatisfy { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
     public func validateGeneralPaths() throws {
+        try WorkspaceLayout.validate(workingDirectory)
         let fm = FileManager.default
-        for (label, value) in [("LightX2V 源码目录", repository), ("Python 可执行文件", python), ("生成结果目录", outputDirectory)] {
+        for (label, value) in [("LightX2V 源码目录", repository), ("PyTorch 环境", python)] {
             guard !value.isEmpty else { throw AppError.message("请选择\(label)。") }
             guard value.hasPrefix("/") else { throw AppError.message("\(label)必须使用绝对路径。") }
         }
         guard fm.fileExists(atPath: repository + "/lightx2v/infer.py") else {
             throw AppError.message("源码目录中找不到 lightx2v/infer.py，请选择正确的 LightX2V 目录。")
         }
-        var isDirectory: ObjCBool = false
-        guard fm.fileExists(atPath: python, isDirectory: &isDirectory), !isDirectory.boolValue,
+        var directory: ObjCBool = false
+        guard fm.fileExists(atPath: python, isDirectory: &directory), !directory.boolValue,
               fm.isExecutableFile(atPath: python) else {
-            throw AppError.message("请选择可执行的 Python 文件，例如环境目录中的 bin/python。")
-        }
-        var output = URL(fileURLWithPath: outputDirectory).standardizedFileURL
-        while !fm.fileExists(atPath: output.path), output.path != "/" { output.deleteLastPathComponent() }
-        guard fm.fileExists(atPath: output.path, isDirectory: &isDirectory), isDirectory.boolValue,
-              fm.isWritableFile(atPath: output.path) else {
-            throw AppError.message("生成结果目录不可写，请选择有写入权限的文件夹。")
+            throw AppError.message("请选择 PyTorch 环境中的 Python 可执行文件，例如 bin/python。")
         }
     }
 

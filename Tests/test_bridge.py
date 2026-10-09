@@ -79,6 +79,7 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(received['seed'],'4294967295')
         self.assertEqual(json.loads((self.root/'run/config.json').read_text()),self.cfg)
         self.assertIn('中文日志',(self.root/'run/inference.log').read_text())
+        self.assertEqual(json.loads((self.root/'run/invocation.json').read_text())['cwd'], str(self.root/'run'))
         self.assertFalse((self.repo/'should-not-exist').exists())
 
     def test_failure_is_not_reported_as_completion(self):

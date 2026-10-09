@@ -1,4 +1,5 @@
 import Foundation
+import LightX2VCore
 
 /// A single owned subprocess. Reading never blocks SwiftUI's main thread.
 final class ProcessRunner {
@@ -7,14 +8,17 @@ final class ProcessRunner {
     private let queue = DispatchQueue(label: "app.lightx2v.process.\(UUID().uuidString)")
     var isRunning: Bool { process.isRunning }
 
-    func start(python: String, bridge: String, mode: String, request: String,
+    func start(python: String, bridge: String, mode: String, request: String, workspace: String,
                onEvent: @escaping ([String: Any]) -> Void, onExit: @escaping (Int32) -> Void) throws {
         process.executableURL = URL(fileURLWithPath: python)
         process.arguments = ["-u", bridge, mode, request]
         process.standardOutput = pipe
         process.standardError = pipe
         process.standardInput = FileHandle.nullDevice
-        var env = ProcessInfo.processInfo.environment
+        let layout = WorkspaceLayout(workspace)
+        try layout.prepare()
+        process.currentDirectoryURL = layout.root
+        var env = ProcessInfo.processInfo.environment.merging(layout.environment) { _, new in new }
         env["PYTHONUNBUFFERED"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
         process.environment = env

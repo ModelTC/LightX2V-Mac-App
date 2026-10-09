@@ -25,6 +25,9 @@ final class AppStore: ObservableObject {
     @Published var isRunning = false
     @Published var isChecking = false
     @Published var isStopping = false
+    @Published var isPreparingWorkspace = false
+    @Published var isPreparingResources = false
+    var setupTask: Task<Void, Never>?
     @Published var environmentReady = false
     @Published var environmentMessage = "尚未检查运行环境"
     @Published var phase = "准备就绪"
@@ -45,10 +48,12 @@ final class AppStore: ObservableObject {
     private var receivedDone = false
     private var checkToken = UUID()
     private var terminationCompletion: (() -> Void)?
-    private let stateURL: URL
+    private var stateURL: URL
+    private let locatorRoot: URL
+    private var canPersist = true
 
     var selected: Generation? { generations.first { $0.id == selectedID } }
-    var busy: Bool { isRunning || isChecking }
+    var busy: Bool { isRunning || isChecking || isPreparingWorkspace || isPreparingResources }
     var needsGeneralSetup: Bool { !hasCompletedGeneralSetup || !settings.hasGeneralPaths }
     var hasUnsavedModelSettings: Bool { modelDirectory != settings.model || modelConfig != settings.config }
     var width: Int { generationSize.dimensions.width }
@@ -63,18 +68,16 @@ final class AppStore: ObservableObject {
         let fm = FileManager.default
         let root = ProcessInfo.processInfo.environment["LIGHTX2V_APP_STATE_DIR"].map { URL(fileURLWithPath: $0) }
             ?? fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("LightX2V APP")
+        locatorRoot = root
         stateURL = root.appendingPathComponent("workspace.json")
         var data = WorkspaceData()
         var readError: String?
-        if fm.fileExists(atPath: stateURL.path) {
-            do { data = try JSONFile.read(WorkspaceData.self, from: stateURL) }
-            catch {
-                // Preserve malformed history before creating a clean workspace.
-                let backup = root.appendingPathComponent("workspace-backup-\(Int(Date().timeIntervalSince1970)).json")
-                do { try fm.copyItem(at: stateURL, to: backup) }
-                catch { readError = "历史文件无法读取或备份：\(error.localizedDescription)" }
-                if readError == nil { readError = "历史文件无法读取，原文件已备份到 \(backup.path)。" }
-            }
+        do {
+            stateURL = try WorkspaceStorage.stateURL(locatorRoot: root)
+            if fm.fileExists(atPath: stateURL.path) { data = try JSONFile.read(WorkspaceData.self, from: stateURL) }
+        } catch {
+            canPersist = false
+            readError = "无法读取原工作区，原文件已保留。\(error.localizedDescription)"
         }
         data.recoverInterrupted()
         settings = data.settings; generations = data.generations
@@ -84,6 +87,7 @@ final class AppStore: ObservableObject {
     }
 
     func persist() {
+        guard canPersist, !isPreparingWorkspace, !settings.workingDirectory.isEmpty else { return }
         do { try JSONFile.write(WorkspaceData(settings: settings, generations: generations, hasCompletedGeneralSetup: hasCompletedGeneralSetup), to: stateURL) }
         catch { errorMessage = "无法保存应用状态：\(error.localizedDescription)" }
     }
@@ -98,22 +102,40 @@ final class AppStore: ObservableObject {
         selectedID = nil
     }
 
-    func applyGeneralSettings(_ value: AppSettings) throws {
+    func applyGeneralSettings(_ value: AppSettings) async throws {
         guard !busy else { throw AppError.message("请等待当前任务结束后再保存设置。") }
         var updated = settings
         func path(_ value: String) -> String {
             (value.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath
         }
+        updated.workingDirectory = path(value.workingDirectory)
         updated.repository = path(value.repository)
         updated.python = path(value.python)
-        updated.outputDirectory = path(value.outputDirectory)
+        updated.outputDirectory = WorkspaceLayout(updated.workingDirectory).outputs.path
+        // Carry the same relative config to a newly downloaded checkout. Keep custom config choices.
+        var suggested: String?
+        if updated.config.isEmpty {
+            suggested = updated.repository + "/configs/platforms/mps/qwen_image_21_viggle_v03.json"
+        } else if updated.repository != settings.repository, !settings.repository.isEmpty,
+                  updated.config.hasPrefix(settings.repository + "/") {
+            suggested = updated.repository + updated.config.dropFirst(settings.repository.count)
+        }
+        if let suggested, FileManager.default.fileExists(atPath: suggested) { updated.config = suggested }
         try updated.validateGeneralPaths()
-        // Commit first: a failed write must leave onboarding open and retryable.
-        try JSONFile.write(WorkspaceData(settings: updated, generations: generations, hasCompletedGeneralSetup: true), to: stateURL)
-        if needsGeneralSetup { showSettings = false }
-        settings = updated; hasCompletedGeneralSetup = true
-        environmentReady = false
-        checkEnvironment()
+        let preserveModelDraft = hasUnsavedModelSettings
+        isPreparingWorkspace = true
+        defer { isPreparingWorkspace = false; finishTerminationIfNeeded() }
+        let snapshot = WorkspaceData(settings: updated, generations: generations, hasCompletedGeneralSetup: true)
+        let previous = stateURL; let locator = locatorRoot
+        let saved = try await Task.detached(priority: .userInitiated) {
+            try WorkspaceStorage.save(snapshot, previousState: previous, locatorRoot: locator)
+        }.value
+        settings = saved.settings; generations = saved.generations
+        if !preserveModelDraft { modelDirectory = settings.model; modelConfig = settings.config }
+        stateURL = WorkspaceLayout(settings.workingDirectory).state
+        canPersist = true; hasCompletedGeneralSetup = true; environmentReady = false
+        errorMessage = nil; showSettings = false
+        environmentMessage = "通用设置已保存，请在右侧准备并检查模型。"
     }
 
     func applyModelSettings() {
@@ -152,12 +174,14 @@ final class AppStore: ObservableObject {
         }
         do {
             try settings.validatePaths()
-            let requestURL = stateURL.deletingLastPathComponent().appendingPathComponent("environment-check.json")
+            let layout = WorkspaceLayout(settings.workingDirectory)
+            try layout.prepare()
+            let requestURL = layout.temporary.appendingPathComponent("environment-check.json")
             try JSONFile.write(["repository": settings.repository, "model": settings.model, "config": settings.config], to: requestURL)
             isChecking = true; environmentReady = false; environmentMessage = "正在检查 Python、MPS 和模型…"
             let token = UUID(); checkToken = token
             let process = ProcessRunner(); checker = process
-            try process.start(python: settings.python, bridge: bridgePath, mode: "check", request: requestURL.path,
+            try process.start(python: settings.python, bridge: bridgePath, mode: "check", request: requestURL.path, workspace: settings.workingDirectory,
                               onEvent: { [weak self] event in
                 guard let self, self.checkToken == token else { return }
                 if event["type"] as? String == "check" {
@@ -216,7 +240,7 @@ final class AppStore: ObservableObject {
             persist()
             let process = ProcessRunner(); runner = process
             do {
-                try process.start(python: settings.python, bridge: bridgePath, mode: "run", request: requestURL.path,
+                try process.start(python: settings.python, bridge: bridgePath, mode: "run", request: requestURL.path, workspace: settings.workingDirectory,
                                   onEvent: { [weak self] event in self?.receive(event, for: id) },
                                   onExit: { [weak self] code in self?.exited(code, for: id) })
                 // Clear only after launch succeeds; the submitted prompt remains in history.
@@ -284,7 +308,11 @@ final class AppStore: ObservableObject {
 
     func prepareToTerminate(_ completion: @escaping () -> Void) {
         terminationCompletion = completion
-        stop(); checker?.stop(); finishTerminationIfNeeded()
+        stop(); checker?.stop(); setupTask?.cancel(); finishTerminationIfNeeded()
+    }
+
+    func finishSetupTask() {
+        setupTask = nil; isPreparingResources = false; finishTerminationIfNeeded()
     }
 
     private func finishTerminationIfNeeded() {

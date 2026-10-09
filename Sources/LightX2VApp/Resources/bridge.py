@@ -120,7 +120,7 @@ def run(request, cfg):
     if Path(request["output"]).exists():
         raise ValueError("输出文件已存在，请创建新的生成任务")
     config_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
-    (destination / "invocation.json").write_text(json.dumps({"argv": cmd, "cwd": request["repository"]},
+    (destination / "invocation.json").write_text(json.dumps({"argv": cmd, "cwd": str(destination)},
                                                              ensure_ascii=False, indent=2), encoding="utf-8")
     started = time.monotonic()
     state = {"child": None, "cancelled": False}
@@ -160,7 +160,7 @@ def run(request, cfg):
     tail = []
     try:
         with (destination / "inference.log").open("w", encoding="utf-8") as log:
-            child = subprocess.Popen(cmd, cwd=request["repository"], env=environment(request),
+            child = subprocess.Popen(cmd, cwd=str(destination), env=environment(request),
                                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                      text=True, encoding="utf-8", errors="replace", bufsize=1,
                                      start_new_session=True)

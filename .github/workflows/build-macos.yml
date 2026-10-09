@@ -56,6 +56,9 @@ jobs:
       - name: Run Swift core checks
         run: swift run LightX2VCoreChecks
 
+      - name: Check workspace setup and discovery
+        run: swift run LightX2VSetupChecks
+
       - name: Check prompt input and IME layout
         run: bash scripts/check-prompt-editor.sh
 
