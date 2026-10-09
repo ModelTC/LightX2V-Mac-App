@@ -59,6 +59,7 @@ struct WorkspaceView: View {
         }
         .foregroundStyle(Palette.ink)
         .frame(minWidth: minimumWindowSize.width, minHeight: minimumWindowSize.height)
+        .overlay(alignment: .top) { WindowDragArea(isNativeTitleBar: true).frame(height: 28) }
         .ignoresSafeArea(.container, edges: .top)
         .sheet(isPresented: $store.showSettings) { SettingsView(settings: store.settings).environmentObject(store) }
         .alert("LightX2V APP", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
@@ -69,11 +70,13 @@ struct WorkspaceView: View {
 
     private var toolbar: some View {
         HStack(spacing: 10) {
-            Image(systemName: "square.stack.3d.up").foregroundStyle(Palette.muted)
-            Text("工作空间").foregroundStyle(Palette.muted)
-            Text("/").foregroundStyle(Palette.muted.opacity(0.5))
-            Text(store.selected == nil ? "新建创作" : "图像生成").fontWeight(.medium)
-            Spacer()
+            HStack(spacing: 10) {
+                Image(systemName: "square.stack.3d.up").foregroundStyle(Palette.muted)
+                Text("工作空间").foregroundStyle(Palette.muted)
+                Text("/").foregroundStyle(Palette.muted.opacity(0.5))
+                Text(store.selected == nil ? "新建创作" : "图像生成").fontWeight(.medium)
+                Spacer()
+            }.frame(maxHeight: .infinity).background(WindowDragArea())
             IconButton(symbol: "terminal", label: "显示运行日志", active: store.showLogs) { store.showLogs.toggle() }
             IconButton(symbol: "sidebar.right", label: "显示模型准备与生成参数", active: store.showInspector) { store.showInspector.toggle() }
         }.font(.system(size: 12)).padding(.horizontal, 24).frame(height: 58).padding(.top, 28)
