@@ -303,7 +303,7 @@ private struct PromptMessageView: View {
                     .foregroundStyle(Palette.muted)
                     .padding(.trailing, 4)
             }
-            .frame(maxWidth: 620, alignment: .trailing)
+            .frame(maxWidth: 560, alignment: .trailing)
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
     }
@@ -313,58 +313,99 @@ struct GenerationView: View {
     @EnvironmentObject var store: AppStore
     let job: Generation
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 23) {
-                PromptMessageView(prompt: job.request.prompt, createdAt: job.createdAt)
-                VStack(alignment: .leading, spacing: 15) {
-                    HStack(spacing: 9) {
-                        BrandMark(size: 23)
-                        Text("LightX2V").font(.system(size: 12, weight: .semibold))
-                        Text("Qwen-Image-2.1").font(.system(size: 10)).foregroundStyle(Palette.muted)
-                        Spacer()
-                        TimelineView(.periodic(from: .now, by: 1)) { context in
-                            Text(store.elapsed(job, now: context.date)).font(.system(size: 10)).foregroundStyle(Palette.muted).monospacedDigit()
-                        }
-                    }
-                    if job.status == .completed {
-                        if let image = NSImage(contentsOfFile: job.request.output) {
-                            Image(nsImage: image).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: 470)
-                                .onDrag { NSItemProvider(contentsOf: URL(fileURLWithPath: job.request.output)) ?? NSItemProvider() }
-                                .contextMenu { Button("复制图片") { store.copyImage(job) }; Button("另存为…") { store.export(job) }; Button("在 Finder 中显示") { store.reveal(job) } }
-                            HStack(spacing: 14) {
-                                Label("已生成", systemImage: "checkmark.circle.fill").foregroundStyle(Palette.green)
-                                Spacer()
-                                Button("复用参数") { store.reuse(job) }
-                                Button { store.reveal(job) } label: { Image(systemName: "folder") }.help("在 Finder 中显示")
-                                Button { store.copyImage(job) } label: { Image(systemName: "doc.on.doc") }.help("复制图片")
-                                Button { store.export(job) } label: { Label("导出", systemImage: "square.and.arrow.up") }
-                            }.font(.system(size: 11)).buttonStyle(.plain)
-                        } else {
-                            failure("图片文件已移动或删除。", symbol: "photo.badge.exclamationmark")
-                        }
-                    } else if job.status == .running {
-                        VStack(spacing: 17) {
-                            ProgressView().controlSize(.regular).tint(Palette.accent)
-                            Text(store.phase).font(.system(size: 13, weight: .medium))
-                            Text("模型按需载入内存，首次生成可能需要几分钟。")
-                                .font(.system(size: 11)).foregroundStyle(Palette.muted)
-                            HStack(spacing: 5) {
-                                ForEach(1...6, id: \.self) { index in
-                                    Capsule().fill(index < store.currentStep ? Palette.accent : index == store.currentStep ? Palette.accent.opacity(0.45) : Palette.line)
-                                        .frame(width: 25, height: 4)
-                                }
+        GeometryReader { geometry in
+            ScrollView {
+                let image = job.status == .completed ? NSImage(contentsOfFile: job.request.output) : nil
+                let previewHeight = min(500, max(280, geometry.size.height - 235))
+                // Keep the header and actions attached to the actual image width.
+                let replyWidth = image.map { min(620, max(220, previewHeight * $0.size.width / max(1, $0.size.height))) } ?? 620
+
+                VStack(alignment: .leading, spacing: 28) {
+                    PromptMessageView(prompt: job.request.prompt, createdAt: job.createdAt)
+                    VStack(alignment: .leading, spacing: 12) {
+                        replyHeader
+                        if job.status == .completed {
+                            if let image {
+                                Image(nsImage: image).resizable().scaledToFit()
+                                    .onDrag { NSItemProvider(contentsOf: URL(fileURLWithPath: job.request.output)) ?? NSItemProvider() }
+                                    .contextMenu { Button("复制图片") { store.copyImage(job) }; Button("另存为…") { store.export(job) }; Button("在 Finder 中显示") { store.reveal(job) } }
+                                imageActions
+                            } else {
+                                failure("图片文件已移动或删除。", symbol: "photo.badge.exclamationmark")
                             }
-                            Button("查看实时日志") { store.showLogs = true }.buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(Palette.muted)
-                        }.frame(maxWidth: .infinity).frame(height: 260)
-                            .background(.white.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line, style: StrokeStyle(lineWidth: 1, dash: [5])))
-                    } else {
-                        failure(job.error ?? job.status.label, symbol: job.status == .failed ? "exclamationmark.triangle" : "pause.circle")
-                    }
+                        } else if job.status == .running {
+                            VStack(spacing: 17) {
+                                ProgressView().controlSize(.regular).tint(Palette.accent)
+                                Text(store.phase).font(.system(size: 13, weight: .medium))
+                                Text("模型按需载入内存，首次生成可能需要几分钟。")
+                                    .font(.system(size: 11)).foregroundStyle(Palette.muted)
+                                HStack(spacing: 5) {
+                                    ForEach(1...6, id: \.self) { index in
+                                        Capsule().fill(index < store.currentStep ? Palette.accent : index == store.currentStep ? Palette.accent.opacity(0.45) : Palette.line)
+                                            .frame(width: 25, height: 4)
+                                    }
+                                }
+                                Button("查看实时日志") { store.showLogs = true }.buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(Palette.muted)
+                            }.frame(maxWidth: .infinity).frame(height: 260)
+                                .background(.white.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
+                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line, style: StrokeStyle(lineWidth: 1, dash: [5])))
+                        } else {
+                            failure(job.error ?? job.status.label, symbol: job.status == .failed ? "exclamationmark.triangle" : "pause.circle")
+                        }
+                    }.frame(maxWidth: replyWidth, alignment: .leading)
                 }
-            }.padding(30).frame(maxWidth: 900).frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 28).padding(.vertical, 24)
+                .frame(maxWidth: 800).frame(maxWidth: .infinity)
+            }
         }
     }
+
+    private var replyHeader: some View {
+        HStack(alignment: .top, spacing: 9) {
+            BrandMark(size: 24)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text("LightX2V").font(.system(size: 12, weight: .semibold))
+                    Text("Qwen-Image-2.1").font(.system(size: 10)).foregroundStyle(Palette.muted)
+                }
+                HStack(spacing: 6) {
+                    if job.status == .completed {
+                        Label("已生成", systemImage: "checkmark.circle.fill").foregroundStyle(Palette.green)
+                        Text("·").foregroundStyle(Palette.muted)
+                    }
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text(store.elapsed(job, now: context.date)).foregroundStyle(Palette.muted).monospacedDigit()
+                    }
+                }.font(.system(size: 10))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var imageActions: some View {
+        HStack(spacing: 6) {
+            Button { store.copyImage(job) } label: {
+                Label("复制", systemImage: "doc.on.doc")
+                    .padding(.horizontal, 9).frame(height: 28)
+            }.help("复制图片")
+            Button { store.export(job) } label: {
+                Label("导出", systemImage: "square.and.arrow.up")
+                    .padding(.horizontal, 9).frame(height: 28)
+            }.help("保存图片到其他位置")
+            Menu {
+                Button("复用提示词与尺寸") { store.reuse(job) }
+                Button("在 Finder 中显示") { store.reveal(job) }
+            } label: {
+                Image(systemName: "ellipsis").frame(width: 28, height: 28)
+            }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .help("更多操作").accessibilityLabel("图片更多操作")
+        }
+        .font(.system(size: 11, weight: .medium)).foregroundStyle(Palette.muted)
+        .buttonStyle(ImageActionButtonStyle())
+    }
+
     private func failure(_ message: String, symbol: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Label(job.status.label, systemImage: symbol).font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.accent)
@@ -375,6 +416,19 @@ struct GenerationView: View {
                 Button("打开任务文件夹") { store.reveal(job) }
             }.buttonStyle(.plain).font(.system(size: 11))
         }.padding(20).frame(maxWidth: .infinity, alignment: .leading).background(.white, in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+private struct ImageActionButtonStyle: ButtonStyle {
+    @State private var hovered = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(hovered ? Palette.ink : Palette.muted)
+            .background(Palette.line.opacity(configuration.isPressed ? 1 : hovered ? 0.65 : 0),
+                        in: RoundedRectangle(cornerRadius: 6))
+            .contentShape(RoundedRectangle(cornerRadius: 6))
+            .onHover { hovered = $0 }
     }
 }
 
