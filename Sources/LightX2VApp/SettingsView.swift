@@ -22,7 +22,7 @@ struct InspectorView: View {
                     withAnimation { proxy.scrollTo("model-preparation", anchor: .top) }
                 }
             }
-        }.padding(.horizontal, 20).background(Color(red: 0.972, green: 0.969, blue: 0.958))
+        }.padding(.horizontal, 20).background(Palette.inspector)
     }
 }
 
@@ -49,7 +49,7 @@ struct ModelPreparationView: View {
                 Rectangle().fill(Palette.line).frame(height: 1).padding(.horizontal, 12)
                 ModelResourceRow(title: "Config 配置", value: $store.modelConfig, directory: false)
             }
-            .background(.white.opacity(0.85), in: RoundedRectangle(cornerRadius: 12))
+            .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Palette.line, lineWidth: 1))
             .disabled(store.busy)
 
@@ -94,7 +94,7 @@ struct ModelPreparationView: View {
                     Text(store.isChecking ? "正在检查…" : store.hasUnsavedModelSettings ? "保存并检查" : "检查模型")
                 }
                 .font(.system(size: 11, weight: .medium)).frame(maxWidth: .infinity).frame(height: 26)
-            }.buttonStyle(.borderedProminent).tint(Palette.ink).disabled(store.busy)
+            }.buttonStyle(.borderedProminent).tint(Palette.button).disabled(store.busy)
         }
     }
 }
@@ -174,7 +174,7 @@ struct SettingsView: View {
                     Button("重新检查已保存设置") { store.checkEnvironment() }.disabled(store.busy).font(.system(size: 11))
                 }
                 ScrollView { Text(store.environmentMessage).font(.system(size: 11, design: .monospaced)).foregroundStyle(Palette.muted).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }.frame(maxHeight: 75)
-            }.padding(14).background(Palette.sidebar, in: RoundedRectangle(cornerRadius: 10))
+            }.padding(14).background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10))
             Text("模型目录与 Config 配置请在主界面右侧的「模型准备」中设置。")
                 .font(.system(size: 11)).foregroundStyle(Palette.muted)
             HStack {
@@ -186,7 +186,7 @@ struct SettingsView: View {
                 }.disabled(store.busy)
                 Spacer()
                 Button("取消") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("保存并检查") { store.applyGeneralSettings(settings); dismiss() }.keyboardShortcut(.defaultAction).disabled(store.busy).buttonStyle(.borderedProminent).tint(Palette.ink)
+                Button("保存并检查") { store.applyGeneralSettings(settings); dismiss() }.keyboardShortcut(.defaultAction).disabled(store.busy).buttonStyle(.borderedProminent).tint(Palette.button)
             }
         }.padding(28).frame(width: 660).background(Palette.canvas).foregroundStyle(Palette.ink)
     }

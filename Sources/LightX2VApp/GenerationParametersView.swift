@@ -36,7 +36,7 @@ struct GenerationParametersView: View {
                 Text("px").font(.system(size: 9)).foregroundStyle(Palette.muted)
             }
             .padding(.horizontal, 10).padding(.vertical, 10)
-            .background(Palette.line.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+            .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("输出尺寸")
             .accessibilityValue("宽 \(store.width)，高 \(store.height) 像素")
@@ -69,12 +69,12 @@ private struct AspectRatioButton: View {
                     .frame(height: 22)
                 Text(ratio.rawValue).font(.system(size: 10, weight: selected ? .semibold : .medium)).monospacedDigit()
             }
-            .foregroundStyle(selected ? Palette.accent : Palette.ink.opacity(0.7))
+            .foregroundStyle(selected ? Palette.accent : Palette.muted)
             .frame(maxWidth: .infinity).frame(height: 60)
-            .background(selected ? Palette.accent.opacity(0.07) : hovered ? Color.white : Color.white.opacity(0.55),
+            .background(selected ? Palette.accentSurface : hovered ? Palette.hover : Palette.surface,
                         in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(focused ? Palette.accent : selected ? Palette.accent.opacity(0.6) : hovered ? Palette.muted.opacity(0.4) : Palette.line,
+                .strokeBorder(focused ? Palette.accent : selected ? Palette.accent.opacity(0.65) : hovered ? Palette.borderStrong : Palette.line,
                               lineWidth: focused ? 2 : 1))
             .overlay(alignment: .topTrailing) {
                 if selected {
