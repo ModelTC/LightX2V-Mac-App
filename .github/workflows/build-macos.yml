@@ -56,6 +56,9 @@ jobs:
       - name: Run Swift core checks
         run: swift run LightX2VCoreChecks
 
+      - name: Check prompt input and IME layout
+        run: bash scripts/check-prompt-editor.sh
+
       - name: Run Python bridge integration tests
         run: python -B -m unittest discover -s Tests -v
 
@@ -79,7 +82,7 @@ jobs:
             printf '[Download latest APP](%s)\n\n' "$DOWNLOAD_URL"
             printf -- '- Build commit: `%s`\n' "$GITHUB_SHA"
             printf -- '- Target: macOS 14+, arm64\n'
-            printf -- '- Tests: Swift core checks and Python bridge integration tests passed\n'
+            printf -- '- Tests: Swift core, native prompt editor and Python bridge checks passed\n'
             printf -- '- Signing: ad-hoc (not notarized)\n'
             printf -- '- Retention: no expiry; only the latest successful APP package is kept\n'
             printf -- '- This stable URL always serves the latest package, including from older run summaries\n'

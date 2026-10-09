@@ -9,9 +9,6 @@ enum GenerationModel: String, CaseIterable, Identifiable {
     var title: String {
         switch self { case .qwenImage21: return "Qwen-Image-2.1" }
     }
-    var detail: String {
-        switch self { case .qwenImage21: return "Viggle v0.3 · BF16" }
-    }
 }
 
 @MainActor
@@ -22,6 +19,7 @@ final class AppStore: ObservableObject {
     @Published var generations: [Generation]
     @Published var selectedID: UUID? { didSet { loadSelectedLog() } }
     @Published var prompt = ""
+    @Published var isComposingPrompt = false
     @Published var selectedModel: GenerationModel = .qwenImage21
     @Published var generationSize = GenerationSize()
     @Published var search = ""
@@ -54,7 +52,7 @@ final class AppStore: ObservableObject {
     var hasUnsavedModelSettings: Bool { modelDirectory != settings.model || modelConfig != settings.config }
     var width: Int { generationSize.dimensions.width }
     var height: Int { generationSize.dimensions.height }
-    var canGenerate: Bool { !busy && !hasUnsavedModelSettings && generationSize.dimensions.isValid && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var canGenerate: Bool { !busy && !isComposingPrompt && !hasUnsavedModelSettings && generationSize.dimensions.isValid && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var filteredGenerations: [Generation] {
         search.isEmpty ? generations : generations.filter { $0.request.prompt.localizedCaseInsensitiveContains(search) }
     }
@@ -170,7 +168,7 @@ final class AppStore: ObservableObject {
     }
 
     func generate() {
-        guard !busy else { return }
+        guard !busy, !isComposingPrompt else { return }
         guard !hasUnsavedModelSettings else {
             showModelPreparation()
             errorMessage = "请先在右侧「模型准备」中保存并检查模型设置。"

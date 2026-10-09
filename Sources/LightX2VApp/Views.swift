@@ -199,17 +199,14 @@ struct WelcomeView: View {
 
 struct ComposerView: View {
     @EnvironmentObject var store: AppStore
-    @FocusState private var focused: Bool
+    @State private var focused = false
+    @State private var editorHeight = PromptScrollView.minimumHeight
     var body: some View {
         VStack(spacing: 9) {
             VStack(alignment: .leading, spacing: 8) {
-                ZStack(alignment: .topLeading) {
-                    // Match the macOS editor's leading text inset and first-line font.
-                    if store.prompt.isEmpty { Text("描述你想生成的画面…").foregroundStyle(Palette.muted).padding(.leading, 5).allowsHitTesting(false) }
-                    TextEditor(text: $store.prompt).scrollContentBackground(.hidden)
-                        .focused($focused).frame(minHeight: 66, maxHeight: 92)
-                        .accessibilityLabel("图像提示词")
-                }.font(.system(size: 14))
+                PromptEditor(text: $store.prompt, height: $editorHeight, focused: $focused,
+                             composing: $store.isComposingPrompt)
+                    .frame(height: editorHeight)
                 HStack(spacing: 7) {
                     ModelSelector()
                     Spacer()
@@ -220,12 +217,12 @@ struct ComposerView: View {
                         }.buttonStyle(.plain).disabled(store.isStopping)
                     } else {
                         Button { store.generate() } label: {
-                            HStack(spacing: 8) { Text("生成").font(.system(size: 12, weight: .medium)); Image(systemName: "arrow.up").font(.system(size: 12, weight: .semibold)) }
-                                .foregroundStyle(store.canGenerate ? Palette.onButton : Palette.disabledInk).padding(.horizontal, 14).frame(height: 32)
-                                .background(store.canGenerate ? Palette.button : Palette.disabledFill, in: Capsule())
-                        }.buttonStyle(.plain).disabled(!store.canGenerate).keyboardShortcut(.return, modifiers: .command).help("生成图片 ⌘↵")
+                            Image(systemName: "arrow.up").font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(store.canGenerate ? Palette.onButton : Palette.disabledInk).frame(width: 32, height: 32)
+                                .background(store.canGenerate ? Palette.button : Palette.disabledFill, in: Circle())
+                        }.buttonStyle(.plain).disabled(!store.canGenerate).keyboardShortcut(.return, modifiers: .command).help("生成图片 ⌘↵").accessibilityLabel("生成图片")
                     }
-                }
+                }.onHover { inside in if inside { NSCursor.arrow.set() } }
             }.padding(14).background(Palette.surface, in: RoundedRectangle(cornerRadius: 17))
                 .overlay(RoundedRectangle(cornerRadius: 17).stroke(focused ? Palette.focus : Palette.line, lineWidth: 1))
                 .shadow(color: .black.opacity(0.025), radius: 12, y: 4)
@@ -248,9 +245,6 @@ struct ModelSelector: View {
                     Text(model.title).tag(model)
                 }
             }.pickerStyle(.inline)
-            Text(store.selectedModel.detail)
-            Divider()
-            Button("模型准备") { store.showModelPreparation() }
         } label: {
             Label(store.selectedModel.title, systemImage: "cube.transparent")
         }
@@ -261,7 +255,7 @@ struct ModelSelector: View {
         .padding(.horizontal, 8).frame(height: 30)
         .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 7))
         .disabled(store.busy)
-        .help("选择生成模型 · \(store.selectedModel.detail)")
+        .help("选择生成模型")
         .accessibilityLabel("选择模型")
         .accessibilityValue(store.selectedModel.title)
     }
