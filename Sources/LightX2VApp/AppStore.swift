@@ -52,14 +52,8 @@ final class AppStore: ObservableObject {
     var selected: Generation? { generations.first { $0.id == selectedID } }
     var busy: Bool { isRunning || isChecking }
     var hasUnsavedModelSettings: Bool { modelDirectory != settings.model || modelConfig != settings.config }
-    var width: Int {
-        get { generationSize.dimensions.width }
-        set { generationSize.setDimensions(width: newValue, height: height) }
-    }
-    var height: Int {
-        get { generationSize.dimensions.height }
-        set { generationSize.setDimensions(width: width, height: newValue) }
-    }
+    var width: Int { generationSize.dimensions.width }
+    var height: Int { generationSize.dimensions.height }
     var canGenerate: Bool { !busy && !hasUnsavedModelSettings && generationSize.dimensions.isValid && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var filteredGenerations: [Generation] {
         search.isEmpty ? generations : generations.filter { $0.request.prompt.localizedCaseInsensitiveContains(search) }

@@ -53,44 +53,31 @@ public enum ImageAspectRatio: String, CaseIterable, Identifiable {
 
 public struct GenerationSize {
     public private(set) var resolution: ImageResolution = .oneK
-    public private(set) var dimensions = ImageDimensions(width: 1024, height: 1024)
-    public var aspectRatio: ImageAspectRatio? {
-        ImageAspectRatio.allCases.first { $0.dimensions(at: resolution) == dimensions }
-    }
+    public private(set) var aspectRatio: ImageAspectRatio = .square
+    public var dimensions: ImageDimensions { aspectRatio.dimensions(at: resolution) }
 
     public init() {}
 
     public init(width: Int, height: Int) {
-        // Restore arbitrary historic dimensions without snapping to a preset.
+        // Keep exact presets; map legacy custom sizes to the nearest tier and ratio.
+        let original = ImageDimensions(width: width, height: height)
+        for tier in ImageResolution.allCases {
+            if let ratio = ImageAspectRatio.allCases.first(where: { $0.dimensions(at: tier) == original }) {
+                resolution = tier
+                aspectRatio = ratio
+                return
+            }
+        }
         let area = Double(max(1, width)) * Double(max(1, height))
         resolution = ImageResolution.allCases.min {
             abs(log(area / pow(Double($0.baseDimension), 2))) < abs(log(area / pow(Double($1.baseDimension), 2)))
         } ?? .oneK
-        setDimensions(width: width, height: height)
-    }
-
-    public mutating func setDimensions(width: Int, height: Int) {
-        dimensions = ImageDimensions(width: width, height: height)
-        for tier in ImageResolution.allCases where ImageAspectRatio.allCases.contains(where: { $0.dimensions(at: tier) == dimensions }) {
-            resolution = tier
-            break
-        }
-    }
-
-    public mutating func selectResolution(_ value: ImageResolution) {
-        let currentRatio = Double(max(1, dimensions.width)) / Double(max(1, dimensions.height))
-        let ratio = aspectRatio ?? ImageAspectRatio.allCases.min {
+        let currentRatio = Double(max(1, width)) / Double(max(1, height))
+        aspectRatio = ImageAspectRatio.allCases.min {
             abs(log($0.ratio / currentRatio)) < abs(log($1.ratio / currentRatio))
         } ?? .square
-        resolution = value
-        selectAspectRatio(ratio)
     }
 
-    public mutating func selectAspectRatio(_ value: ImageAspectRatio) {
-        dimensions = value.dimensions(at: resolution)
-    }
-
-    public mutating func swapOrientation() {
-        setDimensions(width: dimensions.height, height: dimensions.width)
-    }
+    public mutating func selectResolution(_ value: ImageResolution) { resolution = value }
+    public mutating func selectAspectRatio(_ value: ImageAspectRatio) { aspectRatio = value }
 }

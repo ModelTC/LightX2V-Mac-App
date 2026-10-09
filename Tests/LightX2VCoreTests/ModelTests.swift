@@ -20,7 +20,7 @@ struct CoreChecks {
         try resolutionPresets()
         print("PASS all 14 resolution presets and tier switches")
         try sizeSelectionAndRestoration()
-        print("PASS default, orientation, custom sizes and history restoration")
+        print("PASS preset-only selection and legacy history normalization")
         print("6 core checks passed")
     }
     static func invalidRequests() throws {
@@ -91,6 +91,7 @@ struct CoreChecks {
                 let restored = GenerationSize(width: decoded.width, height: decoded.height)
                 try expect(restored.aspectRatio == ratio, "history ratio not restored")
                 try expect(restored.resolution == (width == w1 ? .oneK : .twoK), "history tier not restored")
+                try expect(restored.dimensions == ImageDimensions(width: width, height: height), "preset history dimensions changed")
             }
         }
     }
@@ -100,19 +101,24 @@ struct CoreChecks {
         try expect(selection.resolution == .oneK && selection.aspectRatio == .square, "default is not 1K 1:1")
         selection.selectResolution(.twoK)
         selection.selectAspectRatio(.landscape169)
-        selection.swapOrientation()
+        selection.selectAspectRatio(.portrait916)
         try expect(selection.aspectRatio == .portrait916 && selection.resolution == .twoK, "orientation did not preserve 2K")
         try expect(selection.dimensions == ImageDimensions(width: 1536, height: 2752), "orientation swapped incorrectly")
-        selection.setDimensions(width: 896, height: 1184)
-        try expect(selection.resolution == .oneK && selection.aspectRatio == .portrait34, "manual preset not recognized")
         selection = GenerationSize(width: 512, height: 768)
-        try expect(selection.aspectRatio == nil && selection.dimensions == ImageDimensions(width: 512, height: 768), "custom history was snapped")
-        selection.swapOrientation()
-        try expect(selection.aspectRatio == nil && selection.dimensions == ImageDimensions(width: 768, height: 512), "custom orientation changed size")
+        try expect(selection.resolution == .oneK && selection.aspectRatio == .portrait23, "legacy portrait history not normalized")
+        try expect(selection.dimensions == ImageDimensions(width: 832, height: 1248), "legacy portrait dimensions are not a preset")
         selection.selectResolution(.twoK)
-        try expect(selection.aspectRatio == .landscape32, "custom tier switch did not choose nearest ratio")
-        try expect(selection.dimensions == ImageDimensions(width: 2528, height: 1696), "custom tier switch has wrong dimensions")
-        selection.setDimensions(width: 720, height: 1280)
-        try expect(!selection.dimensions.isValid && selection.aspectRatio == nil, "unaligned size accepted or highlighted")
+        try expect(selection.aspectRatio == .portrait23, "tier switch lost normalized ratio")
+        try expect(selection.dimensions == ImageDimensions(width: 1696, height: 2528), "normalized tier switch has wrong dimensions")
+        for (width, height, tier, ratio) in [
+            (768, 512, ImageResolution.oneK, ImageAspectRatio.landscape32),
+            (720, 1280, .oneK, .portrait916),
+            (2560, 1440, .twoK, .landscape169),
+            (0, 0, .oneK, .square)
+        ] {
+            let restored = GenerationSize(width: width, height: height)
+            try expect(restored.resolution == tier && restored.aspectRatio == ratio, "legacy history chose wrong preset")
+            try expect(restored.dimensions.isValid, "legacy history produced invalid dimensions")
+        }
     }
 }

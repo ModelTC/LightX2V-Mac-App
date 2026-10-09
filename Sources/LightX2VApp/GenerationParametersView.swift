@@ -16,15 +16,9 @@ struct GenerationParametersView: View {
             }
             .pickerStyle(.segmented).labelsHidden()
             .accessibilityLabel("分辨率")
-            .help("切换 1K / 2K 并保留画面比例；自定义尺寸会匹配最接近的比例预设")
+            .help("切换 1K / 2K 并保留画面比例")
 
-            HStack {
-                label("画面比例")
-                Spacer()
-                if store.generationSize.aspectRatio == nil {
-                    Text("自定义").font(.system(size: 10)).foregroundStyle(Palette.accent)
-                }
-            }.padding(.top, 3)
+            label("画面比例").padding(.top, 3)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 6) {
                 ForEach(ImageAspectRatio.allCases) { ratio in
                     AspectRatioButton(ratio: ratio, resolution: store.generationSize.resolution,
@@ -34,20 +28,18 @@ struct GenerationParametersView: View {
                 }
             }
 
-            HStack(alignment: .bottom, spacing: 8) {
-                DimensionField(title: "宽", value: $store.width)
-                Button { store.generationSize.swapOrientation() } label: {
-                    Image(systemName: "arrow.left.arrow.right")
-                        .font(.system(size: 11, weight: .medium)).foregroundStyle(Palette.muted)
-                        .frame(width: 24, height: 35).contentShape(Rectangle())
-                }.buttonStyle(.plain).disabled(store.width == store.height)
-                    .help("交换宽高").accessibilityLabel("交换宽高")
-                DimensionField(title: "高", value: $store.height)
+            HStack(spacing: 8) {
+                label("输出尺寸")
+                Spacer(minLength: 0)
+                Text("\(String(store.width)) × \(String(store.height))")
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                Text("px").font(.system(size: 9)).foregroundStyle(Palette.muted)
             }
-            if !store.generationSize.dimensions.isValid {
-                Text(ImageDimensions.validationMessage)
-                    .font(.system(size: 10)).foregroundStyle(Palette.accent).fixedSize(horizontal: false, vertical: true)
-            }
+            .padding(.horizontal, 10).padding(.vertical, 10)
+            .background(Palette.line.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("输出尺寸")
+            .accessibilityValue("宽 \(store.width)，高 \(store.height) 像素")
         }
     }
 
@@ -98,39 +90,5 @@ private struct AspectRatioButton: View {
         .accessibilityLabel("画面比例 \(ratio.rawValue)")
         .accessibilityValue("\(dimensions.width) × \(dimensions.height) 像素")
         .accessibilityAddTraits(selected ? [.isSelected] : [])
-    }
-}
-
-private struct DimensionField: View {
-    let title: String
-    @Binding var value: Int
-    @State private var text: String
-
-    init(title: String, value: Binding<Int>) {
-        self.title = title
-        _value = value
-        _text = State(initialValue: String(value.wrappedValue))
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.system(size: 10)).foregroundStyle(Palette.muted)
-            HStack(spacing: 3) {
-                TextField(title, text: Binding(get: { text }, set: {
-                    text = $0
-                    // Invalid drafts must disable generation, never reuse a stale number.
-                    value = Int($0) ?? 0
-                }))
-                    .textFieldStyle(.plain).font(.system(size: 12, design: .monospaced))
-                    .accessibilityLabel(title == "宽" ? "图片宽度" : "图片高度")
-                    .dismissEditingOnOutsideClick()
-                    .onChange(of: value) { _, newValue in
-                        if (Int(text) ?? 0) != newValue { text = String(newValue) }
-                    }
-                Text("px").font(.system(size: 9)).foregroundStyle(Palette.muted).accessibilityHidden(true)
-            }.padding(.horizontal, 10).frame(height: 35)
-                .background(.white, in: RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Palette.line, lineWidth: 1))
-        }
     }
 }
