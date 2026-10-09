@@ -18,15 +18,20 @@ private struct OutsideClickEditingModifier: ViewModifier {
     }
 }
 
-private struct OutsideClickObserver: NSViewRepresentable {
+struct OutsideClickObserver: NSViewRepresentable {
     let isEditing: Bool
     let isEnabled: Bool
+    var onHoverChange: ((Bool) -> Void)?
+    var cornerRadius: CGFloat = 0
 
     func makeNSView(context: Context) -> EditingBoundaryView { EditingBoundaryView() }
 
     func updateNSView(_ view: EditingBoundaryView, context: Context) {
         view.isEditing = isEditing
         view.isInputEnabled = isEnabled
+        view.inputCornerRadius = cornerRadius
+        view.onHoverChange = onHoverChange
+        view.updateTrackingAreas()
     }
 
     static func dismantleNSView(_ view: EditingBoundaryView, coordinator: ()) {
@@ -38,9 +43,14 @@ final class EditingBoundaryView: NSView {
     private static let inputs = NSHashTable<EditingBoundaryView>.weakObjects()
     var isEditing = false
     var isInputEnabled = true
+    var inputCornerRadius: CGFloat = 0
+    var onHoverChange: ((Bool) -> Void)?
+    private(set) var hovered = false
     private var monitor: Any?
     private var pendingEvent: NSEvent?
     private var cursorUpdateScheduled = false
+    private var pointerArea: NSTrackingArea?
+    private var windowObservers: [NSObjectProtocol] = []
 
     // The observer measures the input, but never intercepts its clicks.
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -55,13 +65,13 @@ final class EditingBoundaryView: NSView {
             .leftMouseDown, .rightMouseDown, .leftMouseUp, .mouseMoved,
             .mouseEntered, .mouseExited, .cursorUpdate
         ]) { [weak self] event in
-            guard let self, self.isEditing, let window = self.window,
+            guard let self, self.isEditing || self.onHoverChange != nil, let window = self.window,
                   event.window === window, !self.isHiddenOrHasHiddenAncestor else { return event }
             if event.type != .leftMouseDown && event.type != .rightMouseDown {
-                self.scheduleCursorUpdate(for: event)
+                self.observePointerEvent(event)
                 return event
             }
-            guard !self.containsInput(event.locationInWindow) else { return event }
+            guard self.isEditing, !self.containsInput(event.locationInWindow) else { return event }
             // End editing before dispatching the same click, so another input
             // can acquire focus and buttons still activate on the first click.
             // Let AppKit update FocusState; resetting it here can clear the
@@ -70,13 +80,58 @@ final class EditingBoundaryView: NSView {
             self.pendingEvent = nil
             return event
         }
+        for name in [NSWindow.didResignKeyNotification, NSWindow.willCloseNotification] {
+            windowObservers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                self?.setHovered(false)
+                self?.pendingEvent = nil
+            })
+        }
+        updateTrackingAreas()
     }
 
     deinit { stopObserving() }
 
     private func containsInput(_ point: NSPoint) -> Bool {
+        isInputEnabled && coversInput(point)
+    }
+
+    private func coversInput(_ point: NSPoint) -> Bool {
         // On recent macOS versions visibleRect may exceed bounds for unclipped views.
-        isInputEnabled && !isHiddenOrHasHiddenAncestor && bounds.intersection(visibleRect).contains(convert(point, from: nil))
+        let local = convert(point, from: nil)
+        guard !isHiddenOrHasHiddenAncestor, bounds.intersection(visibleRect).contains(local) else { return false }
+        return inputCornerRadius == 0 || NSBezierPath(roundedRect: bounds, xRadius: inputCornerRadius, yRadius: inputCornerRadius).contains(local)
+    }
+
+    override func updateTrackingAreas() {
+        if let pointerArea { removeTrackingArea(pointerArea) }
+        pointerArea = nil
+        super.updateTrackingAreas()
+        guard onHoverChange != nil, window != nil else { return }
+        // This exact rectangle also owns the highlight and the click-to-focus area.
+        let area = NSTrackingArea(rect: bounds.intersection(visibleRect),
+                                  options: [.mouseEnteredAndExited, .cursorUpdate, .activeInKeyWindow], owner: self)
+        addTrackingArea(area)
+        pointerArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { observePointerEvent(event) }
+    override func mouseExited(with event: NSEvent) { observePointerEvent(event) }
+    override func cursorUpdate(with event: NSEvent) { observePointerEvent(event) }
+
+    func observePointerEvent(_ event: NSEvent) {
+        guard event.window === window else { setHovered(false); pendingEvent = nil; return }
+        switch event.type {
+        case .mouseMoved, .mouseEntered, .mouseExited, .cursorUpdate, .leftMouseUp: break
+        default: return
+        }
+        setHovered(containsInput(event.locationInWindow))
+        scheduleCursorUpdate(for: event)
+    }
+
+    private func setHovered(_ value: Bool) {
+        guard hovered != value else { return }
+        hovered = value
+        onHoverChange?(value)
     }
 
     private func scheduleCursorUpdate(for event: NSEvent) {
@@ -89,7 +144,8 @@ final class EditingBoundaryView: NSView {
             guard let self else { return }
             self.cursorUpdateScheduled = false
             defer { self.pendingEvent = nil }
-            guard self.isEditing, self.window?.isKeyWindow == true, NSApp.isActive,
+            guard self.isEditing || self.onHoverChange != nil,
+                  self.window?.isKeyWindow == true, NSApp.isActive,
                   self.window?.attachedSheet == nil, NSEvent.pressedMouseButtons == 0,
                   let event = self.pendingEvent else { return }
             self.cursor(for: event)?.set()
@@ -106,8 +162,8 @@ final class EditingBoundaryView: NSView {
         let point = event.locationInWindow
         guard let window, let content = window.contentView,
               content.bounds.contains(content.convert(point, from: nil)) else { return nil }
-        if Self.inputs.allObjects.contains(where: { $0.window === window && $0.containsInput(point) }) {
-            return .iBeam
+        if let input = Self.inputs.allObjects.first(where: { $0.window === window && $0.coversInput(point) }) {
+            return input.isInputEnabled ? .iBeam : .arrow
         }
         // Keep selectable text and the prompt editor native, but never extend
         // a clipped text document's cursor over its scrollbar or nearby buttons.
@@ -131,5 +187,10 @@ final class EditingBoundaryView: NSView {
         monitor = nil
         pendingEvent = nil
         Self.inputs.remove(self)
+        if let pointerArea { removeTrackingArea(pointerArea) }
+        pointerArea = nil
+        windowObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        windowObservers.removeAll()
+        setHovered(false)
     }
 }

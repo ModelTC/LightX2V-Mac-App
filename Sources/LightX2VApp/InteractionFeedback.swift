@@ -15,8 +15,9 @@ private struct HoverFeedback: ViewModifier {
     var radius: CGFloat = 8
     var bright = false
     var border = false
+    var inputHovered: Bool?
 
-    private var active: Bool { enabled && hovered }
+    private var active: Bool { enabled && (inputHovered ?? hovered) }
 
     func body(content: Content) -> some View {
         content
@@ -31,7 +32,7 @@ private struct HoverFeedback: ViewModifier {
                     .strokeBorder(active && border ? Palette.borderStrong.opacity(0.65) : .clear, lineWidth: 1)
                     .allowsHitTesting(false)
             }
-            .onHover { hovered = $0 }
+            .onHover { if inputHovered == nil { hovered = $0 } }
             .animation(InteractionMotion.hover(reduced: reduceMotion), value: active)
             .animation(InteractionMotion.hover(reduced: reduceMotion), value: enabled && pressed)
     }
@@ -40,6 +41,12 @@ private struct HoverFeedback: ViewModifier {
 extension View {
     func hoverSurface(radius: CGFloat = 8, border: Bool = true) -> some View {
         modifier(HoverFeedback(radius: radius, border: border))
+    }
+
+    /// Text input feedback is driven by its native cursor boundary, not a second
+    /// SwiftUI tracking area with a different hit region.
+    func inputHoverSurface(hovered: Bool, radius: CGFloat = 8) -> some View {
+        modifier(HoverFeedback(radius: radius, inputHovered: hovered))
     }
 }
 

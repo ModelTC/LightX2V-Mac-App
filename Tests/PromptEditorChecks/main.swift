@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 // Exercise the real AppKit text storage and layout without opening a window.
 final class EditorDelegate: NSObject, NSTextViewDelegate {
@@ -238,3 +239,77 @@ check(cursorAt(NSPoint(x: 50, y: 177)) === NSCursor.arrow, "cursor: detached inp
 boundary.removeFromSuperview()
 check(cursorAt(inputPoint) == nil, "cursor: detached observer does not modify cursor")
 print("Input cursor boundary checks passed")
+
+// Mount the actual SwiftUI input: its padding and icon must participate before
+// focus, rather than testing only the narrow native text field in isolation.
+let syncWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 300),
+                          styleMask: .borderless, backing: .buffered, defer: false)
+func inputFixture(enabled: Bool = true) -> some View {
+    PathInputField(title: "工作目录", placeholder: "路径", symbol: "folder", text: .constant("/tmp/LightX2V"))
+        .disabled(!enabled)
+}
+let inputHost = NSHostingView(rootView: inputFixture())
+inputHost.frame = NSRect(x: 30, y: 180, width: 400, height: 44)
+syncWindow.contentView!.addSubview(inputHost)
+inputHost.layoutSubtreeIfNeeded()
+func descendants<T: NSView>(_ view: NSView, of type: T.Type) -> [T] {
+    (view as? T).map { [$0] } ?? view.subviews.flatMap { descendants($0, of: type) }
+}
+var inputBounds = descendants(inputHost, of: EditingBoundaryView.self).first!
+let nativeField = descendants(inputHost, of: NSTextField.self).first!
+check(inputBounds.bounds.height >= 44 && inputBounds.bounds.height > nativeField.bounds.height,
+      "input hover: actual SwiftUI surface includes vertical padding around native TextField")
+let inputFrame = inputBounds.convert(inputBounds.bounds, to: nil)
+let nearbyButton = NSButton(frame: NSRect(x: inputFrame.maxX + 4, y: inputFrame.minY + 10, width: 80, height: 24))
+syncWindow.contentView!.addSubview(nearbyButton)
+let hoverPoints: [(String, NSPoint, Bool)] = [
+    ("left padding", NSPoint(x: inputFrame.minX + 1, y: inputFrame.midY), true),
+    ("icon", NSPoint(x: inputFrame.minX + 16, y: inputFrame.midY), true),
+    ("top padding", NSPoint(x: inputFrame.midX, y: inputFrame.maxY - 1), true),
+    ("bottom padding", NSPoint(x: inputFrame.midX, y: inputFrame.minY + 1), true),
+    ("right padding", NSPoint(x: inputFrame.maxX - 1, y: inputFrame.midY), true),
+    ("text", NSPoint(x: inputFrame.midX, y: inputFrame.midY), true),
+    ("outside left", NSPoint(x: inputFrame.minX - 1, y: inputFrame.midY), false),
+    ("outside top", NSPoint(x: inputFrame.midX, y: inputFrame.maxY + 1), false),
+    ("outside bottom", NSPoint(x: inputFrame.midX, y: inputFrame.minY - 1), false),
+    ("gap before chooser", NSPoint(x: inputFrame.maxX + 1, y: inputFrame.midY), false),
+    ("chooser", NSPoint(x: nearbyButton.frame.midX, y: nearbyButton.frame.midY), false),
+    ("rounded corner", NSPoint(x: inputFrame.minX + 0.5, y: inputFrame.minY + 0.5), false)
+]
+for focused in [false, true] {
+    inputBounds.isEditing = focused
+    for (name, point, inside) in hoverPoints {
+        let event = pointerEvent(point, in: syncWindow)
+        inputBounds.observePointerEvent(event)
+        let expected = inside ? NSCursor.iBeam : NSCursor.arrow
+        check(inputBounds.hovered == inside && inputBounds.cursor(for: event) === expected,
+              "input hover \(focused ? "focused" : "unfocused"): \(name) shares highlight and cursor boundary")
+    }
+}
+let inputMiddle = pointerEvent(NSPoint(x: inputFrame.midX, y: inputFrame.midY), in: syncWindow)
+inputBounds.observePointerEvent(inputMiddle)
+NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: syncWindow)
+check(!inputBounds.hovered, "input hover: switching windows clears highlight")
+inputHost.rootView = inputFixture(enabled: false)
+inputHost.layoutSubtreeIfNeeded()
+inputBounds = descendants(inputHost, of: EditingBoundaryView.self).first!
+inputBounds.observePointerEvent(inputMiddle)
+check(!inputBounds.hovered && inputBounds.cursor(for: inputMiddle) === NSCursor.arrow,
+      "input hover: disabled input has neither highlight nor I-beam")
+inputHost.rootView = inputFixture()
+inputHost.layoutSubtreeIfNeeded()
+inputBounds = descendants(inputHost, of: EditingBoundaryView.self).first!
+inputBounds.observePointerEvent(inputMiddle)
+inputHost.isHidden = true
+inputBounds.observePointerEvent(inputMiddle)
+check(!inputBounds.hovered && inputBounds.cursor(for: inputMiddle) === NSCursor.arrow,
+      "input hover: hidden input has neither highlight nor I-beam")
+inputHost.isHidden = false
+inputBounds.observePointerEvent(inputMiddle)
+inputBounds.observePointerEvent(pointerEvent(.zero, in: otherWindow))
+check(!inputBounds.hovered, "input hover: leaving for another window clears highlight")
+inputBounds.observePointerEvent(inputMiddle)
+inputHost.removeFromSuperview()
+check(!inputBounds.hovered && inputBounds.cursor(for: inputMiddle) == nil,
+      "input hover: detaching view releases both highlight and cursor")
+print("Synchronized input hover checks passed")

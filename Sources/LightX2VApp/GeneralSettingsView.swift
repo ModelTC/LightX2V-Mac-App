@@ -112,11 +112,10 @@ struct SettingsView: View {
     }
 
     private func pathRow(_ title: String, value: Binding<String>, directory: Bool, create: Bool = false) -> some View {
-        HStack(spacing: 9) {
-            Image(systemName: directory ? "folder" : "terminal").foregroundStyle(Palette.muted).font(.system(size: 12))
-            TextField(directory ? "选择文件夹，或粘贴完整路径" : "选择环境中的 bin/python，或点击下方搜索", text: value)
-                .textFieldStyle(.plain).font(.system(size: 11)).accessibilityLabel(title).help(value.wrappedValue)
-                .dismissEditingOnOutsideClick()
+        HStack(spacing: 4) {
+            PathInputField(title: title,
+                           placeholder: directory ? "选择文件夹，或粘贴完整路径" : "选择环境中的 bin/python，或点击下方搜索",
+                           symbol: directory ? "folder" : "terminal", text: value)
             Button(directory ? "选择…" : "手动选择…") {
                 let panel = NSOpenPanel()
                 panel.canChooseDirectories = directory; panel.canChooseFiles = !directory
@@ -125,9 +124,10 @@ struct SettingsView: View {
                 panel.directoryURL = value.wrappedValue.isEmpty ? FileManager.default.homeDirectoryForCurrentUser : URL(fileURLWithPath: normalized(value.wrappedValue)).deletingLastPathComponent()
                 if panel.runModal() == .OK, let url = panel.url { value.wrappedValue = url.path }
             }.font(.system(size: 11)).accessibilityLabel("选择\(title)")
-        }.padding(10).background(Palette.surface, in: RoundedRectangle(cornerRadius: 8))
+                .padding(.trailing, 10)
+        }.background(Palette.surface, in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line, lineWidth: 1))
-            .hoverSurface().disabled(store.busy)
+            .disabled(store.busy)
     }
 
     private var environmentPicker: some View {
