@@ -42,8 +42,6 @@ struct InspectorView: View {
                                     Text("×").foregroundStyle(Palette.muted).padding(.top, 18)
                                     dimension("高", value: $store.height)
                                 }
-                                HStack { Text("32 的倍数 · 256–2048 px"); Spacer(); Button("512 测试") { store.width = 512; store.height = 512 } }
-                                    .font(.system(size: 9)).foregroundStyle(Palette.muted).buttonStyle(.plain)
                             }
                             VStack(alignment: .leading, spacing: 12) {
                                 sectionLabel("随机种子")
@@ -53,37 +51,12 @@ struct InspectorView: View {
                                 }.padding(10).background(.white, in: RoundedRectangle(cornerRadius: 7)).overlay(RoundedRectangle(cornerRadius: 7).stroke(Palette.line, lineWidth: 1))
                                 Toggle("每次使用随机种子", isOn: $store.randomSeed).toggleStyle(.switch).controlSize(.mini).font(.system(size: 11)).tint(Palette.ink)
                             }
-                            VStack(alignment: .leading, spacing: 13) {
-                                sectionLabel("推理设置")
-                                infoRow("采样步数", "6 步")
-                                infoRow("引导强度", "1.0 · 无 CFG")
-                                infoRow("运行设备", "Apple MPS")
-                                infoRow("内存策略", "磁盘流式加载")
-                                Text("沿用 Viggle v0.3 的蒸馏配置，步数与噪声调度保持配套。").font(.system(size: 10)).foregroundStyle(Palette.muted).lineSpacing(4)
-                            }
-                            if let selected = store.selected {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    sectionLabel("当前作品")
-                                    infoRow("实际尺寸", "\(selected.request.width) × \(selected.request.height)")
-                                    infoRow("实际种子", String(selected.request.seed))
-                                    infoRow("状态", selected.status.label)
-                                    Button { store.reuse(selected) } label: { Label("将参数带入新创作", systemImage: "arrow.uturn.backward") }.buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(Palette.accent)
-                                }.padding(.top, 5)
-                            }
                         }.padding(.bottom, 23)
                     }
                 }.onChange(of: store.modelPreparationFocus) { _, _ in
                     withAnimation { proxy.scrollTo("model-preparation", anchor: .top) }
                 }
             }
-            Spacer(minLength: 10)
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    Image(systemName: "internaldrive").font(.system(size: 11))
-                    Text("为 Apple Silicon 优化").font(.system(size: 10, weight: .medium))
-                }
-                Text("\(Int(ProcessInfo.processInfo.physicalMemory / 1073741824)) GB 统一内存 · 按需加载权重").font(.system(size: 9)).foregroundStyle(Palette.muted)
-            }.padding(13).frame(maxWidth: .infinity, alignment: .leading).background(Palette.sidebar.opacity(0.7), in: RoundedRectangle(cornerRadius: 9)).padding(.bottom, 20)
         }.padding(.horizontal, 20).background(Color(red: 0.972, green: 0.969, blue: 0.958))
     }
     private func isPreset(_ preset: (String, Int, Int)) -> Bool { store.width == preset.1 && store.height == preset.2 }
@@ -95,9 +68,6 @@ struct InspectorView: View {
                 .padding(10).background(.white, in: RoundedRectangle(cornerRadius: 7))
                 .overlay(RoundedRectangle(cornerRadius: 7).stroke(Palette.line, lineWidth: 1)).accessibilityLabel(name == "宽" ? "图片宽度" : "图片高度")
         }
-    }
-    private func infoRow(_ label: String, _ value: String) -> some View {
-        HStack { Text(label).foregroundStyle(Palette.muted); Spacer(); Text(value) }.font(.system(size: 10))
     }
 }
 
