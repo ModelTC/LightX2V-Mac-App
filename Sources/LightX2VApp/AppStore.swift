@@ -62,9 +62,9 @@ final class AppStore: ObservableObject {
     var canAddImages: Bool { selectedModel == .qwenImage21 && !needsGeneralSetup && !isPreparingWorkspace && !isImportingImages }
     var needsGeneralSetup: Bool { !hasCompletedGeneralSetup || !settings.hasGeneralPaths }
     var hasUnsavedModelSettings: Bool { modelDirectory != settings.model || modelConfig != settings.config }
-    var width: Int { generationSize.dimensions.width }
-    var height: Int { generationSize.dimensions.height }
-    var canGenerate: Bool { selectedModel != nil && !needsGeneralSetup && !busy && !isComposingPrompt && !hasUnsavedModelSettings && generationSize.dimensions.isValid && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var width: Int? { generationSize.dimensions?.width }
+    var height: Int? { generationSize.dimensions?.height }
+    var canGenerate: Bool { selectedModel != nil && !needsGeneralSetup && !busy && !isComposingPrompt && !hasUnsavedModelSettings && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var bridgePath: String {
         (Bundle.main.url(forResource: "bridge", withExtension: "py")
          ?? Bundle.module.url(forResource: "bridge", withExtension: "py")!).path
@@ -189,7 +189,8 @@ final class AppStore: ObservableObject {
         clearInputImages()
         inputImages = generation.request.inputImages
         prompt = generation.request.prompt
-        generationSize = GenerationSize(width: generation.request.width, height: generation.request.height)
+        generationSize = GenerationSize(width: generation.request.width, height: generation.request.height,
+                                        automaticResolution: generation.request.resolution)
         selectedID = nil
     }
 
@@ -328,7 +329,8 @@ final class AppStore: ObservableObject {
             let directory = URL(fileURLWithPath: settings.outputDirectory)
                 .appendingPathComponent(formatter.string(from: Date()) + "-" + id.uuidString.prefix(8))
             var request = try InferenceRequest(settings: settings, prompt: prompt, width: width, height: height,
-                                               seed: seed, output: directory.appendingPathComponent("image.png").path, inputImages: inputImages)
+                                               seed: seed, output: directory.appendingPathComponent("image.png").path,
+                                               inputImages: inputImages, resolution: generationSize.automaticResolution)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             request.inputImages = try InputImages.snapshot(inputImages, in: directory)
             let requestURL = directory.appendingPathComponent("request.json")

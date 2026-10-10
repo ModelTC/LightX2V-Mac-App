@@ -63,10 +63,17 @@ def arguments(request, config_path):
     prompt = request.get("prompt", "")
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 20000:
         raise ValueError("请输入 1–20000 字的提示词")
-    for key in ("width", "height"):
-        n = request.get(key)
-        if type(n) is not int or not 256 <= n <= 2752 or n % 32:
-            raise ValueError("尺寸必须是 256–2752 之间的 32 的倍数")
+    resolution = request.get("resolution")
+    if resolution is not None:
+        if type(resolution) is not int or resolution not in (1024, 2048) or any(request.get(k) is not None for k in ("width", "height")):
+            raise ValueError("自适应模式请选择 1K 或 2K，无需指定宽高")
+        size_args = ["--resolution", str(resolution)]
+    else:
+        for key in ("width", "height"):
+            n = request.get(key)
+            if type(n) is not int or not 256 <= n <= 2752 or n % 32:
+                raise ValueError("尺寸必须是 256–2752 之间的 32 的倍数")
+        size_args = ["--size", str(request["height"]), str(request["width"])]
     seed = request.get("seed")
     if type(seed) is not int or not 0 <= seed <= 4294967295:
         raise ValueError("种子必须介于 0 和 4294967295 之间")
@@ -94,7 +101,7 @@ def arguments(request, config_path):
     cmd = [sys.executable, "-u", *entry,
             "--model_cls", "qwen_image_21", "--task", "i2i" if images else "t2i",
             "--model_path", request["model"], "--config_json", str(config_path),
-            "--prompt", prompt, "--size", str(request["height"]), str(request["width"]),
+            "--prompt", prompt, *size_args,
             "--seed", str(seed), "--save_result_path", output]
     if paths:
         cmd += ["--image_path", ",".join(paths)]
@@ -122,13 +129,16 @@ def check(request):
          python=sys.executable, torch=torch.__version__)
 
 
-def validate_image(path, expected_width, expected_height):
+def validate_image(path, expected_width=None, expected_height=None):
     # Decode as well as check metadata: a truncated PNG is not a completed run.
     from PIL import Image
     with Image.open(path) as im:
         im.load()
-        if im.format != "PNG" or im.size != (expected_width, expected_height):
+        if im.format != "PNG" or any(n < 32 or n % 32 for n in im.size):
+            raise RuntimeError("生成结果不是有效的 PNG 图片或尺寸未对齐 32 像素")
+        if expected_width is not None and im.size != (expected_width, expected_height):
             raise RuntimeError(f"输出尺寸不匹配：{im.size}，预期 {expected_width} × {expected_height}")
+        return im.size
 
 
 def run(request, cfg):
@@ -206,8 +216,8 @@ def run(request, cfg):
             return 130
         if code != 0:
             raise RuntimeError(f"推理进程退出（{code}）\n" + "\n".join(tail[-12:]))
-        validate_image(request["output"], request["width"], request["height"])
-        emit("done", status="completed", image=request["output"], duration=time.monotonic() - started)
+        width, height = validate_image(request["output"], request.get("width"), request.get("height"))
+        emit("done", status="completed", image=request["output"], width=width, height=height, duration=time.monotonic() - started)
         return 0
     finally:
         finished.set()

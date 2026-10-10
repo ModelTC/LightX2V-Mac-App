@@ -23,6 +23,7 @@ from PIL import Image
 p=argparse.ArgumentParser()
 for name in ('model_cls','task','model_path','config_json','prompt','seed','save_result_path'): p.add_argument('--'+name)
 p.add_argument('--size',nargs=2,type=int)
+p.add_argument('--resolution',type=int)
 a=p.parse_args()
 out=Path(a.save_result_path)
 (out.parent/'received.json').write_text(json.dumps(vars(a)))
@@ -36,7 +37,7 @@ if a.prompt=='SLEEP':
     print('fixture ready',flush=True)
     time.sleep(30)
 for i in range(1,7): print(f'==> step_index: {i} / 6',flush=True)
-Image.new('RGB',(a.size[1],a.size[0]),(100,150,190)).save(out)
+Image.new('RGB',(a.size[1],a.size[0]) if a.size else (a.resolution,a.resolution),(100,150,190)).save(out)
 '''
 
 
@@ -152,6 +153,38 @@ class BridgeTests(unittest.TestCase):
         child=self.start(); out,err=child.communicate(timeout=15)
         self.assertEqual(child.returncode,1)
         self.assertEqual(output.read_bytes(),b'keep me')
+
+    def test_automatic_text_resolution_reaches_cli_without_size(self):
+        for resolution in (1024, 2048):
+            output = self.root / f'auto-{resolution}/image.png'
+            self.request.pop('width', None); self.request.pop('height', None)
+            self.request.update(resolution=resolution, output=str(output))
+            child = self.start(); out, err = child.communicate(timeout=15)
+            self.assertEqual(child.returncode, 0, err + out)
+            received = json.loads((output.parent / 'received.json').read_text())
+            self.assertIsNone(received['size'])
+            self.assertEqual(received['resolution'], resolution)
+            done = json.loads(out.splitlines()[-1])
+            self.assertEqual((done['width'], done['height']), (resolution, resolution))
+
+    def test_automatic_resolution_rejects_ambiguous_or_invalid_sizes(self):
+        base = {**self.request, 'width': None, 'height': None}
+        for resolution in (True, '1024', 1024.0, 0, 512, 4096):
+            with self.subTest(resolution=resolution), self.assertRaises(ValueError):
+                bridge.arguments({**base, 'resolution': resolution}, self.config)
+        with self.assertRaises(ValueError):
+            bridge.arguments({**self.request, 'resolution': 1024}, self.config)
+
+    def test_automatic_output_is_decoded_and_alignment_is_validated(self):
+        from PIL import Image
+        output = self.root / 'auto.png'
+        Image.new('RGB', (896, 1184)).save(output)
+        self.assertEqual(bridge.validate_image(output), (896, 1184))
+        with self.assertRaises(RuntimeError): bridge.validate_image(output, 1024, 1024)
+        Image.new('RGB', (895, 1184)).save(output)
+        with self.assertRaises(RuntimeError): bridge.validate_image(output)
+        output.write_bytes(b'not an image')
+        with self.assertRaises(OSError): bridge.validate_image(output)
 
 
 if __name__ == '__main__': unittest.main(verbosity=2)

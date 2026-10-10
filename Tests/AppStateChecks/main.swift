@@ -75,6 +75,14 @@ struct AppStateChecks {
         try check(store.inputImages.isEmpty && store.prompt.isEmpty && !fm.fileExists(atPath: firstDraft), "new creation removes only draft files")
         store.reuse(generation)
         try check(store.inputImages == saved && store.prompt == request.prompt && store.width == 1376, "reuse restores reference images, prompt and dimensions")
+        let automatic = try InferenceRequest(settings: settings, prompt: "auto", width: nil, height: nil, seed: 43,
+                                               output: request.output, inputImages: saved, resolution: 2048)
+        store.reuse(Generation(request: automatic))
+        try check(store.generationSize.aspectRatio == nil && store.generationSize.resolution == .twoK && store.width == nil && store.height == nil && store.inputImages == saved,
+                  "reuse restores automatic 2K with reference images and no fixed dimensions")
+        store.newGeneration()
+        try check(store.generationSize.aspectRatio == .square && store.generationSize.resolution == .oneK, "new creation resets automatic selection to default 1K 1:1")
+        store.reuse(generation)
         store.removeInputImage(store.inputImages[0])
         try check(store.inputImages.isEmpty && fm.fileExists(atPath: saved[0].path), "removing reused input never deletes history snapshot")
         let provider = NSItemProvider(object: original as NSURL)

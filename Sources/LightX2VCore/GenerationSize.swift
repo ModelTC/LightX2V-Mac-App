@@ -53,12 +53,20 @@ public enum ImageAspectRatio: String, CaseIterable, Identifiable {
 
 public struct GenerationSize {
     public private(set) var resolution: ImageResolution = .oneK
-    public private(set) var aspectRatio: ImageAspectRatio = .square
-    public var dimensions: ImageDimensions { aspectRatio.dimensions(at: resolution) }
+    /// A nil ratio delegates output dimensions to the model.
+    public private(set) var aspectRatio: ImageAspectRatio? = .square
+    public var dimensions: ImageDimensions? { aspectRatio?.dimensions(at: resolution) }
+    public var automaticResolution: Int? { aspectRatio == nil ? resolution.baseDimension : nil }
 
     public init() {}
 
-    public init(width: Int, height: Int) {
+    public init(width: Int?, height: Int?, automaticResolution: Int? = nil) {
+        if let automaticResolution {
+            resolution = automaticResolution == 2048 ? .twoK : .oneK
+            aspectRatio = nil
+            return
+        }
+        guard let width, let height else { return }
         // Keep exact presets; map legacy custom sizes to the nearest tier and ratio.
         let original = ImageDimensions(width: width, height: height)
         for tier in ImageResolution.allCases {
@@ -79,5 +87,5 @@ public struct GenerationSize {
     }
 
     public mutating func selectResolution(_ value: ImageResolution) { resolution = value }
-    public mutating func selectAspectRatio(_ value: ImageAspectRatio) { aspectRatio = value }
+    public mutating func selectAspectRatio(_ value: ImageAspectRatio?) { aspectRatio = value }
 }

@@ -53,6 +53,17 @@ class ImageArgumentsTests(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             bridge.arguments(self.request, self.config)
 
+    def test_automatic_editing_retains_all_references_without_forcing_dimensions(self):
+        self.references(3)
+        self.request.pop('width'); self.request.pop('height')
+        for resolution in (1024, 2048):
+            self.request['resolution'] = resolution
+            args = bridge.arguments(self.request, self.config)
+            self.assertNotIn('--size', args)
+            self.assertNotIn('--aspect_ratio', args)
+            self.assertEqual(args[args.index('--resolution') + 1], str(resolution))
+            self.assertEqual(args[args.index('--image_path') + 1], 'inputs/reference-1.png,inputs/reference-2.png,inputs/reference-3.png')
+
 
 
 class AdapterTests(unittest.TestCase):

@@ -19,6 +19,8 @@ struct CoreChecks {
         print("PASS atomic history persistence")
         try resolutionPresets()
         print("PASS all 14 resolution presets and tier switches")
+        try automaticResolution()
+        print("PASS automatic resolution encoding, restoration and tier switches")
         try sizeSelectionAndRestoration()
         print("PASS preset-only selection and legacy history normalization")
         try setupPersistenceAndMigration()
@@ -26,7 +28,7 @@ struct CoreChecks {
         try generalSettingsValidation()
         print("PASS general path validation independent of model preparation")
         try inputImageChecks()
-        print("9 core checks passed")
+        print("10 core checks passed")
     }
     static func invalidRequests() throws {
         for (prompt, width, height, seed) in [("", 1024, 1024, Int64(42)), ("test", 720, 1280, 42),
@@ -186,7 +188,33 @@ struct CoreChecks {
         ] {
             let restored = GenerationSize(width: width, height: height)
             try expect(restored.resolution == tier && restored.aspectRatio == ratio, "legacy history chose wrong preset")
-            try expect(restored.dimensions.isValid, "legacy history produced invalid dimensions")
+            try expect(restored.dimensions?.isValid == true, "legacy history produced invalid dimensions")
+        }
+    }
+
+    static func automaticResolution() throws {
+        var selection = GenerationSize()
+        selection.selectAspectRatio(nil)
+        for tier in ImageResolution.allCases {
+            selection.selectResolution(tier)
+            try expect(selection.dimensions == nil && selection.automaticResolution == tier.baseDimension, "automatic mode lost on tier switch")
+            let request = try InferenceRequest(settings: .defaults, prompt: "adaptive", width: nil, height: nil,
+                                               seed: 42, output: "/tmp/image.png", resolution: selection.automaticResolution)
+            let data = try JSONEncoder().encode(request)
+            let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+            try expect(json["width"] == nil && json["height"] == nil, "automatic request contains fixed dimensions")
+            let decoded = try JSONDecoder().decode(InferenceRequest.self, from: data)
+            let restored = GenerationSize(width: decoded.width, height: decoded.height, automaticResolution: decoded.resolution)
+            try expect(restored.aspectRatio == nil && restored.resolution == tier, "history lost automatic selection")
+        }
+        selection.selectAspectRatio(.portrait34)
+        try expect(selection.dimensions == ImageDimensions(width: 1792, height: 2400) && selection.automaticResolution == nil,
+                   "switching back to a preset retained automatic mode")
+        for (width, height, resolution): (Int?, Int?, Int?) in [(nil, nil, 512), (1024, nil, 1024), (1024, 1024, 2048), (nil, nil, nil), (nil, 1024, nil)] {
+            var rejected = false
+            do { _ = try InferenceRequest(settings: .defaults, prompt: "test", width: width, height: height, seed: 42, output: "/tmp/image.png", resolution: resolution) }
+            catch { rejected = true }
+            try expect(rejected, "ambiguous or missing size accepted")
         }
     }
 }

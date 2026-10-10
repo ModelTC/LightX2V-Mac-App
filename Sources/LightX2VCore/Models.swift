@@ -75,35 +75,44 @@ public struct InferenceRequest: Codable {
     public var model: String
     public var config: String
     public var prompt: String
-    public var width: Int
-    public var height: Int
+    public var width: Int?
+    public var height: Int?
+    public var resolution: Int?
     public var seed: Int64
     public var output: String
     public var inputImages: [InputImage]
 
-    public init(settings: AppSettings, prompt: String, width: Int, height: Int, seed: Int64, output: String, inputImages: [InputImage] = []) throws {
+    public init(settings: AppSettings, prompt: String, width: Int?, height: Int?, seed: Int64, output: String, inputImages: [InputImage] = [], resolution: Int? = nil) throws {
         guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, prompt.count <= 20000 else {
             throw AppError.message("请输入 1–20000 字的提示词。")
         }
-        guard ImageDimensions(width: width, height: height).isValid else {
-            throw AppError.message(ImageDimensions.validationMessage)
+        if let resolution {
+            guard [1024, 2048].contains(resolution), width == nil, height == nil else {
+                throw AppError.message("自适应模式请选择 1K 或 2K，无需指定宽高。")
+            }
+        } else {
+            guard let width, let height, ImageDimensions(width: width, height: height).isValid else {
+                throw AppError.message(ImageDimensions.validationMessage)
+            }
         }
         guard (0...4294967295).contains(seed) else { throw AppError.message("种子须介于 0 和 4294967295 之间。") }
         try InputImages.validate(inputImages)
         repository = settings.repository; model = settings.model; config = settings.config
         self.prompt = prompt; self.width = width; self.height = height; self.seed = seed; self.output = output
         self.inputImages = inputImages
+        self.resolution = resolution
     }
 
-    private enum CodingKeys: String, CodingKey { case repository, model, config, prompt, width, height, seed, output, inputImages }
+    private enum CodingKeys: String, CodingKey { case repository, model, config, prompt, width, height, resolution, seed, output, inputImages }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         repository = try values.decode(String.self, forKey: .repository)
         model = try values.decode(String.self, forKey: .model)
         config = try values.decode(String.self, forKey: .config)
         prompt = try values.decode(String.self, forKey: .prompt)
-        width = try values.decode(Int.self, forKey: .width)
-        height = try values.decode(Int.self, forKey: .height)
+        width = try values.decodeIfPresent(Int.self, forKey: .width)
+        height = try values.decodeIfPresent(Int.self, forKey: .height)
+        resolution = try values.decodeIfPresent(Int.self, forKey: .resolution)
         seed = try values.decode(Int64.self, forKey: .seed)
         output = try values.decode(String.self, forKey: .output)
         inputImages = try values.decodeIfPresent([InputImage].self, forKey: .inputImages) ?? []
