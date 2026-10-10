@@ -7,6 +7,10 @@ import UniformTypeIdentifiers
 struct AppStateChecks {
     @MainActor static func main() async throws {
         _ = NSApplication.shared
+        if CommandLine.arguments.dropFirst().first == "--layout-only" {
+            try await conversationLayoutChecks()
+            return
+        }
         if CommandLine.arguments.dropFirst().first == "--real" {
             try await realInferenceChecks(Array(CommandLine.arguments.dropFirst(2)))
             return
@@ -133,6 +137,7 @@ struct AppStateChecks {
         try check(store.generations[0].status == .failed && store.errorMessage != nil, "failed launch has a visible history record")
         store.clearInputImages()
         try await creationChecks()
+        try await conversationLayoutChecks()
         print("App state checks passed")
     }
 }

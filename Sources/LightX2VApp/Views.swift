@@ -381,6 +381,7 @@ struct GenerationTurnView: View {
     let previewHeight: CGFloat
     @State private var image: NSImage?
     @State private var loadingImage = true
+    @State private var loadedImagePath: String?
     var body: some View {
         // Keep the header and actions attached to the actual image width.
         let replyWidth = image.map { min(620, max(220, previewHeight * $0.size.width / max(1, $0.size.height))) } ?? 620
@@ -427,13 +428,16 @@ struct GenerationTurnView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: job.status == .completed ? job.request.output : nil) {
-            image = nil
-            loadingImage = true
             guard job.status == .completed else { return }
+            // Lazy rows can appear again when their decoded image changes the
+            // scroll layout. Keep the completed preview across task restarts.
+            guard loadedImagePath != job.request.output else { return }
+            loadingImage = true
             let loaded = await LocalImagePreview.load(job.request.output, maximumDimension: 1800)
             guard !Task.isCancelled else { return }
             image = loaded
             loadingImage = false
+            loadedImagePath = job.request.output
         }
     }
 
@@ -450,10 +454,14 @@ struct GenerationTurnView: View {
                         Label("已生成", systemImage: "checkmark.circle.fill").foregroundStyle(Palette.green)
                         Text("·").foregroundStyle(Palette.muted)
                     }
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        Text(store.elapsed(job, now: context.date)).foregroundStyle(Palette.muted).monospacedDigit()
+                    if job.status == .running {
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            Text(store.elapsed(job, now: context.date)).monospacedDigit()
+                        }
+                    } else {
+                        Text(store.elapsed(job)).monospacedDigit()
                     }
-                }.font(.system(size: 10))
+                }.font(.system(size: 10)).foregroundStyle(Palette.muted)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
