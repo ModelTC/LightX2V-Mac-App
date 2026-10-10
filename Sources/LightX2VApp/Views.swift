@@ -500,41 +500,36 @@ struct GenerationTurnView: View {
     }
 
     private var imageActions: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 6) {
-                copyButton
-                revealButton
-                referenceButton
-            }.fixedSize(horizontal: true, vertical: false)
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) { copyButton; revealButton }
-                referenceButton
-            }
+        HStack(spacing: 4) {
+            copyButton
+            revealButton
+            referenceButton
         }
-        .font(.system(size: 11, weight: .medium)).foregroundStyle(Palette.muted)
+        .font(.system(size: 13)).foregroundStyle(Palette.muted)
         .buttonStyle(HoverButtonStyle(radius: 6))
     }
 
     private var copyButton: some View {
         Button { store.copyImage(job) } label: {
             Label("复制", systemImage: "doc.on.doc")
-                .padding(.horizontal, 7).frame(height: 28)
-        }.help("复制图片")
+                .labelStyle(.iconOnly).frame(width: 30, height: 30)
+        }.help("复制图片").accessibilityLabel("复制")
     }
 
     private var revealButton: some View {
         Button { store.reveal(job) } label: {
             Label("在 Finder 中显示", systemImage: "folder")
-                .padding(.horizontal, 7).frame(height: 28)
-        }.help("在 Finder 中显示图片文件")
+                .labelStyle(.iconOnly).frame(width: 30, height: 30)
+        }.help("在 Finder 中显示图片文件").accessibilityLabel("在 Finder 中显示")
     }
 
     private var referenceButton: some View {
         Button { store.reference(job) } label: {
             Label("引用", systemImage: "photo.badge.plus")
-                .padding(.horizontal, 7).frame(height: 28)
+                .labelStyle(.iconOnly).frame(width: 30, height: 30)
         }.disabled(!store.canReferenceImages)
             .help(store.selectedModel == nil ? "请先选择模型" : "将图片加入当前输入框作为参考图")
+            .accessibilityLabel("引用")
     }
 
     private func failure(_ message: String, symbol: String) -> some View {
