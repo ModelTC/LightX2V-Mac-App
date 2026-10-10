@@ -36,6 +36,16 @@ func inputImageChecks() throws {
     try expect(pixels.alphaInfo == .last || pixels.alphaInfo == .premultipliedLast, "alpha lost")
     let same = try InputImages.importing([first], into: draft, existing: images)
     try expect(same == images, "repeated import duplicates inputs")
+    let duplicateDraft = root.appendingPathComponent("duplicate-draft")
+    let duplicates = try InputImages.importing([first, second, first], into: duplicateDraft, existing: [], deduplicate: false)
+    try expect(duplicates.count == 3 && Set(duplicates.map(\.id)).count == 3
+               && duplicates.map(\.name) == [first.lastPathComponent, second.lastPathComponent, first.lastPathComponent],
+               "deliberate duplicates lose their identity or click order")
+    let duplicateSnapshots = try InputImages.snapshot(duplicates, in: root.appendingPathComponent("duplicate-job"))
+    let duplicateSnapshotBytes = try duplicateSnapshots.map { try Data(contentsOf: URL(fileURLWithPath: $0.path)) }
+    try expect(duplicateSnapshots.count == 3 && Set(duplicateSnapshots.map(\.id)).count == 3
+               && duplicateSnapshotBytes[0] == duplicateSnapshotBytes[2],
+               "snapshot collapsed identical references")
     let job = root.appendingPathComponent("job, with spaces")
     let snapshots = try InputImages.snapshot(images, in: job)
     try expect(snapshots.map { URL(fileURLWithPath: $0.path).lastPathComponent } == ["reference-1.png", "reference-2.png"], "unsafe snapshot paths")
@@ -71,6 +81,14 @@ func inputImageChecks() throws {
     try rejects("ninth image accepted") { _ = try InputImages.importing(many, into: draft, existing: []) }
     let afterLimit = try fm.contentsOfDirectory(atPath: draft.path)
     try expect(afterLimit.isEmpty, "over-limit batch not rolled back")
+    try rejects("duplicate batch bypasses image count limit") {
+        _ = try InputImages.importing(Array(repeating: valid, count: 9), into: draft, existing: [], deduplicate: false)
+    }
+    try rejects("duplicate batch accepts damaged image") {
+        _ = try InputImages.importing([valid, valid, bad], into: draft, existing: [], deduplicate: false)
+    }
+    let afterDuplicateFailure = try fm.contentsOfDirectory(atPath: draft.path)
+    try expect(afterDuplicateFailure.isEmpty, "failed duplicate imports left partial files")
     try fm.removeItem(atPath: snapshots[0].path)
     try rejects("deleted history input accepted") { try InputImages.validate(snapshots) }
     try rejects("relative reference accepted") { try InputImages.validate([InputImage(path: "relative.png", name: "relative")]) }

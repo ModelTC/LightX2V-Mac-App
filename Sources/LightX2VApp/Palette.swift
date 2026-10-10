@@ -24,6 +24,7 @@ enum Palette {
     static let accent = hex(0xA45145)
     static let accentSurface = hex(0xF7EEEC)
     static let green = hex(0x47755D)
+    static let readyIndicator = hex(0x3D8F76)
 
     private static func hex(_ value: UInt32) -> Color {
         Color(.sRGB, red: Double((value >> 16) & 0xFF) / 255,

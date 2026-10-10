@@ -93,8 +93,19 @@ func creationChecks() async throws {
               "reference preserves prompt, current conversation and history")
     try check(store.generationSize.resolution == .twoK && store.generationSize.aspectRatio == .portrait916,
               "reference preserves current size selection")
-    store.reference(first); try await wait({ store.isImportingImages })
-    try check(store.inputImages.count == 2, "repeated reference is deduplicated")
+    store.reference(first); store.reference(first)
+    try await wait({ store.isImportingImages })
+    let duplicates = Array(store.inputImages.dropFirst())
+    let duplicateBytes = try duplicates.map { try Data(contentsOf: URL(fileURLWithPath: $0.path)) }
+    try check(duplicates.count == 3 && Set(duplicates.map(\.id)).count == 3 && Set(duplicateBytes).count == 1,
+              "repeated reference clicks keep identical images as independent entries")
+    store.removeInputImage(duplicates[1])
+    try check(store.inputImages.map(\.id) == [store.inputImages[0].id, duplicates[0].id, duplicates[2].id]
+              && !fm.fileExists(atPath: duplicates[1].path)
+              && fm.fileExists(atPath: duplicates[0].path) && fm.fileExists(atPath: duplicates[2].path)
+              && fm.fileExists(atPath: first.request.output),
+              "removing one duplicate preserves the other references and generated output")
+    store.removeInputImage(duplicates[2])
     store.removeInputImage(store.inputImages[1])
     store.reference(second); store.reference(first)
     try await wait({ store.isImportingImages })
@@ -106,8 +117,14 @@ func creationChecks() async throws {
     let third = try await submit("My new reference prompt")
     try check(third.creationID == first.creationID && third.request.inputImages.count == 3 && third.request.prompt != first.request.prompt,
               "referenced generation appends to the conversation with only the new prompt and selected images")
+    store.reference(first); store.reference(first)
+    try await wait({ store.isImportingImages })
+    let repeated = try await submit("Use the same image twice")
+    let repeatedBytes = try repeated.request.inputImages.map { try Data(contentsOf: URL(fileURLWithPath: $0.path)) }
+    try check(repeated.request.inputImages.count == 2 && Set(repeated.request.inputImages.map(\.id)).count == 2 && Set(repeatedBytes).count == 1,
+              "submission preserves both identical references as separate ordered snapshots")
     let fourth = try await submit("Text only again")
-    try check(fourth.creationID == first.creationID && fourth.request.inputImages.isEmpty && store.selectedCreation.count == 4,
+    try check(fourth.creationID == first.creationID && fourth.request.inputImages.isEmpty && store.selectedCreation.count == 5,
               "normal generation after reference remains text-only in the same conversation")
     store.newGeneration()
     let fifth = try await submit("Explicitly new creation")
@@ -115,7 +132,7 @@ func creationChecks() async throws {
               "only explicit New Creation starts a separate conversation")
     let reopened = AppStore()
     reopened.selectedID = first.id
-    try check(reopened.recentCreations.count == 2 && reopened.selectedCreation.map(\.id) == [first.id, second.id, third.id, fourth.id],
+    try check(reopened.recentCreations.count == 2 && reopened.selectedCreation.map(\.id) == [first.id, second.id, third.id, repeated.id, fourth.id],
               "relaunch restores conversation grouping and chronological turns")
     try check(reopened.creationTitle(fourth) == first.title, "creation title remains anchored to its first prompt")
     store.selectedID = first.id

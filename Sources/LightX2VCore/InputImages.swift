@@ -26,15 +26,15 @@ public enum InputImages {
         }
     }
 
-    public static func importing(_ urls: [URL], into directory: URL, existing: [InputImage]) throws -> [InputImage] {
+    public static func importing(_ urls: [URL], into directory: URL, existing: [InputImage], deduplicate: Bool = true) throws -> [InputImage] {
         let fm = FileManager.default
         try fm.createDirectory(at: directory, withIntermediateDirectories: true)
         var result = existing
         var created: [URL] = []
-        var digests = try Set(existing.map { image in
+        var digests: Set<String> = try deduplicate ? Set(existing.map { image in
             SHA256.hash(data: try Data(contentsOf: URL(fileURLWithPath: image.path)))
                 .map { String(format: "%02x", $0) }.joined()
-        })
+        }) : []
         do {
             for url in urls {
                 guard url.isFileURL else { throw AppError.message("请拖入本机中的图片文件。") }
@@ -66,9 +66,10 @@ public enum InputImages {
                 CGImageDestinationAddImage(destination, image, nil)
                 guard CGImageDestinationFinalize(destination) else { throw AppError.message("无法保存输入图片。") }
                 let bytes = data as Data
-                let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+                // Each deliberate reference has its own identity and removable copy.
+                let digest = deduplicate ? SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined() : UUID().uuidString
                 let path = directory.appendingPathComponent(digest + ".png")
-                if digests.contains(digest) { continue }
+                if deduplicate && digests.contains(digest) { continue }
                 guard result.count < maximumCount else { throw AppError.message("最多可添加 \(maximumCount) 张图片。") }
                 if !fm.fileExists(atPath: path.path) {
                     try bytes.write(to: path, options: .atomic)

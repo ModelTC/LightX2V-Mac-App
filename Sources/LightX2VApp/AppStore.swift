@@ -126,7 +126,6 @@ final class AppStore: ObservableObject {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
         panel.prompt = "添加图片"
-        panel.message = "选择参考图，建议 1–3 张，最多 8 张"
         panel.begin { [weak self] response in
             if response == .OK { self?.addInputImages(panel.urls) }
         }
@@ -156,7 +155,7 @@ final class AppStore: ObservableObject {
         return true
     }
 
-    private func importImages(_ load: @escaping () async throws -> [URL]) {
+    private func importImages(deduplicate: Bool = true, _ load: @escaping () async throws -> [URL]) {
         guard canAddImages else { return }
         let directory = draftImageDirectory ?? WorkspaceLayout(settings.workingDirectory).temporary
             .appendingPathComponent("input-draft-" + UUID().uuidString)
@@ -168,7 +167,7 @@ final class AppStore: ObservableObject {
             do {
                 let urls = try await load()
                 inputImages = try await Task.detached(priority: .userInitiated) {
-                    try InputImages.importing(urls, into: directory, existing: existing)
+                    try InputImages.importing(urls, into: directory, existing: existing, deduplicate: deduplicate)
                 }.value
             } catch { errorMessage = error.localizedDescription }
         }
@@ -221,7 +220,8 @@ final class AppStore: ObservableObject {
 
     private func importNextReference() {
         guard canAddImages, !pendingReferences.isEmpty else { return }
-        addInputImages([pendingReferences.removeFirst()])
+        let url = pendingReferences.removeFirst()
+        importImages(deduplicate: false) { [url] }
     }
 
     func applyGeneralSettings(_ value: AppSettings) async throws {

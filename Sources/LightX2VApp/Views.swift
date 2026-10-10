@@ -142,7 +142,7 @@ struct SidebarView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("本机推理").font(.system(size: 12, weight: .medium))
                     HStack(spacing: 4) {
-                        Circle().fill(store.environmentReady ? Palette.green : Palette.muted).frame(width: 5, height: 5)
+                        Circle().fill(store.environmentReady ? Palette.readyIndicator : Palette.muted).frame(width: 5, height: 5)
                         Text(MacHardware.sidebarDescription)
                             .font(.system(size: 9)).foregroundStyle(Palette.muted)
                     }
@@ -211,28 +211,23 @@ struct ComposerView: View {
     @State private var editorDropTargeted = false
     private var highlightingDrop: Bool { store.canAddImages && (dropTargeted || editorDropTargeted) }
     var body: some View {
-        VStack(spacing: 9) {
-            VStack(alignment: .leading, spacing: 8) {
-                if !store.inputImages.isEmpty {
-                    InputImageStrip(images: store.inputImages, remove: store.removeInputImage)
-                        .disabled(store.isImportingImages)
-                    if store.inputImages.count > 3 {
-                        Text("参考图较多时画面可能失真，当前模型建议使用 1–3 张。")
-                            .font(.system(size: 10)).foregroundStyle(Palette.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+        VStack(alignment: .leading, spacing: 8) {
+            if !store.inputImages.isEmpty {
+                InputImageStrip(images: store.inputImages, remove: store.removeInputImage)
+                    .disabled(store.isImportingImages)
+                if store.inputImages.count > 3 {
+                    Text("参考图较多时画面可能失真，当前模型建议使用 1–3 张。")
+                        .font(.system(size: 10)).foregroundStyle(Palette.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                promptEditor
-                composerActions
-            }.padding(14).background(Palette.surface, in: RoundedRectangle(cornerRadius: 17))
-                .overlay(RoundedRectangle(cornerRadius: 17).stroke(highlightingDrop ? Palette.ink : focused ? Palette.focus : Palette.line, lineWidth: highlightingDrop ? 2 : 1))
-                .shadow(color: .black.opacity(0.025), radius: 12, y: 4)
-                .onDrop(of: [UTType.fileURL], isTargeted: $dropTargeted, perform: store.receiveImageDrop)
-            HStack {
-                Text(store.isChecking ? "正在检查本地推理环境…" : "所有图像与提示词均保存在本机")
-                Spacer()
-            }.font(.system(size: 10)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
-        }.frame(maxWidth: 850)
+            }
+            promptEditor
+            composerActions
+        }.padding(14).background(Palette.surface, in: RoundedRectangle(cornerRadius: 17))
+            .overlay(RoundedRectangle(cornerRadius: 17).stroke(highlightingDrop ? Palette.ink : focused ? Palette.focus : Palette.line, lineWidth: highlightingDrop ? 2 : 1))
+            .shadow(color: .black.opacity(0.025), radius: 12, y: 4)
+            .onDrop(of: [UTType.fileURL], isTargeted: $dropTargeted, perform: store.receiveImageDrop)
+            .frame(maxWidth: 850)
     }
 
     private var promptEditor: some View {
