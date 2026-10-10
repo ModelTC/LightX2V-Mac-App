@@ -64,10 +64,12 @@ struct CoreChecks {
         defer { try? FileManager.default.removeItem(at: dir) }
         let url = dir.appendingPathComponent("workspace.json")
         let request = try InferenceRequest(settings: .defaults, prompt: "history", width: 512, height: 768, seed: 17, output: dir.appendingPathComponent("image.png").path)
-        let workspace = WorkspaceData(generations: [Generation(request: request)])
+        let creation = UUID()
+        let workspace = WorkspaceData(generations: [Generation(creationID: creation, request: request), Generation(creationID: creation, request: request)])
         try JSONFile.write(workspace, to: url)
         let loaded = try JSONFile.read(WorkspaceData.self, from: url)
         try expect(loaded.generations[0].id == workspace.generations[0].id, "history identity changed")
+        try expect(loaded.generations.allSatisfy { $0.creationID == creation }, "conversation grouping lost across persistence")
         try expect(loaded.generations[0].request.height == 768, "history parameters changed")
         try expect(loaded.settings == workspace.settings, "settings changed")
     }

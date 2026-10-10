@@ -132,6 +132,7 @@ struct AppStateChecks {
                   "process launch failure preserves prompt and images")
         try check(store.generations[0].status == .failed && store.errorMessage != nil, "failed launch has a visible history record")
         store.clearInputImages()
+        try await creationChecks()
         print("App state checks passed")
     }
 }

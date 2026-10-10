@@ -36,7 +36,7 @@ struct WorkspaceView: View {
                 toolbar
                 Rectangle().fill(Palette.line).frame(height: 1)
                 ZStack {
-                    if let job = store.selected { GenerationView(job: job) }
+                    if let job = store.selected { GenerationView().id(job.creationID) }
                     else { WelcomeView() }
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 if store.showLogs { LogPanel().frame(height: 205) }
@@ -100,13 +100,13 @@ struct SidebarView: View {
                             Text("生成的作品会保存在这里").font(.system(size: 11)).foregroundStyle(Palette.muted)
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24).padding(.top, 18)
                     }
-                    ForEach(store.generations) { job in
+                    ForEach(store.recentCreations) { job in
                         Button { store.selectedID = job.id } label: {
                             HStack(alignment: .top, spacing: 9) {
                                 Image(systemName: job.status == .completed ? "photo" : job.status == .running ? "circle.dotted" : "clock")
                                     .font(.system(size: 12)).foregroundStyle(job.status == .running ? Palette.ink : Palette.muted).padding(.top, 2)
                                 VStack(alignment: .leading, spacing: 6) {
-                                    Text(job.title).font(.system(size: 12)).lineLimit(2).multilineTextAlignment(.leading)
+                                    Text(store.creationTitle(job)).font(.system(size: 12)).lineLimit(2).multilineTextAlignment(.leading)
                                     HStack(spacing: 5) {
                                         Text(job.createdAt, style: .date)
                                         Text("· \(job.status.label)")
@@ -114,11 +114,16 @@ struct SidebarView: View {
                                 }
                                 Spacer(minLength: 0)
                             }.padding(11).frame(maxWidth: .infinity, alignment: .leading)
-                                .background(store.selectedID == job.id ? Palette.selection : .clear, in: RoundedRectangle(cornerRadius: 8))
+                                .background(store.selected?.creationID == job.creationID ? Palette.selection : .clear, in: RoundedRectangle(cornerRadius: 8))
                         }.buttonStyle(HoverButtonStyle()).padding(.horizontal, 10)
                             .contextMenu {
-                                Button("复用创作") { store.reuse(job) }.disabled(store.isImportingImages)
+                                if job.status == .completed {
+                                    Button("复制") { store.copyImage(job) }
+                                }
                                 Button("在 Finder 中显示") { store.reveal(job) }
+                                if job.status == .completed {
+                                    Button("引用") { store.reference(job) }.disabled(!store.canReferenceImages)
+                                }
                                 if job.status != .running { Button("从历史中移除（保留文件）") { store.removeFromHistory(job) } }
                             }
                     }
@@ -233,7 +238,7 @@ struct ComposerView: View {
     private var promptEditor: some View {
         PromptEditor(text: $store.prompt, height: $editorHeight, focused: $focused,
                      composing: $store.isComposingPrompt,
-                     placeholder: store.inputImages.isEmpty ? "描述你想生成的画面…" : "描述你想如何修改图片…",
+                     placeholder: "描述你想生成的画面…",
                      onDropFiles: store.canAddImages ? { store.addInputImages($0) } : nil,
                      onDropHover: { editorDropTargeted = $0 },
                      onSubmit: { if store.canGenerate { store.generate() } })
@@ -348,57 +353,85 @@ private struct PromptMessageView: View {
 
 struct GenerationView: View {
     @EnvironmentObject var store: AppStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        GeometryReader { geometry in
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 36) {
+                        ForEach(store.selectedCreation) { job in
+                            GenerationTurnView(job: job, previewHeight: min(500, max(280, geometry.size.height - 235)))
+                                .id(job.id)
+                        }
+                        Color.clear.frame(height: 1).id("conversation-bottom")
+                    }
+                    .padding(.horizontal, 28).padding(.vertical, 24)
+                    .frame(maxWidth: 800).frame(maxWidth: .infinity).subtleScrollbars()
+                }
+                .defaultScrollAnchor(.bottom)
+                .onChange(of: store.selectedCreation.map(\.id)) { _, _ in
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+                        proxy.scrollTo("conversation-bottom", anchor: .bottom)
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct GenerationTurnView: View {
+    @EnvironmentObject var store: AppStore
     let job: Generation
+    let previewHeight: CGFloat
     @State private var image: NSImage?
     @State private var loadingImage = true
     var body: some View {
-        GeometryReader { geometry in
-            ScrollView {
-                let previewHeight = min(500, max(280, geometry.size.height - 235))
-                // Keep the header and actions attached to the actual image width.
-                let replyWidth = image.map { min(620, max(220, previewHeight * $0.size.width / max(1, $0.size.height))) } ?? 620
+        // Keep the header and actions attached to the actual image width.
+        let replyWidth = image.map { min(620, max(220, previewHeight * $0.size.width / max(1, $0.size.height))) } ?? 620
 
-                VStack(alignment: .leading, spacing: 28) {
-                    PromptMessageView(prompt: job.request.prompt, createdAt: job.createdAt, inputImages: job.request.inputImages)
-                    VStack(alignment: .leading, spacing: 12) {
-                        replyHeader
-                        if job.status == .completed {
-                            if let image {
-                                Image(nsImage: image).resizable().scaledToFit()
-                                    .onDrag { NSItemProvider(object: URL(fileURLWithPath: job.request.output) as NSURL) }
-                                    .contextMenu { Button("复制图片") { store.copyImage(job) }; Button("另存为…") { store.export(job) }; Button("在 Finder 中显示") { store.reveal(job) } }
-                                imageActions
-                            } else if loadingImage {
-                                ProgressView("正在读取图片…").controlSize(.small).padding(.vertical, 30)
-                            } else {
-                                failure("无法读取图片，请检查文件位置和访问权限。", symbol: "photo.badge.exclamationmark")
+        VStack(alignment: .leading, spacing: 28) {
+            PromptMessageView(prompt: job.request.prompt, createdAt: job.createdAt, inputImages: job.request.inputImages)
+            VStack(alignment: .leading, spacing: 12) {
+                replyHeader
+                if job.status == .completed {
+                    if let image {
+                        Image(nsImage: image).resizable().scaledToFit()
+                            .onDrag { NSItemProvider(object: URL(fileURLWithPath: job.request.output) as NSURL) }
+                            .contextMenu {
+                                Button("复制") { store.copyImage(job) }
+                                Button("在 Finder 中显示") { store.reveal(job) }
+                                Button("引用") { store.reference(job) }.disabled(!store.canReferenceImages)
                             }
-                        } else if job.status == .running {
-                            VStack(spacing: 17) {
-                                ProgressView().controlSize(.regular).tint(Palette.ink)
-                                Text(store.phase).font(.system(size: 13, weight: .medium))
-                                Text("模型按需载入内存，首次生成可能需要几分钟。")
-                                    .font(.system(size: 11)).foregroundStyle(Palette.muted)
-                                HStack(spacing: 5) {
-                                    ForEach(1...6, id: \.self) { index in
-                                        Capsule().fill(index < store.currentStep ? Palette.ink : index == store.currentStep ? Palette.ink.opacity(0.45) : Palette.line)
-                                            .frame(width: 25, height: 4)
-                                    }
-                                }
-                                Button("查看实时日志") { store.showLogs = true }.buttonStyle(HoverButtonStyle()).font(.system(size: 11)).foregroundStyle(Palette.muted)
-                            }.frame(maxWidth: .infinity).frame(height: 260)
-                                .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 12))
-                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line, style: StrokeStyle(lineWidth: 1, dash: [5])))
-                        } else {
-                            failure(job.error ?? job.status.label, symbol: job.status == .failed ? "exclamationmark.triangle" : "pause.circle")
+                        imageActions
+                    } else if loadingImage {
+                        ProgressView("正在读取图片…").controlSize(.small).padding(.vertical, 30)
+                    } else {
+                        failure("无法读取图片，请检查文件位置和访问权限。", symbol: "photo.badge.exclamationmark")
+                    }
+                } else if job.status == .running {
+                    VStack(spacing: 17) {
+                        ProgressView().controlSize(.regular).tint(Palette.ink)
+                        Text(store.phase).font(.system(size: 13, weight: .medium))
+                        Text("模型按需载入内存，首次生成可能需要几分钟。")
+                            .font(.system(size: 11)).foregroundStyle(Palette.muted)
+                        HStack(spacing: 5) {
+                            ForEach(1...6, id: \.self) { index in
+                                Capsule().fill(index < store.currentStep ? Palette.ink : index == store.currentStep ? Palette.ink.opacity(0.45) : Palette.line)
+                                    .frame(width: 25, height: 4)
+                            }
                         }
-                    }.frame(maxWidth: replyWidth, alignment: .leading)
+                        Button("查看实时日志") { store.showLogs = true }.buttonStyle(HoverButtonStyle()).font(.system(size: 11)).foregroundStyle(Palette.muted)
+                    }.frame(maxWidth: .infinity).frame(height: 260)
+                        .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line, style: StrokeStyle(lineWidth: 1, dash: [5])))
+                } else {
+                    failure(job.error ?? job.status.label, symbol: job.status == .failed ? "exclamationmark.triangle" : "pause.circle")
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 28).padding(.vertical, 24)
-                .frame(maxWidth: 800).frame(maxWidth: .infinity).subtleScrollbars()
-            }
-        }.task(id: job.status == .completed ? job.request.output : nil) {
+            }.frame(maxWidth: replyWidth, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .task(id: job.status == .completed ? job.request.output : nil) {
             image = nil
             loadingImage = true
             guard job.status == .completed else { return }
@@ -432,26 +465,41 @@ struct GenerationView: View {
     }
 
     private var imageActions: some View {
-        HStack(spacing: 6) {
-            Button { store.copyImage(job) } label: {
-                Label("复制", systemImage: "doc.on.doc")
-                    .padding(.horizontal, 9).frame(height: 28)
-            }.help("复制图片")
-            Button { store.export(job) } label: {
-                Label("导出", systemImage: "square.and.arrow.up")
-                    .padding(.horizontal, 9).frame(height: 28)
-            }.help("保存图片到其他位置")
-            Menu {
-                Button("复用创作") { store.reuse(job) }.disabled(store.isImportingImages)
-                Button("在 Finder 中显示") { store.reveal(job) }
-            } label: {
-                Image(systemName: "ellipsis").frame(width: 28, height: 28)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) {
+                copyButton
+                revealButton
+                referenceButton
+            }.fixedSize(horizontal: true, vertical: false)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) { copyButton; revealButton }
+                referenceButton
             }
-            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-            .help("更多操作").accessibilityLabel("图片更多操作")
         }
         .font(.system(size: 11, weight: .medium)).foregroundStyle(Palette.muted)
         .buttonStyle(HoverButtonStyle(radius: 6))
+    }
+
+    private var copyButton: some View {
+        Button { store.copyImage(job) } label: {
+            Label("复制", systemImage: "doc.on.doc")
+                .padding(.horizontal, 7).frame(height: 28)
+        }.help("复制图片")
+    }
+
+    private var revealButton: some View {
+        Button { store.reveal(job) } label: {
+            Label("在 Finder 中显示", systemImage: "folder")
+                .padding(.horizontal, 7).frame(height: 28)
+        }.help("在 Finder 中显示图片文件")
+    }
+
+    private var referenceButton: some View {
+        Button { store.reference(job) } label: {
+            Label("引用", systemImage: "photo.badge.plus")
+                .padding(.horizontal, 7).frame(height: 28)
+        }.disabled(!store.canReferenceImages)
+            .help(store.selectedModel == nil ? "请先选择模型" : "将图片加入当前输入框作为参考图")
     }
 
     private func failure(_ message: String, symbol: String) -> some View {

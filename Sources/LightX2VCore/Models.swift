@@ -134,6 +134,7 @@ public enum GenerationStatus: String, Codable {
 
 public struct Generation: Codable, Identifiable {
     public var id: UUID
+    public var creationID: UUID
     public var createdAt: Date
     public var request: InferenceRequest
     public var status: GenerationStatus
@@ -141,8 +142,21 @@ public struct Generation: Codable, Identifiable {
     public var error: String?
     public var directory: String { URL(fileURLWithPath: request.output).deletingLastPathComponent().path }
     public var title: String { String(request.prompt.replacingOccurrences(of: "\n", with: " ").prefix(52)) }
-    public init(id: UUID = UUID(), request: InferenceRequest) {
-        self.id = id; self.createdAt = Date(); self.request = request; self.status = .running
+    public init(id: UUID = UUID(), creationID: UUID? = nil, request: InferenceRequest) {
+        self.id = id; self.creationID = creationID ?? id
+        self.createdAt = Date(); self.request = request; self.status = .running
+    }
+    private enum CodingKeys: String, CodingKey { case id, creationID, createdAt, request, status, duration, error }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        // Existing records are independent creations until a user continues one.
+        creationID = try values.decodeIfPresent(UUID.self, forKey: .creationID) ?? id
+        createdAt = try values.decode(Date.self, forKey: .createdAt)
+        request = try values.decode(InferenceRequest.self, forKey: .request)
+        status = try values.decode(GenerationStatus.self, forKey: .status)
+        duration = try values.decodeIfPresent(Double.self, forKey: .duration)
+        error = try values.decodeIfPresent(String.self, forKey: .error)
     }
 }
 

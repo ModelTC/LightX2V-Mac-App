@@ -56,10 +56,24 @@ final class AppStore: ObservableObject {
     private let locatorRoot: URL
     private var canPersist = true
     private var draftImageDirectory: URL?
+    private var draftCreationID = UUID()
+    private var pendingReferences: [URL] = []
 
     var selected: Generation? { generations.first { $0.id == selectedID } }
+    var selectedCreation: [Generation] {
+        guard let selected else { return [] }
+        return generations.reversed().filter { $0.creationID == selected.creationID }
+    }
+    var recentCreations: [Generation] {
+        var seen = Set<UUID>()
+        return generations.filter { seen.insert($0.creationID).inserted }
+    }
+    func creationTitle(_ job: Generation) -> String {
+        generations.last(where: { $0.creationID == job.creationID })?.title ?? job.title
+    }
     var busy: Bool { isRunning || isChecking || isPreparingWorkspace || isPreparingResources || isImportingImages }
-    var canAddImages: Bool { selectedModel == .qwenImage21 && !needsGeneralSetup && !isPreparingWorkspace && !isImportingImages }
+    var canReferenceImages: Bool { selectedModel == .qwenImage21 && !needsGeneralSetup && !isPreparingWorkspace && terminationCompletion == nil }
+    var canAddImages: Bool { canReferenceImages && !isImportingImages }
     var needsGeneralSetup: Bool { !hasCompletedGeneralSetup || !settings.hasGeneralPaths }
     var hasUnsavedModelSettings: Bool { modelDirectory != settings.model || modelConfig != settings.config }
     var width: Int? { generationSize.dimensions?.width }
@@ -101,6 +115,7 @@ final class AppStore: ObservableObject {
     func newGeneration() {
         guard !isImportingImages else { return }
         selectedID = nil; prompt = ""; showLogs = false; generationSize = GenerationSize()
+        draftCreationID = UUID()
         clearInputImages()
     }
 
@@ -111,7 +126,7 @@ final class AppStore: ObservableObject {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
         panel.prompt = "添加图片"
-        panel.message = "选择用于编辑的图片，建议 1–3 张，最多 8 张"
+        panel.message = "选择参考图，建议 1–3 张，最多 8 张"
         panel.begin { [weak self] response in
             if response == .OK { self?.addInputImages(panel.urls) }
         }
@@ -149,7 +164,7 @@ final class AppStore: ObservableObject {
         let existing = inputImages
         isImportingImages = true
         Task {
-            defer { isImportingImages = false; finishTerminationIfNeeded() }
+            defer { isImportingImages = false; importNextReference(); finishTerminationIfNeeded() }
             do {
                 let urls = try await load()
                 inputImages = try await Task.detached(priority: .userInitiated) {
@@ -163,10 +178,14 @@ final class AppStore: ObservableObject {
         guard !isImportingImages else { return }
         inputImages.removeAll { $0.id == image.id }
         let url = URL(fileURLWithPath: image.path)
-        if url.deletingLastPathComponent() == draftImageDirectory { try? FileManager.default.removeItem(at: url) }
+        if let directory = draftImageDirectory,
+           url.deletingLastPathComponent().standardizedFileURL.resolvingSymlinksInPath().path == directory.standardizedFileURL.resolvingSymlinksInPath().path {
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     func clearInputImages() {
+        pendingReferences = []
         inputImages = []
         if let directory = draftImageDirectory { try? FileManager.default.removeItem(at: directory) }
         draftImageDirectory = nil
@@ -191,7 +210,18 @@ final class AppStore: ObservableObject {
         prompt = generation.request.prompt
         generationSize = GenerationSize(width: generation.request.width, height: generation.request.height,
                                         automaticResolution: generation.request.resolution)
-        selectedID = nil
+        selectedID = generation.id
+    }
+
+    func reference(_ generation: Generation) {
+        guard generation.status == .completed, canReferenceImages else { return }
+        pendingReferences.append(URL(fileURLWithPath: generation.request.output))
+        importNextReference()
+    }
+
+    private func importNextReference() {
+        guard canAddImages, !pendingReferences.isEmpty else { return }
+        addInputImages([pendingReferences.removeFirst()])
     }
 
     func applyGeneralSettings(_ value: AppSettings) async throws {
@@ -223,7 +253,7 @@ final class AppStore: ObservableObject {
         }.value
         let changedWorkspace = stateURL.standardizedFileURL.resolvingSymlinksInPath() != WorkspaceLayout(saved.settings.workingDirectory).state
         settings = saved.settings; generations = saved.generations
-        if changedWorkspace { selectedID = nil; logs = ""; showLogs = false; clearInputImages() }
+        if changedWorkspace { selectedID = nil; draftCreationID = UUID(); logs = ""; showLogs = false; clearInputImages() }
         if !preserveModelDraft { modelDirectory = settings.model; modelConfig = settings.config }
         stateURL = WorkspaceLayout(settings.workingDirectory).state
         canPersist = true; hasCompletedGeneralSetup = true; environmentReady = false
@@ -335,7 +365,7 @@ final class AppStore: ObservableObject {
             request.inputImages = try InputImages.snapshot(inputImages, in: directory)
             let requestURL = directory.appendingPathComponent("request.json")
             try JSONFile.write(request, to: requestURL)
-            let generation = Generation(id: id, request: request)
+            let generation = Generation(id: id, creationID: selected?.creationID ?? draftCreationID, request: request)
             try JSONFile.write(generation, to: directory.appendingPathComponent("generation.json"))
             generations.insert(generation, at: 0)
             activeID = id; selectedID = id; activeLog = ""; logs = ""
@@ -448,26 +478,16 @@ final class AppStore: ObservableObject {
 
     func reveal(_ job: Generation) { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: job.status == .completed ? job.request.output : job.directory)]) }
 
-    func export(_ job: Generation) {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.png]
-        panel.nameFieldStringValue = "LightX2V-\(job.request.seed).png"
-        panel.begin { [weak self] result in
-            guard result == .OK, let url = panel.url else { return }
-            do { try Data(contentsOf: URL(fileURLWithPath: job.request.output)).write(to: url, options: .atomic) }
-            catch { self?.errorMessage = "导出失败：\(error.localizedDescription)" }
-        }
-    }
-
     func copyImage(_ job: Generation) {
         guard let image = NSImage(contentsOfFile: job.request.output) else { return }
         NSPasteboard.general.clearContents(); NSPasteboard.general.writeObjects([image])
     }
 
     func removeFromHistory(_ job: Generation) {
-        guard job.status != .running else { return }
-        generations.removeAll { $0.id == job.id }
-        if selectedID == job.id { selectedID = nil }
+        guard !generations.contains(where: { $0.creationID == job.creationID && $0.status == .running }) else { return }
+        let removingSelected = selected?.creationID == job.creationID
+        generations.removeAll { $0.creationID == job.creationID }
+        if removingSelected { selectedID = nil; draftCreationID = UUID() }
         persist()
     }
 }
