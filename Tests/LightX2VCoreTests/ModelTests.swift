@@ -168,7 +168,8 @@ struct CoreChecks {
 
     static func sizeSelectionAndRestoration() throws {
         var selection = GenerationSize()
-        try expect(selection.resolution == .oneK && selection.aspectRatio == .square, "default is not 1K 1:1")
+        try expect(selection.resolution == .oneK && selection.aspectRatio == nil && selection.dimensions == nil && selection.automaticResolution == 1024,
+                   "default must delegate 1K dimensions to the model")
         selection.selectResolution(.twoK)
         selection.selectAspectRatio(.landscape169)
         selection.selectAspectRatio(.portrait916)

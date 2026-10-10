@@ -54,7 +54,7 @@ public enum ImageAspectRatio: String, CaseIterable, Identifiable {
 public struct GenerationSize {
     public private(set) var resolution: ImageResolution = .oneK
     /// A nil ratio delegates output dimensions to the model.
-    public private(set) var aspectRatio: ImageAspectRatio? = .square
+    public private(set) var aspectRatio: ImageAspectRatio? = nil
     public var dimensions: ImageDimensions? { aspectRatio?.dimensions(at: resolution) }
     public var automaticResolution: Int? { aspectRatio == nil ? resolution.baseDimension : nil }
 

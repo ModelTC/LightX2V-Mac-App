@@ -93,8 +93,8 @@ private struct AspectRatioButton: View {
             .background(selected ? Palette.accentSurface : hovered ? Palette.hover : Palette.surface,
                         in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(focused ? Palette.accent : selected ? Palette.accent.opacity(0.65) : hovered ? Palette.borderStrong : Palette.line,
-                              lineWidth: focused ? 2 : 1))
+                .strokeBorder(selected ? Palette.accent.opacity(0.65) : (hovered || focused) ? Palette.borderStrong : Palette.line,
+                              lineWidth: 1))
             .overlay(alignment: .topTrailing) {
                 if selected {
                     Circle().fill(Palette.accent).frame(width: 4, height: 4).padding(5)

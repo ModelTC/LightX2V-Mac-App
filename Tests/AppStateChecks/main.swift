@@ -52,6 +52,8 @@ struct AppStateChecks {
         // Invalid fixture source deliberately prevents starting a real environment check.
         store.errorMessage = nil
         try check(store.modelPreparationExpanded && store.generationParametersExpanded, "model selection opens preparation and parameters")
+        try check(store.generationSize.automaticResolution == 1024 && store.width == nil && store.height == nil,
+                  "first model selection defaults to automatic 1K without fixed dimensions")
         store.prompt = "编辑这张图"
         store.addInputImages([original])
         try check(store.isImportingImages && !store.canGenerate, "import immediately locks submission")
@@ -81,7 +83,8 @@ struct AppStateChecks {
         try check(store.generationSize.aspectRatio == nil && store.generationSize.resolution == .twoK && store.width == nil && store.height == nil && store.inputImages == saved,
                   "reuse restores automatic 2K with reference images and no fixed dimensions")
         store.newGeneration()
-        try check(store.generationSize.aspectRatio == .square && store.generationSize.resolution == .oneK, "new creation resets automatic selection to default 1K 1:1")
+        try check(store.generationSize.aspectRatio == nil && store.generationSize.automaticResolution == 1024,
+                  "new creation resets size selection to automatic 1K")
         store.reuse(generation)
         store.removeInputImage(store.inputImages[0])
         try check(store.inputImages.isEmpty && fm.fileExists(atPath: saved[0].path), "removing reused input never deletes history snapshot")
@@ -105,6 +108,8 @@ struct AppStateChecks {
         try check(exitCompleted && !fm.fileExists(atPath: exitDraft) && fm.fileExists(atPath: saved[0].path), "termination cleans draft and preserves history")
         let reopened = AppStore()
         try check(reopened.selectedModel == nil && reopened.inputImages.isEmpty && reopened.generations[0].request.inputImages == saved, "relaunch keeps references in history and starts with empty draft/model")
+        try check(reopened.generationSize.automaticResolution == 1024 && reopened.width == nil && reopened.height == nil,
+                  "relaunch defaults to automatic 1K regardless of history")
         try check(reopened.generations[0].status == .interrupted, "relaunch recovers interrupted image task")
         // A launch failure must not discard the user's prompt or attached files.
         let source = root.appendingPathComponent("fake-source/lightx2v")
