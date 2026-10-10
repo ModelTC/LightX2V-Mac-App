@@ -29,23 +29,29 @@ struct WorkspaceView: View {
     @EnvironmentObject var store: AppStore
     @State private var minimumWindowSize = ScreenFittingWindow.minimumContentSize
     var body: some View {
-        HStack(spacing: 0) {
-            SidebarView().frame(width: 232)
-            Rectangle().fill(Palette.line).frame(width: 1)
-            VStack(spacing: 0) {
-                toolbar
-                Rectangle().fill(Palette.line).frame(height: 1)
-                ZStack {
-                    if let job = store.selected { GenerationView().id(job.creationID) }
-                    else { WelcomeView() }
-                }.frame(maxWidth: .infinity, maxHeight: .infinity)
-                if store.showLogs { LogPanel().frame(height: 205) }
-                ComposerView().padding(.horizontal, 30).padding(.top, 12).padding(.bottom, 20)
-            // The two sidebars and separators occupy 514 points in total.
-            }.frame(minWidth: max(1, minimumWindowSize.width - 514)).background(Palette.canvas)
-            if store.showInspector {
+        GeometryReader { workspace in
+            HStack(spacing: 0) {
+                SidebarView().frame(width: 232)
                 Rectangle().fill(Palette.line).frame(width: 1)
-                InspectorView().frame(width: 280)
+                VStack(spacing: 0) {
+                    toolbar
+                    Rectangle().fill(Palette.line).frame(height: 1)
+                    ZStack {
+                        if let job = store.selected {
+                            // Reserve the compact composer and reply metadata once;
+                            // attachments and prompt wrapping must not rescale replies.
+                            GenerationView(previewHeight: min(500, max(280, workspace.size.height - 449)))
+                                .id(job.creationID)
+                        } else { WelcomeView() }
+                    }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if store.showLogs { LogPanel().frame(height: 205) }
+                    ComposerView().padding(.horizontal, 30).padding(.top, 12).padding(.bottom, 20)
+                    // The two sidebars and separators occupy 514 points in total.
+                }.frame(minWidth: max(1, minimumWindowSize.width - 514)).background(Palette.canvas)
+                if store.showInspector {
+                    Rectangle().fill(Palette.line).frame(width: 1)
+                    InspectorView().frame(width: 280)
+                }
             }
         }
         .foregroundStyle(Palette.ink)
@@ -88,7 +94,7 @@ struct SidebarView: View {
                     .font(.system(size: 13, weight: .medium)).padding(12)
                     .background(Palette.surface, in: RoundedRectangle(cornerRadius: 9))
                     .overlay(RoundedRectangle(cornerRadius: 9).stroke(Palette.line, lineWidth: 1))
-            }.buttonStyle(HoverButtonStyle(radius: 9, border: true)).disabled(store.isImportingImages).padding(.horizontal, 14)
+            }.buttonStyle(HoverButtonStyle(radius: 9, border: true, dimsWhenDisabled: false)).disabled(store.isImportingImages).padding(.horizontal, 14)
             Text("最近创作")
                 .font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.muted)
                 .padding(.horizontal, 24).padding(.top, 24).padding(.bottom, 10)
@@ -316,7 +322,8 @@ struct ModelSelector: View {
             if store.selectedModel == nil { ModelSelectionRing() }
         }
         .hoverSurface(radius: 7, border: false)
-        .disabled(store.busy)
+        .disabled(store.configurationBusy)
+        .allowsHitTesting(!store.isImportingImages)
         .help("选择生成模型")
         .accessibilityLabel("选择模型")
         .accessibilityValue(store.selectedModel?.title ?? "未选择")
@@ -376,31 +383,23 @@ private struct PromptMessageView: View {
 
 struct GenerationView: View {
     @EnvironmentObject var store: AppStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    // Based on the whole window, so attaching a reference never rescales replies.
+    var previewHeight: CGFloat = 500
 
     var body: some View {
         GeometryReader { geometry in
-            ScrollViewReader { proxy in
-                ScrollView {
-                    // Image decoding changes a turn's height. Lay out the selected
-                    // conversation together so its drawing and hit regions update
-                    // in the same pass, without waiting for a scroll event.
-                    VStack(alignment: .leading, spacing: 36) {
-                        ForEach(store.selectedCreation) { job in
-                            GenerationTurnView(job: job, previewHeight: min(500, max(280, geometry.size.height - 235)))
-                                .id(job.id)
-                        }
-                        Color.clear.frame(height: 1).id("conversation-bottom")
-                    }
-                    .padding(.horizontal, 28).padding(.vertical, 24)
-                    .frame(maxWidth: 800).frame(maxWidth: .infinity).subtleScrollbars()
-                }
-                .defaultScrollAnchor(.bottom)
-                .onChange(of: store.selectedCreation.map(\.id)) { _, _ in
-                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
-                        proxy.scrollTo("conversation-bottom", anchor: .bottom)
+            ScrollView {
+                // Keep drawing and hit regions in the same layout pass.
+                VStack(alignment: .leading, spacing: 36) {
+                    ForEach(store.selectedCreation) { job in
+                        GenerationTurnView(job: job, previewHeight: previewHeight,
+                                           maximumWidth: max(1, min(620, geometry.size.width - 56)))
+                            .id(job.id)
                     }
                 }
+                .padding(.horizontal, 28).padding(.vertical, 24)
+                .frame(maxWidth: 800).frame(maxWidth: .infinity).subtleScrollbars()
+                .background(ConversationScrollAnchor(turns: store.selectedCreation.map(\.id)))
             }
         }
     }
@@ -410,12 +409,13 @@ struct GenerationTurnView: View {
     @EnvironmentObject var store: AppStore
     let job: Generation
     let previewHeight: CGFloat
+    var maximumWidth: CGFloat = 620
     @State private var image: NSImage?
     @State private var loadingImage = true
     @State private var loadedImagePath: String?
     var body: some View {
         // Keep the header and actions attached to the actual image width.
-        let replyWidth = image.map { min(620, max(220, previewHeight * $0.size.width / max(1, $0.size.height))) } ?? 620
+        let replyWidth = image.map { min(maximumWidth, max(220, previewHeight * $0.size.width / max(1, $0.size.height))) } ?? maximumWidth
 
         VStack(alignment: .leading, spacing: 28) {
             PromptMessageView(prompt: job.request.prompt, createdAt: job.createdAt, inputImages: job.request.inputImages)

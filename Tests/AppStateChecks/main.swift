@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 @main
 struct AppStateChecks {
     @MainActor static func main() async throws {
+        setbuf(stdout, nil)
         _ = NSApplication.shared
         if CommandLine.arguments.dropFirst().first == "--layout-only" {
             try await conversationLayoutChecks()

@@ -92,7 +92,7 @@ struct ModelPreparationView: View {
             }
             .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Palette.line, lineWidth: 1))
-            .disabled(store.busy)
+            .disabled(store.configurationBusy).allowsHitTesting(!store.isImportingImages)
 
             HStack(spacing: 7) {
                 Group {
@@ -106,7 +106,7 @@ struct ModelPreparationView: View {
                 Spacer(minLength: 4)
                 if store.hasUnsavedModelSettings {
                     Button("撤销") { store.discardModelSettings() }
-                        .disabled(store.busy).accessibilityLabel("撤销模型设置修改")
+                        .disabled(store.configurationBusy).allowsHitTesting(!store.isImportingImages).accessibilityLabel("撤销模型设置修改")
                 } else {
                     Button("详情") { showsDetails = true }
                         .accessibilityLabel("查看环境检查详情")
@@ -135,7 +135,7 @@ struct ModelPreparationView: View {
                     Text(store.isChecking ? "正在检查…" : store.hasUnsavedModelSettings ? "保存并检查" : "检查模型")
                 }
                 .font(.system(size: 11, weight: .medium)).frame(maxWidth: .infinity).frame(height: 26)
-            }.buttonStyle(SettingsActionStyle(prominent: true)).disabled(store.busy)
+            }.buttonStyle(SettingsActionStyle(prominent: true)).disabled(store.configurationBusy).allowsHitTesting(!store.isImportingImages)
         }
     }
 }

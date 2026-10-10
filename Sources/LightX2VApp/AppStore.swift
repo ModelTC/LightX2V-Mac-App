@@ -71,7 +71,8 @@ final class AppStore: ObservableObject {
     func creationTitle(_ job: Generation) -> String {
         generations.last(where: { $0.creationID == job.creationID })?.title ?? job.title
     }
-    var busy: Bool { isRunning || isChecking || isPreparingWorkspace || isPreparingResources || isImportingImages }
+    var configurationBusy: Bool { isRunning || isChecking || isPreparingWorkspace || isPreparingResources }
+    var busy: Bool { configurationBusy || isImportingImages }
     var canReferenceImages: Bool { selectedModel == .qwenImage21 && !needsGeneralSetup && !isPreparingWorkspace && terminationCompletion == nil }
     var canAddImages: Bool { canReferenceImages && !isImportingImages }
     var needsGeneralSetup: Bool { !hasCompletedGeneralSetup || !settings.hasGeneralPaths }
