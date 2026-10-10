@@ -236,6 +236,7 @@ struct ComposerView: View {
                      placeholder: "描述你想生成的画面…",
                      onDropFiles: store.canAddImages ? { store.addInputImages($0) } : nil,
                      onDropHover: { editorDropTargeted = $0 },
+                     onPasteImages: store.receiveImagePaste,
                      onSubmit: { if store.canGenerate { store.generate() } })
             .frame(height: editorHeight)
     }

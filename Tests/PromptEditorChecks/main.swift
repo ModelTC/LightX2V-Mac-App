@@ -144,6 +144,58 @@ check(keyboardDraft == "\n\n后" && sentPrompts.count == 4, "prompt Shift+Return
 keyboardText("")
 keyboardEditor.insertText("粘贴第一行\n粘贴第二行", replacementRange: NSRange(location: NSNotFound, length: 0))
 check(keyboardDraft == "粘贴第一行\n粘贴第二行" && sentPrompts.count == 4, "prompt paste: embedded newlines never submit")
+
+// Exercise the same responder action used by Edit > Paste and Command+V.
+// Restore the user's clipboard after these native input checks.
+do {
+    let clipboard = NSPasteboard.general
+    let savedItems = (clipboard.pasteboardItems ?? []).map { item in
+        let saved = NSPasteboardItem()
+        for type in item.types { if let data = item.data(forType: type) { saved.setData(data, forType: type) } }
+        return saved
+    }
+    defer { clipboard.clearContents(); if !savedItems.isEmpty { clipboard.writeObjects(savedItems) } }
+    let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 40, pixelsHigh: 30, bitsPerSample: 8,
+                                 samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                                 bytesPerRow: 160, bitsPerPixel: 32)!
+    let png = bitmap.representation(using: .png, properties: [:])!
+    var pastedBatches: [[ImagePasteboard.Source]] = []
+    keyboardEditor.onPasteImages = { board in
+        guard ImagePasteboard.containsImages(board) else { return false }
+        pastedBatches.append(try! ImagePasteboard.read(board))
+        return true
+    }
+    keyboardText("保留提示词")
+    let copiedImage = NSImage(size: NSSize(width: 40, height: 30))
+    copiedImage.addRepresentation(bitmap)
+    clipboard.clearContents(); clipboard.writeObjects([copiedImage])
+    let pasteItem = NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+    check(keyboardEditor.validateUserInterfaceItem(pasteItem), "image paste: native Paste action is enabled for copied TIFF images")
+    keyboardEditor.paste(nil)
+    check(pastedBatches.count == 1 && pastedBatches[0].count == 1 && keyboardDraft == "保留提示词",
+          "image paste: copied NSImage becomes an attachment without replacing prompt")
+    let item = NSPasteboardItem()
+    item.setData(png, forType: .png); item.setData(copiedImage.tiffRepresentation!, forType: .tiff)
+    item.setString("https://example.test/photo.png", forType: .string)
+    clipboard.clearContents(); clipboard.writeObjects([item])
+    keyboardEditor.paste(nil)
+    check(pastedBatches.count == 2 && pastedBatches[1].count == 1 && keyboardDraft == "保留提示词",
+          "image paste: PNG/TIFF/text representations add one image and never insert its URL")
+    let controlV = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .control,
+                                   timestamp: 0, windowNumber: keyboardWindow.windowNumber, context: nil,
+                                   characters: "v", charactersIgnoringModifiers: "v", isARepeat: false, keyCode: 9)!
+    keyboardEditor.keyDown(with: controlV)
+    check(pastedBatches.count == 3 && keyboardDraft == "保留提示词" && sentPrompts.count == 4,
+          "image paste: Control+V routes to attachment paste without sending")
+    clipboard.clearContents(); clipboard.setString("第一行\n第二行", forType: .string)
+    keyboardEditor.paste(nil)
+    check(keyboardDraft == "保留提示词第一行\n第二行" && pastedBatches.count == 3 && sentPrompts.count == 4,
+          "text paste: multiline text still updates binding and never submits")
+    keyboardEditor.keyDown(with: controlV)
+    check(keyboardDraft.hasSuffix("第一行\n第二行第一行\n第二行") && pastedBatches.count == 3,
+          "text paste: Control+V also preserves ordinary text editing")
+    keyboardEditor.onPasteImages = nil
+}
 keyboardWindow.makeFirstResponder(nil)
 keyboardHost.removeFromSuperview()
 print("Prompt keyboard checks passed")

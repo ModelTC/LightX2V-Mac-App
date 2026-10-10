@@ -10,6 +10,7 @@ struct PromptEditor: NSViewRepresentable {
     var placeholder = "描述你想生成的画面…"
     var onDropFiles: (([URL]) -> Void)?
     var onDropHover: ((Bool) -> Void)?
+    var onPasteImages: ((NSPasteboard) -> Bool)?
     var onSubmit: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -43,6 +44,7 @@ struct PromptEditor: NSViewRepresentable {
         view.editor.placeholder = placeholder
         view.editor.onDropFiles = onDropFiles
         view.editor.onDropHover = onDropHover
+        view.editor.onPasteImages = onPasteImages
         // SwiftUI updates also occur while the IME is still selecting a candidate.
         // Never replace that live text storage or move its selection.
         if !view.editor.hasMarkedText(), view.editor.string != text {
@@ -154,6 +156,7 @@ final class PromptTextView: NSTextView {
     var placeholder = "描述你想生成的画面…" { didSet { if oldValue != placeholder { needsDisplay = true } } }
     var onDropFiles: (([URL]) -> Void)?
     var onDropHover: ((Bool) -> Void)?
+    var onPasteImages: ((NSPasteboard) -> Bool)?
     private var pointerArea: NSTrackingArea?
     var showsPlaceholder: Bool { string.isEmpty && !hasMarkedText() }
 
@@ -194,6 +197,10 @@ final class PromptTextView: NSTextView {
     override func keyDown(with event: NSEvent) {
         let isReturn = event.keyCode == 36 || event.keyCode == 76
         let modifiers = event.modifierFlags.intersection([.shift, .control, .option, .command])
+        if event.keyCode == 9, modifiers == .control {
+            if !event.isARepeat { paste(nil) }
+            return
+        }
         // Decide before the input method commits marked text. Checking only in
         // insertNewline would risk sending the Return used to confirm a candidate.
         if isReturn, !hasMarkedText() {
@@ -212,6 +219,22 @@ final class PromptTextView: NSTextView {
             }
         }
         super.keyDown(with: event)
+    }
+
+    override func paste(_ sender: Any?) {
+        guard isEditable else { return }
+        if onPasteImages?(NSPasteboard.general) == true { return }
+        super.paste(sender)
+        inputChanged()
+    }
+
+    override func pasteAsPlainText(_ sender: Any?) { paste(sender) }
+
+    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(paste(_:)), ImagePasteboard.containsImages(.general) {
+            return isEditable && onPasteImages != nil
+        }
+        return super.validateUserInterfaceItem(item)
     }
 
     override func draw(_ dirtyRect: NSRect) {

@@ -105,6 +105,7 @@ struct AppStateChecks {
         try await waitForImport()
         try check(store.inputImages.isEmpty && store.errorMessage != nil, "provider error is atomic and visible")
         store.errorMessage = nil
+        try await clipboardChecks(store: store, root: root, original: original)
         store.addInputImages([original]); try await waitForImport()
         let exitDraft = store.inputImages[0].path
         var exitCompleted = false

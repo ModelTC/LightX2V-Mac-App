@@ -57,7 +57,7 @@ final class AppStore: ObservableObject {
     private var canPersist = true
     private var draftImageDirectory: URL?
     private var draftCreationID = UUID()
-    private var pendingReferences: [URL] = []
+    private var pendingImageImports: [[ImagePasteboard.Source]] = []
 
     var selected: Generation? { generations.first { $0.id == selectedID } }
     var selectedCreation: [Generation] {
@@ -155,7 +155,25 @@ final class AppStore: ObservableObject {
         return true
     }
 
-    private func importImages(deduplicate: Bool = true, _ load: @escaping () async throws -> [URL]) {
+    /// Returning true consumes an image paste even when it is unavailable, so
+    /// file paths or a browser's image URL never replace the user's prompt.
+    func receiveImagePaste(_ pasteboard: NSPasteboard) -> Bool {
+        guard ImagePasteboard.containsImages(pasteboard) else { return false }
+        guard canReferenceImages else {
+            if selectedModel == nil { errorMessage = "请先选择模型，再添加参考图。" }
+            return true
+        }
+        do {
+            let sources = try ImagePasteboard.read(pasteboard)
+            guard !sources.isEmpty else { throw AppError.message("无法读取剪贴板图片，请重新复制。") }
+            pendingImageImports.append(sources)
+            importNextImageBatch()
+        } catch { errorMessage = error.localizedDescription }
+        return true
+    }
+
+    private func importImages(deduplicate: Bool = true, cleanup: (() -> Void)? = nil,
+                              _ load: @escaping () async throws -> [URL]) {
         guard canAddImages else { return }
         let directory = draftImageDirectory ?? WorkspaceLayout(settings.workingDirectory).temporary
             .appendingPathComponent("input-draft-" + UUID().uuidString)
@@ -163,7 +181,7 @@ final class AppStore: ObservableObject {
         let existing = inputImages
         isImportingImages = true
         Task {
-            defer { isImportingImages = false; importNextReference(); finishTerminationIfNeeded() }
+            defer { cleanup?(); isImportingImages = false; importNextImageBatch(); finishTerminationIfNeeded() }
             do {
                 let urls = try await load()
                 inputImages = try await Task.detached(priority: .userInitiated) {
@@ -184,7 +202,7 @@ final class AppStore: ObservableObject {
     }
 
     func clearInputImages() {
-        pendingReferences = []
+        pendingImageImports = []
         inputImages = []
         if let directory = draftImageDirectory { try? FileManager.default.removeItem(at: directory) }
         draftImageDirectory = nil
@@ -214,14 +232,20 @@ final class AppStore: ObservableObject {
 
     func reference(_ generation: Generation) {
         guard generation.status == .completed, canReferenceImages else { return }
-        pendingReferences.append(URL(fileURLWithPath: generation.request.output))
-        importNextReference()
+        pendingImageImports.append([.file(URL(fileURLWithPath: generation.request.output))])
+        importNextImageBatch()
     }
 
-    private func importNextReference() {
-        guard canAddImages, !pendingReferences.isEmpty else { return }
-        let url = pendingReferences.removeFirst()
-        importImages(deduplicate: false) { [url] }
+    private func importNextImageBatch() {
+        guard canAddImages, !pendingImageImports.isEmpty else { return }
+        let sources = pendingImageImports.removeFirst()
+        let staging = WorkspaceLayout(settings.workingDirectory).temporary
+            .appendingPathComponent("clipboard-" + UUID().uuidString)
+        importImages(deduplicate: false, cleanup: { try? FileManager.default.removeItem(at: staging) }) {
+            try await Task.detached(priority: .userInitiated) {
+                try ImagePasteboard.materialize(sources, in: staging)
+            }.value
+        }
     }
 
     func applyGeneralSettings(_ value: AppSettings) async throws {
