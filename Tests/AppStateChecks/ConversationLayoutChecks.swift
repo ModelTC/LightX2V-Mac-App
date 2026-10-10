@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 import LightX2VCore
 
-/// Exercise the real scrolling view with asynchronous image decoding. A single
-/// completed turn used to alternate between its loading and image layouts.
+/// Exercise the real scrolling view with asynchronous image decoding, reopening
+/// history and resizing before any user scroll.
 @MainActor
 func conversationLayoutChecks() async throws {
     let fm = FileManager.default
@@ -83,6 +83,8 @@ func conversationLayoutChecks() async throws {
     for size in [NSSize(width: 380, height: 350), NSSize(width: 1200, height: 900)] {
         window.setContentSize(size)
         try await settle("resize \(Int(size.width)) × \(Int(size.height))")
+        host.rootView = GenerationView().environmentObject(store)
+        try await settle("reopen completed history at \(Int(size.width)) points before scrolling")
         guard let scroll = descendantScroll(host), let document = scroll.documentView else {
             throw AppError.message("Conversation scroll view missing")
         }

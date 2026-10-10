@@ -244,6 +244,13 @@ struct ComposerView: View {
         HStack(spacing: 7) {
             if store.selectedModel == .qwenImage21 { attachmentButton }
             ModelSelector()
+            if store.selectedModel == nil {
+                Label("请先选择模型", systemImage: "arrow.left")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Palette.accent)
+                    .lineLimit(1)
+                    .accessibilityIdentifier("model-selection-reminder")
+            }
             Spacer()
             if store.isRunning {
                 Button { store.stop() } label: {
@@ -301,12 +308,32 @@ struct ModelSelector: View {
         .menuIndicator(.visible)
         .fixedSize()
         .padding(.horizontal, 8).frame(height: 30)
-        .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 7))
+        .foregroundStyle(store.selectedModel == nil ? Palette.accent : Palette.ink)
+        .background(store.selectedModel == nil ? Palette.accentSurface : Palette.surfaceSubtle,
+                    in: RoundedRectangle(cornerRadius: 7))
+        .overlay {
+            if store.selectedModel == nil { ModelSelectionRing() }
+        }
         .hoverSurface(radius: 7, border: false)
         .disabled(store.busy)
         .help("选择生成模型")
         .accessibilityLabel("选择模型")
         .accessibilityValue(store.selectedModel?.title ?? "未选择")
+    }
+}
+
+/// A quiet breathing outline draws attention without changing layout or hit areas.
+private struct ModelSelectionRing: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var bright = false
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 7)
+            .strokeBorder(Palette.accent.opacity(reduceMotion ? 0.8 : bright ? 0.9 : 0.35), lineWidth: 1)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: bright)
+            .onAppear { bright = true }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 
@@ -354,7 +381,10 @@ struct GenerationView: View {
         GeometryReader { geometry in
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 36) {
+                    // Image decoding changes a turn's height. Lay out the selected
+                    // conversation together so its drawing and hit regions update
+                    // in the same pass, without waiting for a scroll event.
+                    VStack(alignment: .leading, spacing: 36) {
                         ForEach(store.selectedCreation) { job in
                             GenerationTurnView(job: job, previewHeight: min(500, max(280, geometry.size.height - 235)))
                                 .id(job.id)
@@ -393,6 +423,8 @@ struct GenerationTurnView: View {
                 if job.status == .completed {
                     if let image {
                         Image(nsImage: image).resizable().scaledToFit()
+                            .frame(width: replyWidth, height: replyWidth * image.size.height / max(1, image.size.width))
+                            .contentShape(Rectangle())
                             .onDrag { NSItemProvider(object: URL(fileURLWithPath: job.request.output) as NSURL) }
                             .contextMenu {
                                 Button("复制") { store.copyImage(job) }
@@ -429,8 +461,7 @@ struct GenerationTurnView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: job.status == .completed ? job.request.output : nil) {
             guard job.status == .completed else { return }
-            // Lazy rows can appear again when their decoded image changes the
-            // scroll layout. Keep the completed preview across task restarts.
+            // Keep the completed preview across task restarts.
             guard loadedImagePath != job.request.output else { return }
             loadingImage = true
             let loaded = await LocalImagePreview.load(job.request.output, maximumDimension: 1800)

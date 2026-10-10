@@ -54,6 +54,9 @@ func creationChecks() async throws {
     #!/usr/bin/env python3
     import json, shutil, sys
     from pathlib import Path
+    if sys.argv[-2] == "check":
+        print(json.dumps({"type":"check", "ok":True, "message":"Fixture ready"}), flush=True)
+        sys.exit(0)
     request = json.load(open(sys.argv[-1]))
     fixture = "fixture-second.png" if request["prompt"] == "Independent second scene" else "fixture.png"
     shutil.copyfile(Path(__file__).with_name(fixture), request["output"])
@@ -135,6 +138,23 @@ func creationChecks() async throws {
     try check(reopened.recentCreations.count == 2 && reopened.selectedCreation.map(\.id) == [first.id, second.id, third.id, repeated.id, fourth.id],
               "relaunch restores conversation grouping and chronological turns")
     try check(reopened.creationTitle(fourth) == first.title, "creation title remains anchored to its first prompt")
+    try check(reopened.selectedModel == nil && !reopened.canReferenceImages && !reopened.canAddImages,
+              "relaunch keeps history references disabled until a model is selected")
+    reopened.prompt = "My fresh draft"
+    reopened.reference(second)
+    try check(reopened.selectedModel == nil && reopened.inputImages.isEmpty && !reopened.isImportingImages,
+              "reference cannot select a model or add an image while no model is selected")
+    reopened.selectModel(.qwenImage21)
+    try await wait({ reopened.isChecking })
+    reopened.reference(second); reopened.reference(second)
+    try await wait({ reopened.isImportingImages || reopened.isChecking })
+    try check(reopened.selectedModel == .qwenImage21 && reopened.inputImages.count == 2
+              && Set(reopened.inputImages.map(\.id)).count == 2,
+              "selecting Qwen enables repeated history references after relaunch")
+    try check(reopened.prompt == "My fresh draft" && reopened.selectedID == first.id
+              && reopened.recentCreations.count == 2 && reopened.errorMessage == nil,
+              "reference after relaunch preserves the draft and current conversation without errors")
+    reopened.clearInputImages()
     store.selectedID = first.id
     store.prompt = "Keep this draft"
     store.reference(first); try await wait({ store.isImportingImages })
