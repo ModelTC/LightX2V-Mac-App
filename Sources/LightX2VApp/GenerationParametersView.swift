@@ -40,22 +40,14 @@ struct GenerationParametersView: View {
                         .font(.system(size: 12, weight: .medium, design: .monospaced))
                     Text("px").font(.system(size: 9)).foregroundStyle(Palette.muted)
                 } else {
-                    Text(automaticSizeDescription).font(.system(size: 11, weight: .medium))
+                    Text("自动确定").font(.system(size: 11, weight: .medium))
                 }
             }
             .padding(.horizontal, 10).padding(.vertical, 10)
             .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("输出尺寸")
-            .accessibilityValue(store.generationSize.dimensions.map { "宽 \($0.width)，高 \($0.height) 像素" } ?? automaticSizeDescription)
-        }
-    }
-
-    private var automaticSizeDescription: String {
-        switch store.inputImages.count {
-        case 0: return "无参考图时为 1:1"
-        case 1: return "跟随参考图"
-        default: return "跟随最后一张参考图"
+            .accessibilityValue(store.generationSize.dimensions.map { "宽 \($0.width)，高 \($0.height) 像素" } ?? "自动确定")
         }
     }
 
@@ -76,7 +68,7 @@ private struct AspectRatioButton: View {
 
     private var title: String { ratio?.rawValue ?? "自适应" }
     private var sizeDescription: String {
-        guard let dimensions = ratio?.dimensions(at: resolution) else { return "由参考图确定比例，无参考图时为 1:1" }
+        guard let dimensions = ratio?.dimensions(at: resolution) else { return "由模型自动确定，无参考图时为 1:1" }
         return "\(dimensions.width) × \(dimensions.height) 像素"
     }
 
