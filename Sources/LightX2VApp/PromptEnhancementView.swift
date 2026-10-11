@@ -13,31 +13,21 @@ struct PromptEnhancementControl: View {
     @EnvironmentObject var store: AppStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Toggle(isOn: Binding(get: { store.settings.promptEnhancement.enabled }, set: store.setPromptEnhancementEnabled)) {
-                HStack {
-                    Label("Prompt 增强", systemImage: "sparkles")
-                        .font(.system(size: 11, weight: .medium))
-                    Spacer(minLength: 8)
-                }
-            }
-            .toggleStyle(.switch).controlSize(.mini).tint(Palette.button)
+        HStack(spacing: 10) {
+            Label("Prompt 增强", systemImage: "sparkles")
+                .font(.system(size: 11, weight: .medium))
+            Spacer(minLength: 8)
+            Button { store.showEnhancementSettings = true } label: {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 11)).foregroundStyle(Palette.muted)
+                    .frame(width: 26, height: 26)
+            }.buttonStyle(HoverButtonStyle(radius: 6)).help("配置 Prompt 增强")
+                .accessibilityLabel("配置 Prompt 增强").disabled(store.configurationBusy)
+            Toggle("Prompt 增强", isOn: Binding(get: { store.settings.promptEnhancement.enabled }, set: store.setPromptEnhancementEnabled))
+            .labelsHidden().fixedSize().toggleStyle(.switch).controlSize(.mini).tint(Palette.button)
             .accessibilityLabel("Prompt 增强")
             .disabled(store.configurationBusy).allowsHitTesting(!store.isImportingImages)
-            if store.settings.promptEnhancement.enabled {
-                HStack(spacing: 6) {
-                    Image(systemName: store.enhancementResourcesReady ? "checkmark.circle" : "exclamationmark.circle")
-                        .foregroundStyle(store.enhancementResourcesReady ? Palette.green : Palette.accent)
-                    Text(store.enhancementResourcesReady ? store.enhancementMode.title : "请配置增强资源")
-                        .font(.system(size: 10))
-                    Spacer(minLength: 0)
-                    Button { store.showEnhancementSettings = true } label: {
-                        Image(systemName: "slider.horizontal.3").frame(width: 24, height: 24)
-                    }.buttonStyle(HoverButtonStyle(radius: 5)).help("配置 Prompt 增强")
-                        .accessibilityLabel("配置 Prompt 增强").disabled(store.configurationBusy)
-                }.font(.system(size: 10)).foregroundStyle(Palette.muted)
-            }
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 12).padding(.vertical, 10)
             .background(Palette.surface, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Palette.line, lineWidth: 1))
     }
@@ -116,7 +106,13 @@ struct PromptEnhancementMessageView: View {
     let reply: PromptEnhancementReply
     let thinkingStream: EnhancementTextStream
     let promptStream: EnhancementTextStream
-    @State private var showsThinking = true
+    @State private var showsThinking: Bool
+
+    init(job: Generation, reply: PromptEnhancementReply, thinkingStream: EnhancementTextStream, promptStream: EnhancementTextStream) {
+        self.job = job; self.reply = reply
+        self.thinkingStream = thinkingStream; self.promptStream = promptStream
+        _showsThinking = State(initialValue: reply.status == .thinking)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -139,6 +135,11 @@ struct PromptEnhancementMessageView: View {
             }
             EnhancedPromptBody(job: job, reply: reply, stream: promptStream)
         }.frame(maxWidth: .infinity, alignment: .leading)
+            .onChange(of: reply.status) { previous, current in
+                // Collapse once when thinking ends. A manual reopening during
+                // rewriting remains open when the prompt or image completes.
+                if previous == .thinking && current != .thinking { showsThinking = false }
+            }
     }
 }
 

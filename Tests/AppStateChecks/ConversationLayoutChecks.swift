@@ -205,6 +205,11 @@ func conversationLayoutChecks() async throws {
     try checkBottom("visible thinking", in: workspaceHost)
     store.generations[0].enhancement?.status = .rewriting
     try await settle("thinking switches to streamed prompt", in: workspaceHost)
+    guard beforeStreamingHeight - descendantScroll(workspaceHost)!.documentView!.frame.height >= 190 else {
+        throw AppError.message("Thinking panel did not automatically collapse when rewriting began")
+    }
+    print("PASS the thinking panel automatically collapses before rewritten prompt streaming")
+    try checkBottom("automatic thinking collapse", in: workspaceHost)
     let promptStream = store.promptStream(for: store.generations[0])
     for _ in 0..<20 {
         promptStream.text += "A natural scene with warm light and realistic materials. "
@@ -250,6 +255,10 @@ func conversationLayoutChecks() async throws {
     try await Task.sleep(for: .milliseconds(900))
     try checkBottom("reopened enhanced history before layout polling", in: workspaceHost)
     try await settle("reopen enhanced history with asynchronous image decoding", in: workspaceHost)
+    guard descendantScroll(workspaceHost)!.documentView!.frame.height == enhancedHeight else {
+        throw AppError.message("Completed enhancement history reopened with an expanded thinking panel")
+    }
+    print("PASS completed enhancement history opens with thinking collapsed")
 }
 
 @MainActor

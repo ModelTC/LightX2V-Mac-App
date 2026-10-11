@@ -451,8 +451,6 @@ struct GenerationTurnView: View {
                     VStack(spacing: 17) {
                         ProgressView().controlSize(.regular).tint(Palette.ink)
                         Text(store.phase).font(.system(size: 13, weight: .medium))
-                        Text("模型按需载入内存，首次生成可能需要几分钟。")
-                            .font(.system(size: 11)).foregroundStyle(Palette.muted)
                         HStack(spacing: 5) {
                             ForEach(1...6, id: \.self) { index in
                                 Capsule().fill(index < store.currentStep ? Palette.ink : index == store.currentStep ? Palette.ink.opacity(0.45) : Palette.line)
