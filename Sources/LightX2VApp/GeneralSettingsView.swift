@@ -28,7 +28,6 @@ struct SettingsView: View {
     @State private var installLines: [String] = []
     @State private var installError: String?
     @State private var installCancelled = false
-    @State private var manualRequirements: URL?
 
     private var layout: WorkspaceLayout { WorkspaceLayout(normalized(settings.workingDirectory)) }
     private var hasWorkDirectory: Bool { (try? WorkspaceLayout.validate(normalized(settings.workingDirectory))) != nil }
@@ -179,13 +178,10 @@ struct SettingsView: View {
                                   settings.python = environment.executable
                                   updateGuide(); store.setupTask?.cancel(); showEnvironments = false
                               }, onSearch: startSearch, onStop: { store.setupTask?.cancel() },
-                              onInstructions: showInstructions, onInstall: startInstall,
+                              onInstructions: { showInstallInstructions = true }, onInstall: startInstall,
                               onClose: { store.setupTask?.cancel(); showEnvironments = false })
             .sheet(isPresented: $showInstallInstructions) {
-                if let manualRequirements {
-                    EnvironmentInstallInstructions(workspace: layout, requirements: manualRequirements,
-                                                   onClose: { showInstallInstructions = false })
-                }
+                EnvironmentInstallInstructions(onClose: { showInstallInstructions = false })
             }
             .sheet(isPresented: $showInstaller, onDismiss: { if installing { store.setupTask?.cancel() } }) {
                 EnvironmentInstallView(workspace: layout, progress: installProgress, lines: installLines,
@@ -250,14 +246,6 @@ struct SettingsView: View {
     private var bundledRequirements: URL? {
         Bundle.main.url(forResource: "requirements", withExtension: "txt")
             ?? Bundle.module.url(forResource: "requirements", withExtension: "txt")
-    }
-
-    private func showInstructions() {
-        do {
-            guard let bundledRequirements else { throw AppError.message("APP 中的依赖文件缺失，请重新下载 APP。") }
-            manualRequirements = try PyTorchEnvironmentInstaller.prepareRequirements(bundledRequirements, workspace: layout)
-            showInstallInstructions = true
-        } catch { searchError = error.localizedDescription }
     }
 
     private func startInstall() {

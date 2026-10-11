@@ -43,8 +43,7 @@ func environmentPresentationChecks() async throws {
     try await render("searching", search([], searching: true))
     try await render("no-matching-environment", search([old]))
     try await render("ready-environment", search([ready]))
-    try await render("manual-instructions", EnvironmentInstallInstructions(workspace: layout,
-                         requirements: layout.root.appendingPathComponent("environments/requirements.txt"), onClose: {}))
+    try await render("manual-instructions", EnvironmentInstallInstructions(onClose: {}))
     for (name, progress, installing, cancelled, error) in [
         ("installing", EnvironmentInstallProgress(.dependencies), true, false, Optional<String>.none),
         ("cancelled", EnvironmentInstallProgress(.dependencies), false, true, nil),

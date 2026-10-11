@@ -126,30 +126,31 @@ private struct EnvironmentResultRow: View {
 }
 
 struct EnvironmentInstallInstructions: View {
-    let workspace: WorkspaceLayout
-    let requirements: URL
     let onClose: () -> Void
     private var commands: String {
-        func quote(_ value: String) -> String { "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'" }
         return """
-        LIGHTX2V_WORKSPACE=\(quote(workspace.root.path))
-        python3.11 -m venv "$LIGHTX2V_WORKSPACE/envs/TorchLightX2V"
-        LIGHTX2V_PYTHON="$LIGHTX2V_WORKSPACE/envs/TorchLightX2V/bin/python"
-        "$LIGHTX2V_PYTHON" -m pip install --upgrade pip
-        "$LIGHTX2V_PYTHON" -m pip install -r "$LIGHTX2V_WORKSPACE/environments/requirements.txt"
-        "$LIGHTX2V_PYTHON" -m pip check
+        pip install torch torchvision torchaudio transformers diffusers -U
+        pip install loguru
+        pip install imageio
+        pip install imageio_ffmpeg
+        pip install safetensors
+        pip install einops
+        pip install gguf
+        pip install opencv-python
+        pip install prometheus_client
+        pip install pydantic
         """
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("自行安装 PyTorch 环境").font(.system(size: 18, weight: .semibold))
-            Text("准备 Apple Silicon 版 Python 3.11，在终端执行以下命令。")
+            Text("自行安装依赖").font(.system(size: 18, weight: .semibold))
+            Text("准备好 Python 3.11 环境，在该环境中执行以下命令。")
                 .font(.system(size: 12)).foregroundStyle(Palette.muted)
             ScrollView([.vertical, .horizontal]) {
                 Text(commands).font(.system(size: 11, design: .monospaced)).lineSpacing(7)
                     .textSelection(.enabled).fixedSize(horizontal: true, vertical: true).padding(14)
-            }.frame(height: 190).background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10)).subtleScrollbars()
-            Text("已将完整依赖文件存入工作目录 / environments / requirements.txt。安装完成后，返回并点击“搜索本机环境”。")
+            }.frame(height: 240).background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10)).subtleScrollbars()
+            Text("安装完成后，返回 APP 点击“搜索本机环境”，选择该环境。")
                 .font(.system(size: 11)).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true).lineSpacing(3)
             HStack {
                 Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(commands, forType: .string) } label: {
