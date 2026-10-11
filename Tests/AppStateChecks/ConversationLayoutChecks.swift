@@ -13,6 +13,7 @@ func conversationLayoutChecks() async throws {
     let layout = WorkspaceLayout(root.appendingPathComponent("workspace").path)
     try layout.prepare()
     var settings = AppSettings.defaults
+    settings.promptEnhancement.enabled = false // The first turns exercise ordinary image replies.
     settings.workingDirectory = layout.root.path
     settings.repository = root.appendingPathComponent("fake-source").path
     settings.python = "/usr/bin/false"
@@ -184,20 +185,24 @@ func conversationLayoutChecks() async throws {
                                          seed: 3, output: square.path, resolution: 1024)
     let enhanced = Generation(creationID: creationID, request: peRequest)
     store.generations.insert(enhanced, at: 0); store.selectedID = enhanced.id
-    try await settle("enhancement starts with thinking hidden", in: workspaceHost)
+    try await settle("enhancement starts with thinking visible", in: workspaceHost)
     let stream = store.thinkingStream(for: enhanced)
-    let beforeStreamingLayouts = workspaceHost.layoutCount
     let beforeStreamingHeight = descendantScroll(workspaceHost)!.documentView!.frame.height
+    let beforeStreamingOffset = descendantScroll(workspaceHost)!.contentView.bounds.origin.y
     for index in 0..<40 {
         stream.text += "Thinking fragment \(index). 保留原始构图与光线。\n"
         workspaceHost.layoutSubtreeIfNeeded()
         try await Task.sleep(for: .milliseconds(15))
     }
-    guard workspaceHost.layoutCount - beforeStreamingLayouts < 3,
-          descendantScroll(workspaceHost)!.documentView!.frame.height == beforeStreamingHeight else {
-        throw AppError.message("Hidden thinking updates invalidated workspace layout")
+    // Visible text needs layout as its internal scroll document grows. Its
+    // bounded panel must not resize or shift the enclosing conversation.
+    guard descendantScroll(workspaceHost)!.documentView!.frame.height == beforeStreamingHeight,
+          abs(descendantScroll(workspaceHost)!.contentView.bounds.origin.y - beforeStreamingOffset) < 1 else {
+        throw AppError.message("Visible thinking updates resized or shifted the conversation")
     }
-    print("PASS hidden thinking stream does not relayout the window or inspector")
+    print("PASS visible thinking stream does not resize or shift the conversation")
+    try await settle("visible thinking stops updating without a layout loop", in: workspaceHost)
+    try checkBottom("visible thinking", in: workspaceHost)
     store.generations[0].enhancement?.status = .rewriting
     try await settle("thinking switches to streamed prompt", in: workspaceHost)
     let promptStream = store.promptStream(for: store.generations[0])

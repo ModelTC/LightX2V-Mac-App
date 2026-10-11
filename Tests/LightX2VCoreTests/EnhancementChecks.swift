@@ -23,9 +23,16 @@ func enhancementChecks() throws {
     }
     let projector = try file("models/Qwen/Qwen-Image-2.1-PE-I2I-GGUF/mmproj-Qwen-Image-2.1-PE-I2I-F16.gguf")
     var settings = AppSettings.defaults
+    try expect(settings.promptEnhancement.enabled, "new configuration enables prompt enhancement by default")
+    let defaultRequest = try InferenceRequest(settings: settings, prompt: "Original 中文", width: 512, height: 512, seed: 42, output: "/tmp/image.png")
+    try expect(defaultRequest.promptEnhancement?.enabled == true && Generation(request: defaultRequest).enhancement?.mode == .t2i,
+               "default submission includes enhancement before image inference")
+    settings.promptEnhancement.enabled = false
     let off = try InferenceRequest(settings: settings, prompt: "Original 中文", width: 512, height: 512, seed: 42, output: "/tmp/image.png")
     let offJSON = try JSONSerialization.jsonObject(with: JSONEncoder().encode(off)) as! [String: Any]
     try expect(offJSON["promptEnhancement"] == nil && !settings.promptEnhancement.enabled, "off requests must preserve the existing protocol")
+    let disabled = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
+    try expect(!disabled.promptEnhancement.enabled, "an explicitly disabled enhancement stays disabled after restoring settings")
     settings.promptEnhancement.discover(near: [URL(fileURLWithPath: model).deletingLastPathComponent().path, source])
     try expect(settings.promptEnhancement.runtimeDirectory == URL(fileURLWithPath: binary).deletingLastPathComponent().path, "nested source/model should discover script resource layout")
     try settings.promptEnhancement.validate(for: .t2i)

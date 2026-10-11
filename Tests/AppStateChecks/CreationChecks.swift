@@ -38,8 +38,9 @@ func creationChecks() async throws {
     try layout.prepare()
     try png(64, at: outputFixture)
     try png(66, at: root.appendingPathComponent("fixture-second.png"))
-    let settings = AppSettings(repository: source.path, model: model.path, config: config.path,
+    var settings = AppSettings(repository: source.path, model: model.path, config: config.path,
                                python: executable.path, workingDirectory: workspace.path)
+    settings.promptEnhancement.enabled = false // This fixture exercises ordinary image inference.
     setenv("LIGHTX2V_APP_STATE_DIR", support.path, 1)
     try JSONFile.write(WorkspaceData(settings: settings, hasCompletedGeneralSetup: true), to: layout.state)
     try JSONFile.write(WorkspaceLocation(workingDirectory: workspace.path), to: support.appendingPathComponent("workspace_location.json"))

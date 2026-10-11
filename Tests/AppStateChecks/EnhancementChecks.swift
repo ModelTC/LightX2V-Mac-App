@@ -72,9 +72,8 @@ func enhancementStateChecks() async throws {
     try JSONFile.write(WorkspaceLocation(workingDirectory: settings.workingDirectory), to: support.appendingPathComponent("workspace_location.json"))
     let store = AppStore(); store.selectModel(.qwenImage21)
     try await wait({ store.isChecking }); store.environmentReady = true
-    store.setPromptEnhancementEnabled(true)
     try await wait({ !store.enhancementResourcesReady })
-    try check(store.settings.promptEnhancement.enabled && store.enhancementResourcesReady, "enhancement switch persists and detects text resources")
+    try check(store.settings.promptEnhancement.enabled && store.enhancementResourcesReady, "enhancement is enabled by default and detects text resources without toggling")
     store.prompt = "Original input"; store.generate()
     try check(store.isRunning && store.prompt.isEmpty && store.selected?.enhancement?.mode == .t2i, "text submission starts enhancement and clears only draft")
     try await wait({ store.selected.map { store.promptStream(for: $0).text.isEmpty } == true })
@@ -125,6 +124,8 @@ func enhancementStateChecks() async throws {
               "relaunch restores incomplete prompt text with its failure status")
     store.setPromptEnhancementEnabled(false); store.prompt = "Off input"; store.generate(); try await wait({ store.isRunning })
     try check(store.selected?.status == .completed && store.selected?.enhancement == nil && store.selected?.request.promptEnhancement == nil, "switch off returns to the original generation flow")
+    let reopenedOff = AppStore()
+    try check(!reopenedOff.settings.promptEnhancement.enabled, "relaunch preserves an explicitly disabled enhancement")
     store.setPromptEnhancementEnabled(true)
     store.settings.promptEnhancement.t2iModel = "/missing/model.gguf"
     store.prompt = "Keep draft"; let count = store.generations.count; store.generate()

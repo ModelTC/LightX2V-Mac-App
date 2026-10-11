@@ -9,9 +9,10 @@ func realInferenceChecks(_ arguments: [String]) async throws {
     let root = URL(fileURLWithPath: arguments[3])
     let fm = FileManager.default
     guard !fm.fileExists(atPath: root.path) else { throw AppError.message("Choose a new test results folder") }
-    let settings = AppSettings(repository: arguments[0], model: arguments[1],
+    var settings = AppSettings(repository: arguments[0], model: arguments[1],
                                config: arguments[0] + "/configs/platforms/mps/qwen_image_21_viggle_v03.json",
                                python: arguments[2], workingDirectory: root.appendingPathComponent("workspace, 中文").path)
+    settings.promptEnhancement.enabled = false // This check runs image inference without enhancement resources.
     let support = root.appendingPathComponent("support")
     setenv("LIGHTX2V_APP_STATE_DIR", support.path, 1)
     let layout = WorkspaceLayout(settings.workingDirectory)

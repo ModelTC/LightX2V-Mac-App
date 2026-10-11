@@ -8,7 +8,7 @@ public enum PromptEnhancementMode: String, Codable {
 
 /// Explicit local resources, snapshotted per run; no implicit PATH or shell.
 public struct PromptEnhancementSettings: Codable, Equatable {
-    public var enabled = false
+    public var enabled = true
     public var runtimeDirectory = ""
     public var t2iModel = ""
     public var t2iSystemPrompt = ""

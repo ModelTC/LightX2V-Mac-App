@@ -34,6 +34,7 @@ struct AppStateChecks {
         let layout = WorkspaceLayout(workspace.path)
         try layout.prepare()
         var settings = AppSettings.defaults
+        settings.promptEnhancement.enabled = false // This fixture exercises ordinary image inference.
         settings.workingDirectory = workspace.path
         settings.repository = root.appendingPathComponent("fake-source").path
         settings.python = "/usr/bin/false"

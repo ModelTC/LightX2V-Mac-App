@@ -116,7 +116,7 @@ struct PromptEnhancementMessageView: View {
     let reply: PromptEnhancementReply
     let thinkingStream: EnhancementTextStream
     let promptStream: EnhancementTextStream
-    @State private var showsThinking = false
+    @State private var showsThinking = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
