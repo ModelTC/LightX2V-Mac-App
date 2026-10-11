@@ -198,6 +198,31 @@ func conversationLayoutChecks() async throws {
         throw AppError.message("Hidden thinking updates invalidated workspace layout")
     }
     print("PASS hidden thinking stream does not relayout the window or inspector")
+    store.generations[0].enhancement?.status = .rewriting
+    try await settle("thinking switches to streamed prompt", in: workspaceHost)
+    let promptStream = store.promptStream(for: store.generations[0])
+    for _ in 0..<20 {
+        promptStream.text += "A natural scene with warm light and realistic materials. "
+        try await Task.sleep(for: .milliseconds(100))
+    }
+    try await settle("rewritten prompt grows progressively", in: workspaceHost)
+    try checkBottom("streamed rewritten prompt", in: workspaceHost)
+    let peScroll = descendantScroll(workspaceHost)!
+    peScroll.contentView.scroll(to: .zero)
+    peScroll.reflectScrolledClipView(peScroll.contentView)
+    NotificationCenter.default.post(name: NSScrollView.didLiveScrollNotification, object: peScroll)
+    for _ in 0..<10 {
+        promptStream.text += "Keep the original composition and natural light. "
+        try await Task.sleep(for: .milliseconds(80))
+    }
+    try await settle("read older replies while prompt streams", in: workspaceHost)
+    guard peScroll.contentView.bounds.origin.y < 2 else {
+        throw AppError.message("Streamed prompt pulled the reader away from older replies")
+    }
+    print("PASS prompt streaming preserves the reader's position")
+    peScroll.contentView.scroll(to: NSPoint(x: 0, y: max(0, peScroll.documentView!.frame.height - peScroll.contentView.bounds.height)))
+    peScroll.reflectScrolledClipView(peScroll.contentView)
+    NotificationCenter.default.post(name: NSScrollView.didLiveScrollNotification, object: peScroll)
     store.generations[0].enhancement?.prompt = String(repeating: "A natural scene with warm light and realistic materials. ", count: 18)
     store.generations[0].enhancement?.thinking = stream.text
     store.generations[0].enhancement?.status = .completed

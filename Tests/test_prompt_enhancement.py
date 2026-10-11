@@ -27,6 +27,56 @@ class StreamTests(unittest.TestCase):
             self.assertEqual(stream.thinking.strip(), "思考 🐈，保留构图。")
             self.assertEqual(''.join(e['delta'] for e in events if e['type'] == 'enhancement_thinking').strip(), stream.thinking.strip())
             self.assertEqual(len([e for e in events if e['type'] == 'enhancement_phase']), 1)
+            self.assertEqual(''.join(e['delta'] for e in events if e['type'] == 'enhancement_prompt'), 'a cat')
+
+    def test_prompt_stream_decodes_all_json_escapes_at_every_boundary(self):
+        prompt = '中文 🐈 “光影”\n"quoted" \\ path /\t\r\b\f End'
+        for ascii_only in [False, True]:
+            for first in [True, False]:
+                fields = dict(rewritten_prompt=prompt, wh_ratio='3:2', ratio_follow='')
+                if not first: fields = dict(wh_ratio='3:2', ratio_follow='', rewritten_prompt=prompt)
+                answer = json.dumps(fields, ensure_ascii=ascii_only)
+                answer = answer.replace('rewritten_prompt', r'rewritten_\u0070rompt')
+                source = '分析</think>\n' + answer
+                for width in range(1, 40):
+                    events = []
+                    stream = ThinkingStream(lambda kind, **kw: events.append(dict(type=kind, **kw)))
+                    for offset in range(0, len(source), width):
+                        stream.feed(source[offset:offset + width])
+                    stream.finish()
+                    actual = ''.join(e['delta'] for e in events if e['type'] == 'enhancement_prompt')
+                    self.assertEqual(actual, prompt, (ascii_only, first, width))
+                    # No dangling surrogate halves may reach NDJSON / Swift.
+                    actual.encode('utf-8')
+
+    def test_prompt_is_visible_before_json_and_model_output_complete(self):
+        events = []
+        stream = ThinkingStream(lambda kind, **fields: events.append(dict(type=kind, **fields)))
+        stream.feed('思考</think>{"rewritten_prompt":"A quiet forest')
+        self.assertEqual(''.join(e['delta'] for e in events if e['type'] == 'enhancement_prompt'), 'A quiet forest')
+        self.assertFalse(any(e['type'] == 'enhancement_result' for e in events))
+        with self.assertRaises(ValueError): parse_result(stream.raw, 't2i', 0)
+        stream.feed(' at sunrise","wh_ratio":"1:1"}[end of text]')
+        stream.finish()
+        self.assertEqual(''.join(e['delta'] for e in events if e['type'] == 'enhancement_prompt'), 'A quiet forest at sunrise')
+
+    def test_metadata_never_leaks_into_prompt_and_incomplete_escape_is_withheld(self):
+        events = []
+        stream = ThinkingStream(lambda kind, **fields: events.append(dict(type=kind, **fields)))
+        stream.feed('思考</think>{"wh_ratio":"rewritten_prompt","rewritten_prompt":"A dog \\uD83D')
+        stream.finish()
+        self.assertEqual(''.join(e['delta'] for e in events if e['type'] == 'enhancement_prompt'), 'A dog ')
+        stream.feed('\\uDC15","ratio_follow":""}')
+        stream.finish()
+        self.assertEqual(''.join(e['delta'] for e in events if e['type'] == 'enhancement_prompt'), 'A dog 🐕')
+
+    def test_malformed_surrogates_and_duplicate_keys_are_rejected(self):
+        for value in [r'\uD83D!', r'\uDC15', r'\uD83D\n']:
+            stream = ThinkingStream(lambda *args, **kwargs: None)
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                stream.feed('思考</think>{"rewritten_prompt":"' + value + '"}')
+        with self.assertRaises(ValueError):
+            parse_result('thought</think>{"rewritten_prompt":"one","rewritten_prompt":"two","wh_ratio":"1:1"}[end of text]', 't2i', 0)
 
     def test_incomplete_and_invalid_outputs_are_rejected(self):
         invalid = ["still thinking", 'thought</think>{"rewritten_prompt":"x","wh_ratio":"1:1"}',
@@ -70,12 +120,17 @@ if scenario=='sleep':
     (root/'enhancer.pid').write_text(str(os.getpid()))
     print('开始思考',flush=True); time.sleep(60)
 if scenario=='fail': sys.exit(7)
+if scenario=='sleep_rewriting':
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    (root/'enhancer.pid').write_text(str(os.getpid()))
+    print('思考</think>{"rewritten_prompt":"A partial dog scene',end='',flush=True); time.sleep(60)
 mode='i2i' if '--mmproj' in args else 't2i'
 result={'rewritten_prompt':'Enhanced 中文 prompt; $(touch forbidden) `echo no`','wh_ratio':'3:2'}
 if mode=='i2i': result.update(wh_ratio='',ratio_follow='<image1>')
 text='正在思考 🐈，保留构图。</think>\\n'+json.dumps(result,ensure_ascii=False)+('[end of text]' if mode=='t2i' else '')
 if scenario=='bad': text='思考</think>{oops}'
 if scenario=='partial': text=text.replace('</think>','')
+if scenario=='truncated': text=text[:text.index('prompt;')]
 for byte in text.encode():
     os.write(sys.stdout.fileno(), bytes([byte])); time.sleep(.001)
 '''
@@ -131,10 +186,12 @@ class EnhancementPipelineTests(unittest.TestCase):
     def test_text_enhancement_precedes_generation_and_preserves_original(self):
         events = self.run_pipeline()
         types = [e['type'] for e in events]
+        self.assertLess(types.index('enhancement_prompt'), types.index('enhancement_result'))
         self.assertLess(types.index('enhancement_result'), types.index('step'))
         self.assertEqual(events[-1]['status'], 'completed')
         received = json.loads((self.root/'run/received.json').read_text())
         self.assertEqual(received['prompt'], 'Enhanced 中文 prompt; $(touch forbidden) `echo no`')
+        self.assertEqual(''.join(e['delta'] for e in events if e['type'] == 'enhancement_prompt'), received['prompt'])
         self.assertEqual(received['aspect_ratio'], '3:2')
         self.assertIsNone(received['size'])
         self.assertEqual(json.loads(self.request_path.read_text())['prompt'], 'Original 中文')
@@ -153,7 +210,9 @@ class EnhancementPipelineTests(unittest.TestCase):
 
     def test_reference_enhancement_preserves_order_duplicates_and_canvas(self):
         self.attach_images()
-        self.run_pipeline()
+        events = self.run_pipeline()
+        self.assertEqual(''.join(e['delta'] for e in events if e['type'] == 'enhancement_prompt'),
+                         next(e['prompt'] for e in events if e['type'] == 'enhancement_result'))
         args = json.loads((self.root/'run/enhancer-args.json').read_text())
         paths = [args[i+1] for i,v in enumerate(args) if v=='--image']
         self.assertEqual(paths, ['inputs/reference-1.png','inputs/reference-2.png','inputs/reference-1.png'])
@@ -187,7 +246,7 @@ class EnhancementPipelineTests(unittest.TestCase):
         self.assertEqual(json.loads((self.root/'run/received.json').read_text())['prompt'],'Original 中文')
 
     def test_failed_or_partial_enhancement_never_launches_generation(self):
-        for scenario in ['bad','fail','partial']:
+        for scenario in ['bad','fail','partial','truncated']:
             self.set_scenario(scenario)
             child = self.start(); out, err = child.communicate(timeout=15)
             self.assertEqual(child.returncode,1,err+out)
@@ -208,6 +267,26 @@ class EnhancementPipelineTests(unittest.TestCase):
             deadline = time.monotonic()+8
             while not (self.root/'run/enhancer.pid').exists() and time.monotonic()<deadline:
                 time.sleep(.02)
+            pid = int((self.root/'run/enhancer.pid').read_text())
+            child.terminate(); out, err = child.communicate(timeout=8)
+            self.assertEqual(child.returncode,130,err+out)
+            self.assertEqual(json.loads(out.splitlines()[-1])['status'],'cancelled')
+            self.assertFalse((self.root/'run/received.json').exists())
+            with self.assertRaises(ProcessLookupError): os.kill(pid,0)
+        finally:
+            if child.poll() is None: child.kill(); child.wait()
+
+    def test_streamed_partial_prompt_can_be_cancelled_without_starting_image_model(self):
+        self.set_scenario('sleep_rewriting')
+        child = self.start()
+        try:
+            events = []
+            for line in child.stdout:
+                events.append(json.loads(line))
+                if events[-1]['type'] == 'enhancement_prompt': break
+            self.assertEqual(events[-1]['delta'].strip(), 'A partial dog scene')
+            self.assertIsNone(child.poll())
+            self.assertFalse((self.root/'run/received.json').exists())
             pid = int((self.root/'run/enhancer.pid').read_text())
             child.terminate(); out, err = child.communicate(timeout=8)
             self.assertEqual(child.returncode,130,err+out)

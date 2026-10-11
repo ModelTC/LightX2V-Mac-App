@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import LightX2VCore
 
 @MainActor
@@ -38,7 +39,12 @@ func enhancementStateChecks() async throws {
         if source=='STOP_ENHANCEMENT': time.sleep(60)
         if source=='FAIL_ENHANCEMENT':
             emit('done',status='failed',message='fixture enhancement failed'); sys.exit(1)
-        emit('enhancement_phase',phase='rewriting'); time.sleep(.1)
+        emit('enhancement_phase',phase='rewriting'); time.sleep(.05)
+        emit('enhancement_prompt',delta='Enhanced '); time.sleep(.2)
+        if source=='STOP_REWRITING': time.sleep(60)
+        if source=='FAIL_REWRITING':
+            emit('done',status='failed',message='fixture truncated prompt'); sys.exit(1)
+        emit('enhancement_prompt',delta=source); time.sleep(.2)
         emit('enhancement_result',prompt='Enhanced '+source,whRatio='3:2',ratioFollow='',duration=.2)
         time.sleep(.2)
     shutil.copyfile(Path(__file__).with_name('fixture.png'),request['output'])
@@ -71,10 +77,21 @@ func enhancementStateChecks() async throws {
     try check(store.settings.promptEnhancement.enabled && store.enhancementResourcesReady, "enhancement switch persists and detects text resources")
     store.prompt = "Original input"; store.generate()
     try check(store.isRunning && store.prompt.isEmpty && store.selected?.enhancement?.mode == .t2i, "text submission starts enhancement and clears only draft")
+    try await wait({ store.selected.map { store.promptStream(for: $0).text.isEmpty } == true })
+    try check(store.selected?.enhancement?.status == .rewriting && store.selected?.enhancement?.prompt == nil
+              && store.promptStream(for: store.selected!).text == "Enhanced " && !fm.fileExists(atPath: store.selected!.request.output),
+              "enhanced prompt streams before the validated result and image reply")
+    var publications = 0
+    let observer = store.objectWillChange.sink { publications += 1 }
+    try await wait({ store.promptStream(for: store.selected!).text == "Enhanced " })
+    observer.cancel()
+    try check(publications == 0, "prompt deltas do not republish the workspace or inspector")
     try await wait({ store.selected?.enhancement?.prompt == nil && store.isRunning })
     let enhanced = store.selected!
     try check(enhanced.request.prompt == "Original input" && enhanced.enhancement?.prompt == "Enhanced Original input" && enhanced.enhancement?.thinking == "思考 🐈" && enhanced.status == .running,
               "first reply finishes with original prompt intact before second image reply")
+    try check(store.promptStream(for: enhanced).text == enhanced.enhancement?.prompt,
+              "validated prompt reconciles with its streamed text without duplication")
     store.setPromptEnhancementEnabled(false)
     try check(store.settings.promptEnhancement.enabled, "enhancement cannot change midway through a run")
     try await wait({ store.isRunning })
@@ -94,6 +111,18 @@ func enhancementStateChecks() async throws {
     try await wait({ store.selected.map { store.thinkingStream(for: $0).text.isEmpty } == true })
     store.stop(); try await wait({ store.isRunning })
     try check(store.selected?.status == .cancelled && store.selected?.enhancement?.status == .cancelled && store.selected?.enhancement?.thinking == "思考 🐈", "stop during thinking preserves partial reply and cancels image generation")
+    store.prompt = "STOP_REWRITING"; store.generate()
+    try await wait({ store.selected.map { store.promptStream(for: $0).text.isEmpty } == true })
+    store.stop(); try await wait({ store.isRunning })
+    try check(store.selected?.enhancement?.status == .cancelled && store.selected?.enhancement?.prompt == "Enhanced "
+              && !fm.fileExists(atPath: store.selected!.request.output), "stop during prompt streaming preserves partial text without generating an image")
+    store.prompt = "FAIL_REWRITING"; store.generate(); try await wait({ store.isRunning })
+    let failed = store.selected!
+    try check(failed.enhancement?.status == .failed && failed.enhancement?.prompt == "Enhanced " && !fm.fileExists(atPath: failed.request.output),
+              "truncated prompt keeps visible text but is never marked complete")
+    let reopenedPartial = AppStore(); reopenedPartial.selectedID = failed.id
+    try check(reopenedPartial.selected?.enhancement?.status == .failed && reopenedPartial.promptStream(for: reopenedPartial.selected!).text == "Enhanced ",
+              "relaunch restores incomplete prompt text with its failure status")
     store.setPromptEnhancementEnabled(false); store.prompt = "Off input"; store.generate(); try await wait({ store.isRunning })
     try check(store.selected?.status == .completed && store.selected?.enhancement == nil && store.selected?.request.promptEnhancement == nil, "switch off returns to the original generation flow")
     store.setPromptEnhancementEnabled(true)

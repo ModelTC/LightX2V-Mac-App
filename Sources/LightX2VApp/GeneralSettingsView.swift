@@ -6,6 +6,7 @@ struct SettingsView: View {
     @EnvironmentObject var store: AppStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @FocusState private var headerFocused: Bool
     @Namespace private var guideAnimation
     @State var settings: AppSettings
     @State private var setupProgress = GeneralSetupProgress()
@@ -47,6 +48,7 @@ struct SettingsView: View {
                     }.accessibilityHidden(true)
                 }.accessibilityLabel("通用设置已填写 \(setupProgress.completed.count) 项，共 3 项")
             }.padding(26)
+                .focusable().focusEffectDisabled().focused($headerFocused)
             ScrollViewReader { scroll in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
@@ -125,6 +127,9 @@ struct SettingsView: View {
             }.padding(.horizontal, 26).padding(.vertical, 18)
         }.frame(width: 660).background(Palette.canvas).foregroundStyle(Palette.ink)
             .buttonStyle(SettingsActionStyle())
+            // Present neutrally. AppKit otherwise focuses and selects the first
+            // path automatically; subsequent clicks and Tab retain native focus.
+            .defaultFocus($headerFocused, true, priority: .userInitiated)
             .onAppear { updateGuide(animated: false) }
             .onChange(of: settings) { _, _ in saveError = nil }
             .onDisappear { store.setupTask?.cancel() }

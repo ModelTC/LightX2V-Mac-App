@@ -70,6 +70,108 @@ def command(request, folder):
     return args, mode
 
 
+class PromptStream:
+    """Decode the flat response's prompt string without exposing JSON syntax.
+
+    Every escape (including UTF-16 surrogate pairs) may span arbitrary reads.
+    A visible prefix is not a validated result and never starts image inference.
+    """
+    def __init__(self, emit):
+        self.emit = emit
+        self.state = "start"
+        self.key = ""
+        self.keys = set()
+        self.key_parts = []
+        self.escape = False
+        self.unicode_digits = None
+        self.high_surrogate = None
+        self.prompt = ""
+        self.delta = ""
+        self.last_emit = float("-inf")
+
+    def invalid(self):
+        raise ValueError("Prompt 增强返回了无效的结果格式")
+
+    def feed(self, text):
+        for char in text:
+            if self.state in ("key", "value"):
+                self.string_char(char)
+                continue
+            if char in " \t\r\n" or self.state == "end":
+                continue
+            if self.state == "start" and char == "{":
+                self.state = "key_start"
+            elif self.state == "key_start" and char == '"':
+                self.key_parts = []; self.state = "key"
+            elif self.state == "colon" and char == ":":
+                self.state = "value_start"
+            elif self.state == "value_start" and char == '"':
+                self.state = "value"
+            elif self.state == "after_value" and char == ",":
+                self.state = "key_start"
+            elif self.state in ("key_start", "after_value") and char == "}":
+                self.state = "end"
+            else:
+                self.invalid()
+        if time.monotonic() - self.last_emit >= 0.15:
+            self.flush()
+
+    def string_char(self, char):
+        if self.unicode_digits is not None:
+            if char not in "0123456789abcdefABCDEF": self.invalid()
+            self.unicode_digits += char
+            if len(self.unicode_digits) == 4:
+                code = int(self.unicode_digits, 16); self.unicode_digits = None
+                if 0xD800 <= code <= 0xDBFF:
+                    if self.high_surrogate is not None: self.invalid()
+                    self.high_surrogate = code
+                elif 0xDC00 <= code <= 0xDFFF:
+                    if self.high_surrogate is None: self.invalid()
+                    self.append(chr(0x10000 + ((self.high_surrogate - 0xD800) << 10) + code - 0xDC00))
+                    self.high_surrogate = None
+                else:
+                    if self.high_surrogate is not None: self.invalid()
+                    self.append(chr(code))
+            return
+        if self.escape:
+            self.escape = False
+            if char == "u":
+                self.unicode_digits = ""
+            else:
+                escapes = {'"': '"', "\\": "\\", "/": "/", "b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t"}
+                if char not in escapes or self.high_surrogate is not None: self.invalid()
+                self.append(escapes[char])
+        elif char == "\\":
+            self.escape = True
+        elif self.high_surrogate is not None:
+            self.invalid()
+        elif char == '"':
+            if self.state == "key":
+                self.key = "".join(self.key_parts)
+                if self.key in self.keys: self.invalid()
+                self.keys.add(self.key); self.state = "colon"
+            else:
+                self.state = "after_value"
+                self.flush()
+        elif ord(char) < 0x20 or 0xD800 <= ord(char) <= 0xDFFF:
+            self.invalid()
+        else:
+            self.append(char)
+
+    def append(self, text):
+        if self.state == "key":
+            self.key_parts.append(text)
+        elif self.key == "rewritten_prompt":
+            self.prompt += text; self.delta += text
+            if len(self.prompt) > 20000:
+                raise ValueError("增强后的提示词过长，已停止本次生成")
+
+    def flush(self):
+        if self.delta:
+            self.emit("enhancement_prompt", delta=self.delta)
+            self.delta = ""; self.last_emit = time.monotonic()
+
+
 class ThinkingStream:
     """Incremental UTF-8 text, with a closing tag allowed to span any chunk."""
     def __init__(self, emit):
@@ -80,12 +182,14 @@ class ThinkingStream:
         self.delta = ""
         self.closed = False
         self.last_emit = 0.0
+        self.answer = PromptStream(emit)
 
     def feed(self, text):
         self.raw += text
         if len(self.raw) > 1500000:
             raise ValueError("增强响应过长，已停止本次生成")
         if self.closed:
+            self.answer.feed(text)
             return
         self.pending += text
         # The opening tag is already part of the generation prompt. Some builds
@@ -101,6 +205,7 @@ class ThinkingStream:
             self.closed = True
             self.flush()
             self.emit("enhancement_phase", phase="rewriting")
+            self.answer.feed(tail)
         else:
             # Retain the longest possible partial closing tag, not real text.
             keep = 0
@@ -127,6 +232,7 @@ class ThinkingStream:
             self.append(self.pending)
             self.pending = ""
         self.flush()
+        self.answer.flush()
 
 
 def parse_result(raw, mode, image_count):
@@ -140,11 +246,19 @@ def parse_result(raw, mode, image_count):
         answer = answer[:-len(END_TEXT)].rstrip()
     elif answer.endswith(END_TEXT):
         answer = answer[:-len(END_TEXT)].rstrip()
-    result = json.loads(answer)
+    def unique_fields(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result: raise ValueError("Prompt 增强返回了重复的结果字段")
+            result[key] = value
+        return result
+    result = json.loads(answer, object_pairs_hook=unique_fields)
     expected = {"rewritten_prompt", "wh_ratio"} | ({"ratio_follow"} if mode == "i2i" else set())
     if not isinstance(result, dict) or set(result) != expected or not all(isinstance(v, str) for v in result.values()):
         raise ValueError("Prompt 增强返回了无效的结果格式")
     prompt = result["rewritten_prompt"].strip()
+    try: prompt.encode("utf-8")
+    except UnicodeEncodeError: raise ValueError("Prompt 增强返回了无效的文字编码") from None
     if not prompt or len(prompt) > 20000:
         raise ValueError("增强后的提示词为空或过长")
     result["rewritten_prompt"] = prompt

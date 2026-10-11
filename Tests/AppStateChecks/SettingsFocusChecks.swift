@@ -1,0 +1,82 @@
+import AppKit
+import SwiftUI
+import LightX2VCore
+
+@MainActor
+func generalSettingsFocusChecks() async throws {
+    let fm = FileManager.default
+    let root = fm.temporaryDirectory.appendingPathComponent("settings-focus-" + UUID().uuidString)
+    defer { try? fm.removeItem(at: root) }
+    let support = root.appendingPathComponent("support")
+    let layout = WorkspaceLayout(root.appendingPathComponent("workspace").path)
+    try layout.prepare()
+    var settings = AppSettings.defaults
+    settings.workingDirectory = layout.root.path
+    settings.repository = root.appendingPathComponent("source").path
+    settings.python = "/usr/bin/false"
+    setenv("LIGHTX2V_APP_STATE_DIR", support.path, 1)
+    try JSONFile.write(WorkspaceData(settings: settings, hasCompletedGeneralSetup: true), to: layout.state)
+    try JSONFile.write(WorkspaceLocation(workingDirectory: layout.root.path), to: support.appendingPathComponent("workspace_location.json"))
+    let store = AppStore()
+    let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 1000, height: 800),
+                          styleMask: [.titled, .closable], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    defer { window.orderOut(nil); window.contentView = nil }
+    window.contentView = NSHostingView(rootView: SettingsPresentationFixture(store: store))
+    window.makeKeyAndOrderFront(nil)
+
+    func fields(_ view: NSView) -> [NSTextField] {
+        (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(fields)
+    }
+    func check(_ good: Bool, _ message: String) throws {
+        guard good else { throw AppError.message(message) }
+        print("PASS \(message)")
+    }
+    for opening in 1...2 {
+        store.showSettings = true
+        try await Task.sleep(for: .milliseconds(700))
+        guard let sheet = window.attachedSheet, let content = sheet.contentView else {
+            throw AppError.message("General settings sheet did not open")
+        }
+        let inputs = fields(content).filter(\.isEditable)
+        try check(inputs.count == 3 && inputs.allSatisfy { $0.currentEditor() == nil },
+                  "settings opening \(opening) leaves every path unselected")
+        let workspaceField = inputs.first { $0.stringValue == settings.workingDirectory }!
+        sheet.makeFirstResponder(workspaceField)
+        try await Task.sleep(for: .milliseconds(100))
+        try check(workspaceField.currentEditor() != nil, "workspace path still accepts explicit focus")
+        // Initial focus is evaluated only on presentation, not after editing starts.
+        try await Task.sleep(for: .milliseconds(250))
+        try check(workspaceField.currentEditor() != nil, "settings does not steal focus from an active editor")
+        sheet.makeFirstResponder(nil)
+        try await Task.sleep(for: .milliseconds(100))
+        try check(workspaceField.currentEditor() == nil, "outside click can end path editing")
+        sheet.selectNextKeyView(nil)
+        for _ in 0..<5 where !inputs.contains(where: { $0.currentEditor() != nil }) {
+            try await Task.sleep(for: .milliseconds(50))
+            sheet.selectNextKeyView(nil)
+        }
+        try check(inputs.contains { $0.currentEditor() != nil }, "settings paths remain accessible with Tab navigation")
+        store.showSettings = false
+        try await Task.sleep(for: .milliseconds(450))
+    }
+
+    // The same view is also the first-launch setup card, outside a sheet.
+    try JSONFile.write(WorkspaceData(settings: settings, hasCompletedGeneralSetup: false), to: layout.state)
+    let firstLaunch = AppStore()
+    window.contentView = NSHostingView(rootView: SettingsView(settings: settings).environmentObject(firstLaunch))
+    window.makeKeyAndOrderFront(nil)
+    try await Task.sleep(for: .milliseconds(500))
+    try check(fields(window.contentView!).filter(\.isEditable).allSatisfy { $0.currentEditor() == nil },
+              "first launch does not automatically select the workspace path")
+}
+
+private struct SettingsPresentationFixture: View {
+    @ObservedObject var store: AppStore
+    var body: some View {
+        Text("Main window").frame(maxWidth: .infinity, maxHeight: .infinity)
+            .sheet(isPresented: $store.showSettings) {
+                SettingsView(settings: store.settings).environmentObject(store)
+            }
+    }
+}

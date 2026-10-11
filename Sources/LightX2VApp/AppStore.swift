@@ -63,7 +63,8 @@ final class AppStore: ObservableObject {
     private var draftImageDirectory: URL?
     private var draftCreationID = UUID()
     private var pendingImageImports: [[ImagePasteboard.Source]] = []
-    private var thinkingStreams: [UUID: EnhancementThinkingStream] = [:]
+    private var thinkingStreams: [UUID: EnhancementTextStream] = [:]
+    private var promptStreams: [UUID: EnhancementTextStream] = [:]
     private var enhancementResourceTask: Task<Void, Never>?
     @Published private var enhancementAvailability: [PromptEnhancementMode: Bool] = [:]
 
@@ -106,10 +107,17 @@ final class AppStore: ObservableObject {
         persist(); showEnhancementSettings = false
     }
 
-    func thinkingStream(for job: Generation) -> EnhancementThinkingStream {
+    func thinkingStream(for job: Generation) -> EnhancementTextStream {
         if let stream = thinkingStreams[job.id] { return stream }
-        let stream = EnhancementThinkingStream(text: job.enhancement?.thinking ?? "")
+        let stream = EnhancementTextStream(text: job.enhancement?.thinking ?? "")
         thinkingStreams[job.id] = stream
+        return stream
+    }
+
+    func promptStream(for job: Generation) -> EnhancementTextStream {
+        if let stream = promptStreams[job.id] { return stream }
+        let stream = EnhancementTextStream(text: job.enhancement?.prompt ?? "")
+        promptStreams[job.id] = stream
         return stream
     }
 
@@ -479,6 +487,11 @@ final class AppStore: ObservableObject {
             guard let job = generations.first(where: { $0.id == id }), job.enhancement?.status.isActive == true,
                   let delta = event["delta"] as? String else { break }
             thinkingStream(for: job).text += delta
+        case "enhancement_prompt":
+            guard let job = generations.first(where: { $0.id == id }), job.enhancement?.status == .rewriting,
+                  let delta = event["delta"] as? String else { break }
+            // Only the rewritten-prompt text observes these token updates.
+            promptStream(for: job).text += delta
         case "enhancement_phase":
             guard let index = generations.firstIndex(where: { $0.id == id }), generations[index].enhancement != nil else { break }
             let rewriting = event["phase"] as? String == "rewriting"
@@ -491,6 +504,7 @@ final class AppStore: ObservableObject {
         case "enhancement_result":
             guard let index = generations.firstIndex(where: { $0.id == id }),
                   let prompt = event["prompt"] as? String, !prompt.isEmpty else { break }
+            promptStream(for: generations[index]).text = prompt
             generations[index].enhancement?.thinking = thinkingStreams[id]?.text ?? ""
             generations[index].enhancement?.prompt = prompt
             generations[index].enhancement?.whRatio = event["whRatio"] as? String
@@ -527,6 +541,9 @@ final class AppStore: ObservableObject {
         generations[index].duration = duration ?? startedAt.map { Date().timeIntervalSince($0) }
         if generations[index].enhancement?.status.isActive == true {
             generations[index].enhancement?.thinking = thinkingStreams[id]?.text ?? ""
+            if let partial = promptStreams[id]?.text, !partial.isEmpty {
+                generations[index].enhancement?.prompt = partial
+            }
             generations[index].enhancement?.status = status == .cancelled ? .cancelled : .failed
         }
         phase = status.label
@@ -603,6 +620,7 @@ final class AppStore: ObservableObject {
         let removingSelected = selected?.creationID == job.creationID
         generations.removeAll { $0.creationID == job.creationID }
         thinkingStreams = thinkingStreams.filter { id, _ in generations.contains { $0.id == id } }
+        promptStreams = promptStreams.filter { id, _ in generations.contains { $0.id == id } }
         if removingSelected { selectedID = nil; draftCreationID = UUID() }
         persist()
     }

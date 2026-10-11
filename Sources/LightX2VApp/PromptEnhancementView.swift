@@ -2,9 +2,9 @@ import AppKit
 import SwiftUI
 import LightX2VCore
 
-/// Token updates invalidate only the thinking text, not the window or inspector.
+/// Each stream invalidates its text only, not the window or inspector.
 @MainActor
-final class EnhancementThinkingStream: ObservableObject {
+final class EnhancementTextStream: ObservableObject {
     @Published var text: String
     init(text: String = "") { self.text = text }
 }
@@ -112,37 +112,53 @@ struct PromptEnhancementSettingsView: View {
 }
 
 struct PromptEnhancementMessageView: View {
-    @EnvironmentObject var store: AppStore
     let job: Generation
     let reply: PromptEnhancementReply
-    let stream: EnhancementThinkingStream
+    let thinkingStream: EnhancementTextStream
+    let promptStream: EnhancementTextStream
     @State private var showsThinking = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 9) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 9) {
                 BrandMark(size: 24)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("LightX2V").font(.system(size: 12, weight: .semibold))
-                    HStack(spacing: 5) {
-                        Image(systemName: "sparkles")
-                        Text("Prompt 增强")
-                        Text("· \(reply.mode.title)")
-                    }.font(.system(size: 10)).foregroundStyle(Palette.muted)
+                    HStack(spacing: 8) {
+                        Text("LightX2V").font(.system(size: 12, weight: .semibold))
+                        Text("Prompt 增强").font(.system(size: 10)).foregroundStyle(Palette.muted)
+                    }
+                    Text(reply.mode.title).font(.system(size: 10)).foregroundStyle(Palette.muted)
                 }
-                Spacer(minLength: 6)
-                Toggle("思考过程", isOn: $showsThinking)
-                    .font(.system(size: 10)).toggleStyle(.switch).controlSize(.mini).tint(Palette.button)
-                    .fixedSize().accessibilityLabel("显示思考过程")
-            }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+            Toggle("显示思考内容", isOn: $showsThinking)
+                .font(.system(size: 10)).toggleStyle(.switch).controlSize(.mini).tint(Palette.button)
+                .fixedSize().frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel("显示思考内容")
             if showsThinking {
-                EnhancementThinkingView(stream: stream, id: job.id, active: reply.status.isActive)
+                EnhancementThinkingView(stream: thinkingStream, id: job.id, active: reply.status == .thinking)
             }
-            if let prompt = reply.prompt {
-                Text(prompt).font(.system(size: 14)).lineSpacing(5).textSelection(.enabled)
+            EnhancedPromptBody(job: job, reply: reply, stream: promptStream)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct EnhancedPromptBody: View {
+    @EnvironmentObject var store: AppStore
+    let job: Generation
+    let reply: PromptEnhancementReply
+    @ObservedObject var stream: EnhancementTextStream
+
+    private var text: String { reply.status == .completed ? (reply.prompt ?? stream.text) : stream.text }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if !text.isEmpty {
+                Text(text).font(.system(size: 14)).lineSpacing(5).textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("enhanced-prompt")
+            }
+            if reply.status == .completed {
                 HStack(spacing: 7) {
                     Image(systemName: "checkmark").foregroundStyle(Palette.green)
                     Text("已增强").foregroundStyle(Palette.muted)
@@ -153,16 +169,16 @@ struct PromptEnhancementMessageView: View {
                     Spacer()
                     Button {
                         NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(prompt, forType: .string)
+                        NSPasteboard.general.setString(text, forType: .string)
                     } label: { Image(systemName: "doc.on.doc").frame(width: 26, height: 26) }
                         .buttonStyle(HoverButtonStyle(radius: 6)).help("复制增强提示词").accessibilityLabel("复制增强提示词")
                 }.font(.system(size: 10))
             } else if reply.status.isActive {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.mini)
-                    Text(reply.status == .thinking ? "正在思考与完善描述…" : "正在整理增强提示词…")
-                        .font(.system(size: 12)).foregroundStyle(Palette.muted)
-                }.padding(.vertical, 6)
+                    Text(reply.status == .thinking ? "正在思考与完善描述…" : "正在输出增强提示词…")
+                        .font(.system(size: text.isEmpty ? 12 : 10)).foregroundStyle(Palette.muted)
+                }.padding(.vertical, text.isEmpty ? 6 : 0)
             } else {
                 VStack(alignment: .leading, spacing: 10) {
                     Label(job.status == .cancelled ? "增强已停止" : "增强未完成", systemImage: "info.circle")
@@ -175,14 +191,12 @@ struct PromptEnhancementMessageView: View {
                     }.font(.system(size: 11)).buttonStyle(HoverButtonStyle())
                 }
             }
-        }.padding(16).background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Palette.line, lineWidth: 1))
-            .frame(maxWidth: .infinity, alignment: .leading)
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 private struct EnhancementThinkingView: View {
-    @ObservedObject var stream: EnhancementThinkingStream
+    @ObservedObject var stream: EnhancementTextStream
     let id: UUID
     let active: Bool
 

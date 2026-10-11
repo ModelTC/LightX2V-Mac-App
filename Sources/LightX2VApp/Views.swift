@@ -423,7 +423,8 @@ struct GenerationTurnView: View {
         VStack(alignment: .leading, spacing: 28) {
             PromptMessageView(prompt: job.request.prompt, createdAt: job.createdAt, inputImages: job.request.inputImages)
             if let reply = job.enhancement {
-                PromptEnhancementMessageView(job: job, reply: reply, stream: store.thinkingStream(for: job))
+                PromptEnhancementMessageView(job: job, reply: reply, thinkingStream: store.thinkingStream(for: job),
+                                             promptStream: store.promptStream(for: job))
                     .frame(maxWidth: maximumWidth)
             }
             if job.enhancement == nil || job.enhancement?.status == .completed {

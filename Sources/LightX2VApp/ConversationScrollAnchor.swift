@@ -72,8 +72,7 @@ struct ConversationScrollAnchor: NSViewRepresentable {
                     return event
                 }
                 observers.append(NotificationCenter.default.addObserver(forName: NSScrollView.didLiveScrollNotification, object: scroll, queue: .main) { [weak self] _ in
-                    self?.userScrolled = true
-                    self?.schedule()
+                    self?.recordLiveScroll()
                 })
                 document.postsFrameChangedNotifications = true
                 scroll.contentView.postsBoundsChangedNotifications = true
@@ -105,6 +104,20 @@ struct ConversationScrollAnchor: NSViewRepresentable {
             }
             requestedBottom = false
             userScrolled = false
+        }
+
+        private func recordLiveScroll() {
+            guard let scroll = scrollView, let document = documentView else { return }
+            // Snapshot the user's position now. A streamed reply can grow before
+            // the next run-loop reconciliation; comparing against that new height
+            // would wrongly detach someone who just scrolled back to the bottom.
+            if !requestedBottom {
+                let viewport = scroll.contentView.bounds
+                let target = document.isFlipped ? max(0, document.frame.height - viewport.height) : 0
+                pinned = abs(viewport.origin.y - target) <= 2
+            }
+            userScrolled = false
+            schedule()
         }
     }
 }

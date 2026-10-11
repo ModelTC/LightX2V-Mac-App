@@ -8,6 +8,10 @@ struct AppStateChecks {
     @MainActor static func main() async throws {
         setbuf(stdout, nil)
         _ = NSApplication.shared
+        if CommandLine.arguments.dropFirst().first == "--settings-only" {
+            try await generalSettingsFocusChecks()
+            return
+        }
         if CommandLine.arguments.dropFirst().first == "--enhancement-only" {
             try await enhancementStateChecks()
             return
@@ -144,6 +148,7 @@ struct AppStateChecks {
         store.clearInputImages()
         try await creationChecks()
         try await enhancementStateChecks()
+        try await generalSettingsFocusChecks()
         try await conversationLayoutChecks()
         print("App state checks passed")
     }
