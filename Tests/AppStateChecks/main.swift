@@ -8,6 +8,10 @@ struct AppStateChecks {
     @MainActor static func main() async throws {
         setbuf(stdout, nil)
         _ = NSApplication.shared
+        if CommandLine.arguments.dropFirst().first == "--model-check-only" {
+            try await modelEnvironmentChecks()
+            return
+        }
         if CommandLine.arguments.dropFirst().first == "--settings-only" {
             try await generalSettingsFocusChecks()
             try await environmentPresentationChecks()
@@ -154,6 +158,7 @@ struct AppStateChecks {
         store.clearInputImages()
         try await creationChecks()
         try await enhancementStateChecks()
+        try await modelEnvironmentChecks()
         try await generalSettingsFocusChecks()
         try await environmentPresentationChecks()
         try await conversationLayoutChecks()

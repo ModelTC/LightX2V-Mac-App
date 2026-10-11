@@ -397,35 +397,56 @@ final class AppStore: ObservableObject {
             try layout.prepare()
             let requestURL = layout.temporary.appendingPathComponent("environment-check.json")
             try JSONFile.write(["repository": settings.repository, "model": settings.model, "config": settings.config], to: requestURL)
-            isChecking = true; environmentReady = false; environmentMessage = "正在检查 Python、MPS 和模型…"
+            isChecking = true; environmentReady = false; environmentMessage = "正在检查依赖版本与 MPS…"
             let token = UUID(); checkToken = token
-            let process = ProcessRunner(); checker = process
-            try process.start(python: settings.python, bridge: bridgePath, mode: "check", request: requestURL.path, workspace: settings.workingDirectory,
-                              onEvent: { [weak self] event in
-                guard let self, self.checkToken == token else { return }
-                if event["type"] as? String == "check" {
-                    self.environmentReady = event["ok"] as? Bool ?? false
-                    self.environmentMessage = event["message"] as? String ?? "检查完成"
-                } else if event["type"] as? String == "error" {
-                    self.environmentMessage = event["message"] as? String ?? "环境检查失败"
+            let python = settings.python
+            setupTask = Task {
+                defer { finishSetupTask() }
+                do {
+                    // The search picker and model check share the same probe and
+                    // eligibility policy; never enable generation from MPS alone.
+                    let environment = try await PythonEnvironmentSearch.probe(python, workspace: layout)
+                    try Task.checkCancellation()
+                    guard checkToken == token else { return }
+                    guard environment.isCompatible else { throw AppError.message(environment.compatibilityDetail) }
+                    try startModelCheck(python: python, request: requestURL, token: token)
+                } catch {
+                    guard checkToken == token else { return }
+                    isChecking = false; checker = nil; environmentReady = false
+                    environmentMessage = Task.isCancelled ? "环境检查已取消。" : error.localizedDescription
                 }
-            }, onExit: { [weak self] code in
-                guard let self, self.checkToken == token else { return }
-                self.isChecking = false; self.checker = nil
-                if code != 0 || !self.environmentReady {
-                    self.environmentReady = false
-                    if self.environmentMessage.hasPrefix("正在") { self.environmentMessage = "环境检查未完成（退出码 \(code)），请检查 Python 路径。" }
-                }
-                self.finishTerminationIfNeeded()
-            })
-            DispatchQueue.main.asyncAfter(deadline: .now() + 100) { [weak self] in
-                guard let self, self.isChecking, self.checkToken == token else { return }
-                self.environmentMessage = "环境检查超时。若 macOS 正在请求文件访问权限，请允许后重试；否则请检查 Python 环境。"
-                self.checker?.stop()
             }
         } catch {
             isChecking = false; checker = nil; environmentReady = false
             environmentMessage = error.localizedDescription
+        }
+    }
+
+    private func startModelCheck(python: String, request: URL, token: UUID) throws {
+        environmentMessage = "正在检查 MPS 运算和模型…"
+        let process = ProcessRunner(); checker = process
+        try process.start(python: python, bridge: bridgePath, mode: "check", request: request.path, workspace: settings.workingDirectory,
+                          onEvent: { [weak self] event in
+            guard let self, self.checkToken == token else { return }
+            if event["type"] as? String == "check" {
+                self.environmentReady = event["ok"] as? Bool ?? false
+                self.environmentMessage = event["message"] as? String ?? "检查完成"
+            } else if event["type"] as? String == "error" {
+                self.environmentMessage = event["message"] as? String ?? "环境检查失败"
+            }
+        }, onExit: { [weak self] code in
+            guard let self, self.checkToken == token else { return }
+            self.isChecking = false; self.checker = nil
+            if code != 0 || !self.environmentReady {
+                self.environmentReady = false
+                if self.environmentMessage.hasPrefix("正在") { self.environmentMessage = "环境检查未完成（退出码 \(code)），请检查 Python 路径。" }
+            }
+            self.finishTerminationIfNeeded()
+        })
+        DispatchQueue.main.asyncAfter(deadline: .now() + 100) { [weak self] in
+            guard let self, self.isChecking, self.checkToken == token else { return }
+            self.environmentMessage = "环境检查超时。若 macOS 正在请求文件访问权限，请允许后重试；否则请检查 Python 环境。"
+            self.checker?.stop()
         }
     }
 
