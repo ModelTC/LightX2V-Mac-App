@@ -13,6 +13,9 @@ import sys
 import threading
 import time
 
+# Bundled adapters must never add bytecode files inside the signed APP bundle.
+sys.dont_write_bytecode = True
+
 
 def emit(kind, **fields):
     print(json.dumps({"type": kind, **fields}, ensure_ascii=False), flush=True)
@@ -68,6 +71,10 @@ def arguments(request, config_path):
         if type(resolution) is not int or resolution not in (1024, 2048) or any(request.get(k) is not None for k in ("width", "height")):
             raise ValueError("自适应模式请选择 1K 或 2K，无需指定宽高")
         size_args = ["--resolution", str(resolution)]
+        if request.get("aspectRatio"):
+            from prompt_enhancement import ratio_value
+            ratio_value(request["aspectRatio"])
+            size_args += ["--aspect_ratio", request["aspectRatio"]]
     else:
         for key in ("width", "height"):
             n = request.get(key)
@@ -141,62 +148,97 @@ def validate_image(path, expected_width=None, expected_height=None):
         return im.size
 
 
-def run(request, cfg):
-    destination = Path(request["output"]).parent
-    destination.mkdir(parents=True, exist_ok=True)
-    config_path = destination / "config.json"
-    # Validate all arguments before modifying any existing output.
-    cmd = arguments(request, config_path)
-    if Path(request["output"]).exists():
-        raise ValueError("输出文件已存在，请创建新的生成任务")
-    config_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
-    (destination / "invocation.json").write_text(json.dumps({"argv": cmd, "cwd": str(destination)},
-                                                             ensure_ascii=False, indent=2), encoding="utf-8")
-    started = time.monotonic()
-    state = {"child": None, "cancelled": False}
+class RunCancelled(Exception):
+    pass
 
+
+class ChildSupervisor:
+    """One process group at a time across both stages, with shared cancellation."""
+    def __init__(self):
+        self.child = None
+        self.cancelled = False
+        self.finished = threading.Event()
+        self.old_handlers = {sig: signal.signal(sig, self.cancel) for sig in (signal.SIGTERM, signal.SIGINT)}
+        self.parent = os.getppid()
+        threading.Thread(target=self.watch_parent, daemon=True).start()
+
+    @staticmethod
     def stop_group(child, sig):
-        if child and child.poll() is None:
+        # A child can exit before its descendants close inherited output pipes.
+        # Terminate the owned group even in that case; no process-name matching.
+        if child:
             try:
                 os.killpg(child.pid, sig)
             except ProcessLookupError:
                 pass
 
-    def cancel(signum, frame):
-        if state["cancelled"]:
+    def cancel(self, signum, frame):
+        if self.cancelled:
             return
-        state["cancelled"] = True
-        child = state["child"]
-        stop_group(child, signal.SIGTERM)
-        timer = threading.Timer(3, stop_group, args=(child, signal.SIGKILL))
+        self.cancelled = True
+        child = self.child
+        self.stop_group(child, signal.SIGTERM)
+        timer = threading.Timer(3, lambda: self.stop_group(child, signal.SIGKILL) if self.child is child else None)
         timer.daemon = True
         timer.start()
 
-    signal.signal(signal.SIGTERM, cancel)
-    signal.signal(signal.SIGINT, cancel)
-    # Parent watchdog prevents a GPU process being orphaned if the native app crashes.
-    parent = os.getppid()
-    finished = threading.Event()
-
-    def watch_parent():
-        while not finished.wait(1):
-            if os.getppid() != parent:
+    def watch_parent(self):
+        while not self.finished.wait(1):
+            if os.getppid() != self.parent:
                 os.kill(os.getpid(), signal.SIGTERM)
                 return
 
-    threading.Thread(target=watch_parent, daemon=True).start()
-    code = -1
-    emit("status", message="正在加载模型", phase="loading")
-    tail = []
+    def check_cancelled(self):
+        if self.cancelled:
+            raise RunCancelled()
+
+    def spawn(self, cmd, **kwargs):
+        self.check_cancelled()
+        child = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, start_new_session=True, **kwargs)
+        self.child = child
+        if self.cancelled:
+            self.stop_group(child, signal.SIGKILL)
+        return child
+
+    def release(self, child):
+        self.stop_group(child, signal.SIGKILL)
+        child.wait()
+        if child.stdout:
+            child.stdout.close()
+        if self.child is child:
+            self.child = None
+
+    def close(self):
+        self.finished.set()
+        if self.child:
+            self.release(self.child)
+        for sig, handler in self.old_handlers.items():
+            signal.signal(sig, handler)
+
+
+def run(request, cfg):
+    destination = Path(request["output"]).parent
+    destination.mkdir(parents=True, exist_ok=True)
+    config_path = destination / "config.json"
+    # Validate original inputs before launching either model or modifying output.
+    arguments(request, config_path)
+    if Path(request["output"]).exists():
+        raise ValueError("输出文件已存在，请创建新的生成任务")
+    started = time.monotonic()
+    supervisor = ChildSupervisor()
     try:
+        if request.get("promptEnhancement") is not None:
+            from prompt_enhancement import run_enhancement
+            request = run_enhancement(request, destination, emit, supervisor)
+        supervisor.check_cancelled()
+        cmd = arguments(request, config_path)
+        config_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+        (destination / "invocation.json").write_text(json.dumps({"argv": cmd, "cwd": str(destination)}, ensure_ascii=False, indent=2), encoding="utf-8")
+        emit("status", message="正在加载模型", phase="loading")
+        tail = []
         with (destination / "inference.log").open("w", encoding="utf-8") as log:
-            child = subprocess.Popen(cmd, cwd=str(destination), env=environment(request),
-                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                     text=True, encoding="utf-8", errors="replace", bufsize=1,
-                                     start_new_session=True)
-            state["child"] = child
-            if state["cancelled"]:
-                stop_group(child, signal.SIGKILL)
+            child = supervisor.spawn(cmd, cwd=str(destination), env=environment(request), stdout=subprocess.PIPE,
+                                     stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", bufsize=1)
             for raw in child.stdout:
                 line = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", raw).rstrip("\r\n")
                 log.write(line + "\n")
@@ -211,17 +253,20 @@ def run(request, cfg):
                 elif "Run Encoders" in line:
                     emit("status", message="正在编码提示词", phase="encoding")
             code = child.wait()
-        if state["cancelled"]:
-            emit("done", status="cancelled", message="生成已停止", duration=time.monotonic() - started)
-            return 130
+            supervisor.release(child)
+        supervisor.check_cancelled()
         if code != 0:
             raise RuntimeError(f"推理进程退出（{code}）\n" + "\n".join(tail[-12:]))
         width, height = validate_image(request["output"], request.get("width"), request.get("height"))
         emit("done", status="completed", image=request["output"], width=width, height=height, duration=time.monotonic() - started)
         return 0
+    except BaseException:
+        if supervisor.cancelled:
+            emit("done", status="cancelled", message="生成已停止", duration=time.monotonic() - started)
+            return 130
+        raise
     finally:
-        finished.set()
-        stop_group(state["child"], signal.SIGKILL)
+        supervisor.close()
 
 
 def main():

@@ -60,6 +60,9 @@ struct WorkspaceView: View {
         .overlay(alignment: .top) { WindowDragArea(isNativeTitleBar: true).frame(height: 28) }
         .ignoresSafeArea(.container, edges: .top)
         .sheet(isPresented: $store.showSettings) { SettingsView(settings: store.settings).environmentObject(store) }
+        .sheet(isPresented: $store.showEnhancementSettings) {
+            PromptEnhancementSettingsView(settings: store.settings.promptEnhancement, mode: store.enhancementMode).environmentObject(store)
+        }
         .alert("LightX2V APP", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
             Button("好") { store.errorMessage = nil }
         } message: { Text(store.errorMessage ?? "") }
@@ -419,6 +422,11 @@ struct GenerationTurnView: View {
 
         VStack(alignment: .leading, spacing: 28) {
             PromptMessageView(prompt: job.request.prompt, createdAt: job.createdAt, inputImages: job.request.inputImages)
+            if let reply = job.enhancement {
+                PromptEnhancementMessageView(job: job, reply: reply, stream: store.thinkingStream(for: job))
+                    .frame(maxWidth: maximumWidth)
+            }
+            if job.enhancement == nil || job.enhancement?.status == .completed {
             VStack(alignment: .leading, spacing: 12) {
                 replyHeader
                 if job.status == .completed {
@@ -458,6 +466,7 @@ struct GenerationTurnView: View {
                     failure(job.error ?? job.status.label, symbol: job.status == .failed ? "exclamationmark.triangle" : "pause.circle")
                 }
             }.frame(maxWidth: replyWidth, alignment: .leading)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: job.status == .completed ? job.request.output : nil) {

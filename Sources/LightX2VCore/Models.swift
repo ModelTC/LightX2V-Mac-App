@@ -6,25 +6,28 @@ public struct AppSettings: Codable, Equatable {
     public var config: String
     public var python: String
     public var workingDirectory: String
+    public var promptEnhancement: PromptEnhancementSettings
     public var outputDirectory: String { workingDirectory.isEmpty ? "" : WorkspaceLayout(workingDirectory).outputs.path }
 
-    public init(repository: String, model: String, config: String, python: String, workingDirectory: String = "") {
+    public init(repository: String, model: String, config: String, python: String, workingDirectory: String = "", promptEnhancement: PromptEnhancementSettings = .init()) {
         self.repository = repository; self.model = model; self.config = config
         self.python = python; self.workingDirectory = workingDirectory
+        self.promptEnhancement = promptEnhancement
     }
 
     public static var defaults: AppSettings {
         AppSettings(repository: "", model: "", config: "", python: "")
     }
 
-    private enum CodingKeys: String, CodingKey { case repository, model, config, python, workingDirectory }
+    private enum CodingKeys: String, CodingKey { case repository, model, config, python, workingDirectory, promptEnhancement }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         self.init(repository: try values.decode(String.self, forKey: .repository),
                   model: try values.decode(String.self, forKey: .model),
                   config: try values.decode(String.self, forKey: .config),
                   python: try values.decode(String.self, forKey: .python),
-                  workingDirectory: try values.decodeIfPresent(String.self, forKey: .workingDirectory) ?? "")
+                  workingDirectory: try values.decodeIfPresent(String.self, forKey: .workingDirectory) ?? "",
+                  promptEnhancement: try values.decodeIfPresent(PromptEnhancementSettings.self, forKey: .promptEnhancement) ?? .init())
     }
 
     public var hasGeneralPaths: Bool {
@@ -81,6 +84,7 @@ public struct InferenceRequest: Codable {
     public var seed: Int64
     public var output: String
     public var inputImages: [InputImage]
+    public var promptEnhancement: PromptEnhancementSettings?
 
     public init(settings: AppSettings, prompt: String, width: Int?, height: Int?, seed: Int64, output: String, inputImages: [InputImage] = [], resolution: Int? = nil) throws {
         guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, prompt.count <= 20000 else {
@@ -101,9 +105,10 @@ public struct InferenceRequest: Codable {
         self.prompt = prompt; self.width = width; self.height = height; self.seed = seed; self.output = output
         self.inputImages = inputImages
         self.resolution = resolution
+        self.promptEnhancement = settings.promptEnhancement.enabled ? settings.promptEnhancement : nil
     }
 
-    private enum CodingKeys: String, CodingKey { case repository, model, config, prompt, width, height, resolution, seed, output, inputImages }
+    private enum CodingKeys: String, CodingKey { case repository, model, config, prompt, width, height, resolution, seed, output, inputImages, promptEnhancement }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         repository = try values.decode(String.self, forKey: .repository)
@@ -116,6 +121,7 @@ public struct InferenceRequest: Codable {
         seed = try values.decode(Int64.self, forKey: .seed)
         output = try values.decode(String.self, forKey: .output)
         inputImages = try values.decodeIfPresent([InputImage].self, forKey: .inputImages) ?? []
+        promptEnhancement = try values.decodeIfPresent(PromptEnhancementSettings.self, forKey: .promptEnhancement)
     }
 }
 
@@ -140,13 +146,15 @@ public struct Generation: Codable, Identifiable {
     public var status: GenerationStatus
     public var duration: Double?
     public var error: String?
+    public var enhancement: PromptEnhancementReply?
     public var directory: String { URL(fileURLWithPath: request.output).deletingLastPathComponent().path }
     public var title: String { String(request.prompt.replacingOccurrences(of: "\n", with: " ").prefix(52)) }
     public init(id: UUID = UUID(), creationID: UUID? = nil, request: InferenceRequest) {
         self.id = id; self.creationID = creationID ?? id
         self.createdAt = Date(); self.request = request; self.status = .running
+        if request.promptEnhancement != nil { enhancement = PromptEnhancementReply(mode: request.inputImages.isEmpty ? .t2i : .i2i) }
     }
-    private enum CodingKeys: String, CodingKey { case id, creationID, createdAt, request, status, duration, error }
+    private enum CodingKeys: String, CodingKey { case id, creationID, createdAt, request, status, duration, error, enhancement }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         id = try values.decode(UUID.self, forKey: .id)
@@ -157,6 +165,7 @@ public struct Generation: Codable, Identifiable {
         status = try values.decode(GenerationStatus.self, forKey: .status)
         duration = try values.decodeIfPresent(Double.self, forKey: .duration)
         error = try values.decodeIfPresent(String.self, forKey: .error)
+        enhancement = try values.decodeIfPresent(PromptEnhancementReply.self, forKey: .enhancement)
     }
 }
 
@@ -180,6 +189,7 @@ public struct WorkspaceData: Codable {
         for index in generations.indices where generations[index].status == .running {
             generations[index].status = .interrupted
             generations[index].error = "应用在上次生成完成前退出，可复用参数重新生成。"
+            if generations[index].enhancement?.status.isActive == true { generations[index].enhancement?.status = .interrupted }
         }
     }
 }

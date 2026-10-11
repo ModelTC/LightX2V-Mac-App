@@ -21,7 +21,8 @@ struct GenerationParametersView: View {
             label("画面比例").padding(.top, 3)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 6) {
                 AspectRatioButton(ratio: nil, resolution: store.generationSize.resolution,
-                                  selected: store.generationSize.aspectRatio == nil) {
+                                  selected: store.generationSize.aspectRatio == nil,
+                                  enhancementEnabled: store.settings.promptEnhancement.enabled) {
                     store.generationSize.selectAspectRatio(nil)
                 }
                 ForEach(ImageAspectRatio.allCases) { ratio in
@@ -48,6 +49,7 @@ struct GenerationParametersView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("输出尺寸")
             .accessibilityValue(store.generationSize.dimensions.map { "宽 \($0.width)，高 \($0.height) 像素" } ?? "自动确定")
+            PromptEnhancementControl().padding(.top, 4)
         }
     }
 
@@ -60,6 +62,7 @@ private struct AspectRatioButton: View {
     let ratio: ImageAspectRatio?
     let resolution: ImageResolution
     let selected: Bool
+    var enhancementEnabled = false
     let action: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var enabled
@@ -68,7 +71,9 @@ private struct AspectRatioButton: View {
 
     private var title: String { ratio?.rawValue ?? "自适应" }
     private var sizeDescription: String {
-        guard let dimensions = ratio?.dimensions(at: resolution) else { return "由模型自动确定，无参考图时为 1:1" }
+        guard let dimensions = ratio?.dimensions(at: resolution) else {
+            return enhancementEnabled ? "根据增强结果自动确定比例" : "由模型自动确定，无参考图时为 1:1"
+        }
         return "\(dimensions.width) × \(dimensions.height) 像素"
     }
 

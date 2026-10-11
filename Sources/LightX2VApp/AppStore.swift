@@ -14,7 +14,11 @@ enum GenerationModel: String, CaseIterable, Identifiable {
 
 @MainActor
 final class AppStore: ObservableObject {
-    @Published var settings: AppSettings
+    @Published var settings: AppSettings {
+        didSet {
+            if oldValue.promptEnhancement != settings.promptEnhancement { refreshEnhancementResources() }
+        }
+    }
     @Published var modelDirectory: String
     @Published var modelConfig: String
     @Published var generations: [Generation]
@@ -41,6 +45,7 @@ final class AppStore: ObservableObject {
     @Published var logs = ""
     @Published var errorMessage: String?
     @Published var showSettings = false
+    @Published var showEnhancementSettings = false
     @Published private(set) var hasCompletedGeneralSetup = false
     @Published var showLogs = false
     @Published var showInspector = true
@@ -58,6 +63,55 @@ final class AppStore: ObservableObject {
     private var draftImageDirectory: URL?
     private var draftCreationID = UUID()
     private var pendingImageImports: [[ImagePasteboard.Source]] = []
+    private var thinkingStreams: [UUID: EnhancementThinkingStream] = [:]
+    private var enhancementResourceTask: Task<Void, Never>?
+    @Published private var enhancementAvailability: [PromptEnhancementMode: Bool] = [:]
+
+    var enhancementMode: PromptEnhancementMode {
+        if isRunning, let job = generations.first(where: { $0.id == activeID }), let reply = job.enhancement { return reply.mode }
+        return inputImages.isEmpty ? .t2i : .i2i
+    }
+    var enhancementResourcesReady: Bool { enhancementAvailability[enhancementMode] == true }
+
+    // SwiftUI rendering must not perform filesystem reads against large model
+    // files. Check both modes once per configuration, away from the main thread.
+    private func refreshEnhancementResources(presentIfMissing: Bool = false) {
+        enhancementResourceTask?.cancel()
+        let value = settings.promptEnhancement
+        let mode = enhancementMode
+        enhancementResourceTask = Task { [weak self] in
+            let availability = await Task.detached(priority: .utility) {
+                [PromptEnhancementMode.t2i: (try? value.validate(for: .t2i)) != nil,
+                 PromptEnhancementMode.i2i: (try? value.validate(for: .i2i)) != nil]
+            }.value
+            guard !Task.isCancelled, let self, self.settings.promptEnhancement == value else { return }
+            self.enhancementAvailability = availability
+            if presentIfMissing && value.enabled && availability[mode] != true { self.showEnhancementSettings = true }
+        }
+    }
+
+    func setPromptEnhancementEnabled(_ enabled: Bool) {
+        guard !configurationBusy else { return }
+        var value = settings.promptEnhancement
+        if enabled { value.discover(near: [settings.model, settings.repository, settings.workingDirectory]) }
+        value.enabled = enabled
+        settings.promptEnhancement = value
+        persist()
+        if enabled { refreshEnhancementResources(presentIfMissing: true) }
+    }
+
+    func applyEnhancementSettings(_ value: PromptEnhancementSettings) {
+        guard !configurationBusy else { return }
+        settings.promptEnhancement = value
+        persist(); showEnhancementSettings = false
+    }
+
+    func thinkingStream(for job: Generation) -> EnhancementThinkingStream {
+        if let stream = thinkingStreams[job.id] { return stream }
+        let stream = EnhancementThinkingStream(text: job.enhancement?.thinking ?? "")
+        thinkingStreams[job.id] = stream
+        return stream
+    }
 
     var selected: Generation? { generations.first { $0.id == selectedID } }
     var selectedCreation: [Generation] {
@@ -105,6 +159,7 @@ final class AppStore: ObservableObject {
         modelDirectory = data.settings.model; modelConfig = data.settings.config
         hasCompletedGeneralSetup = data.hasCompletedGeneralSetup
         errorMessage = readError
+        refreshEnhancementResources()
     }
 
     func persist() {
@@ -378,6 +433,10 @@ final class AppStore: ObservableObject {
         do {
             try settings.validatePaths()
             guard environmentReady else { showModelPreparation(); checkEnvironment(); return }
+            if settings.promptEnhancement.enabled && (try? settings.promptEnhancement.validate(for: enhancementMode)) == nil {
+                showEnhancementSettings = true
+                return
+            }
             let seed = Int64.random(in: 0...4294967295)
             let id = UUID()
             let formatter = DateFormatter(); formatter.dateFormat = "yyyyMMdd-HHmmss"
@@ -394,7 +453,7 @@ final class AppStore: ObservableObject {
             try JSONFile.write(generation, to: directory.appendingPathComponent("generation.json"))
             generations.insert(generation, at: 0)
             activeID = id; selectedID = id; activeLog = ""; logs = ""
-            startedAt = Date(); phase = "正在启动推理"; currentStep = 0
+            startedAt = Date(); phase = generation.enhancement == nil ? "正在启动推理" : "正在启动 Prompt 增强"; currentStep = 0
             isRunning = true; isStopping = false; receivedDone = false
             persist()
             let process = ProcessRunner(); runner = process
@@ -416,6 +475,29 @@ final class AppStore: ObservableObject {
     private func receive(_ event: [String: Any], for id: UUID) {
         guard activeID == id else { return }
         switch event["type"] as? String {
+        case "enhancement_thinking":
+            guard let job = generations.first(where: { $0.id == id }), job.enhancement?.status.isActive == true,
+                  let delta = event["delta"] as? String else { break }
+            thinkingStream(for: job).text += delta
+        case "enhancement_phase":
+            guard let index = generations.firstIndex(where: { $0.id == id }), generations[index].enhancement != nil else { break }
+            let rewriting = event["phase"] as? String == "rewriting"
+            generations[index].enhancement?.status = rewriting ? .rewriting : .thinking
+            if rewriting {
+                generations[index].enhancement?.thinking = thinkingStreams[id]?.text ?? ""
+                saveGeneration(generations[index]); persist()
+            }
+            if !isStopping { phase = rewriting ? "正在整理增强提示词" : "正在增强提示词" }
+        case "enhancement_result":
+            guard let index = generations.firstIndex(where: { $0.id == id }),
+                  let prompt = event["prompt"] as? String, !prompt.isEmpty else { break }
+            generations[index].enhancement?.thinking = thinkingStreams[id]?.text ?? ""
+            generations[index].enhancement?.prompt = prompt
+            generations[index].enhancement?.whRatio = event["whRatio"] as? String
+            generations[index].enhancement?.ratioFollow = event["ratioFollow"] as? String
+            generations[index].enhancement?.duration = event["duration"] as? Double
+            generations[index].enhancement?.status = .completed
+            saveGeneration(generations[index]); persist()
         case "log":
             activeLog += (event["message"] as? String ?? "") + "\n"
             if activeLog.utf8.count > 90000 { activeLog = String(activeLog.suffix(60000)) }
@@ -443,10 +525,18 @@ final class AppStore: ObservableObject {
         generations[index].status = status
         generations[index].error = message
         generations[index].duration = duration ?? startedAt.map { Date().timeIntervalSince($0) }
+        if generations[index].enhancement?.status.isActive == true {
+            generations[index].enhancement?.thinking = thinkingStreams[id]?.text ?? ""
+            generations[index].enhancement?.status = status == .cancelled ? .cancelled : .failed
+        }
         phase = status.label
-        do { try JSONFile.write(generations[index], to: URL(fileURLWithPath: generations[index].directory).appendingPathComponent("generation.json")) }
-        catch { errorMessage = "无法保存任务记录：\(error.localizedDescription)" }
+        saveGeneration(generations[index])
         persist()
+    }
+
+    private func saveGeneration(_ job: Generation) {
+        do { try JSONFile.write(job, to: URL(fileURLWithPath: job.directory).appendingPathComponent("generation.json")) }
+        catch { errorMessage = "无法保存任务记录：\(error.localizedDescription)" }
     }
 
     private func exited(_ code: Int32, for id: UUID) {
@@ -512,6 +602,7 @@ final class AppStore: ObservableObject {
         guard !generations.contains(where: { $0.creationID == job.creationID && $0.status == .running }) else { return }
         let removingSelected = selected?.creationID == job.creationID
         generations.removeAll { $0.creationID == job.creationID }
+        thinkingStreams = thinkingStreams.filter { id, _ in generations.contains { $0.id == id } }
         if removingSelected { selectedID = nil; draftCreationID = UUID() }
         persist()
     }

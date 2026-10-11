@@ -11,6 +11,7 @@ struct ConversationScrollAnchor: NSViewRepresentable {
 
     final class AnchorView: NSView {
         private weak var scrollView: NSScrollView?
+        private weak var documentView: NSView?
         private var observers: [NSObjectProtocol] = []
         private var turns: [UUID] = []
         private var pinned = true
@@ -23,6 +24,11 @@ struct ConversationScrollAnchor: NSViewRepresentable {
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
         override func viewDidMoveToSuperview() { super.viewDidMoveToSuperview(); schedule() }
         override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); schedule() }
+        override func setFrameSize(_ newSize: NSSize) {
+            let changed = frame.size != newSize
+            super.setFrameSize(newSize)
+            if changed { schedule() }
+        }
         deinit {
             observers.forEach { NotificationCenter.default.removeObserver($0) }
             if let eventMonitor { NSEvent.removeMonitor(eventMonitor) }
@@ -47,10 +53,11 @@ struct ConversationScrollAnchor: NSViewRepresentable {
 
         private func reconcile() {
             guard let scroll = enclosingScrollView, let document = scroll.documentView else { return }
-            if scrollView !== scroll {
+            if scrollView !== scroll || documentView !== document {
                 observers.forEach { NotificationCenter.default.removeObserver($0) }
                 observers = []
                 scrollView = scroll
+                documentView = document
                 pinned = true
                 if let eventMonitor { NSEvent.removeMonitor(eventMonitor) }
                 eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .leftMouseDragged, .keyDown]) { [weak self, weak scroll, weak document] event in

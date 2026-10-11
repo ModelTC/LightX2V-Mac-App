@@ -178,6 +178,48 @@ func conversationLayoutChecks() async throws {
     store.clearInputImages()
     try await settle("clear composer after pasting", in: workspaceHost)
     try checkBottom("cleared composer", in: workspaceHost)
+
+    var peSettings = settings; peSettings.promptEnhancement.enabled = true
+    let peRequest = try InferenceRequest(settings: peSettings, prompt: "Original short scene", width: nil, height: nil,
+                                         seed: 3, output: square.path, resolution: 1024)
+    let enhanced = Generation(creationID: creationID, request: peRequest)
+    store.generations.insert(enhanced, at: 0); store.selectedID = enhanced.id
+    try await settle("enhancement starts with thinking hidden", in: workspaceHost)
+    let stream = store.thinkingStream(for: enhanced)
+    let beforeStreamingLayouts = workspaceHost.layoutCount
+    let beforeStreamingHeight = descendantScroll(workspaceHost)!.documentView!.frame.height
+    for index in 0..<40 {
+        stream.text += "Thinking fragment \(index). 保留原始构图与光线。\n"
+        workspaceHost.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(15))
+    }
+    guard workspaceHost.layoutCount - beforeStreamingLayouts < 3,
+          descendantScroll(workspaceHost)!.documentView!.frame.height == beforeStreamingHeight else {
+        throw AppError.message("Hidden thinking updates invalidated workspace layout")
+    }
+    print("PASS hidden thinking stream does not relayout the window or inspector")
+    store.generations[0].enhancement?.prompt = String(repeating: "A natural scene with warm light and realistic materials. ", count: 18)
+    store.generations[0].enhancement?.thinking = stream.text
+    store.generations[0].enhancement?.status = .completed
+    store.generations[0].status = .completed
+    try await settle("enhanced reply followed by decoded image", in: workspaceHost)
+    try checkBottom("enhanced image reply", in: workspaceHost)
+    let enhancedHeight = descendantScroll(workspaceHost)!.documentView!.frame.height
+    store.reference(store.generations[0])
+    try await settle("reference from an enhanced turn grows composer", in: workspaceHost)
+    try checkBottom("enhanced image after referencing", in: workspaceHost)
+    guard descendantScroll(workspaceHost)!.documentView!.frame.height == enhancedHeight else {
+        throw AppError.message("References resized an enhanced conversation")
+    }
+    store.clearInputImages()
+    store.selectedID = nil
+    workspaceHost.layoutSubtreeIfNeeded()
+    try await Task.sleep(for: .milliseconds(100))
+    store.selectedID = enhanced.id
+    // Image tasks must finish and anchor without a test forcing another layout.
+    try await Task.sleep(for: .milliseconds(900))
+    try checkBottom("reopened enhanced history before layout polling", in: workspaceHost)
+    try await settle("reopen enhanced history with asynchronous image decoding", in: workspaceHost)
 }
 
 @MainActor
