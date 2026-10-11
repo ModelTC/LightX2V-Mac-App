@@ -19,6 +19,10 @@ FIXTURE = '''#!/usr/bin/env python3
 import json, shutil, sys, time
 from pathlib import Path
 def emit(kind, **fields): print(json.dumps(dict(type=kind, **fields)), flush=True)
+if '-c' in sys.argv:
+    print('LIGHTX2V_ENV:' + json.dumps(dict(python='3.11.17', architecture='arm64', mps=True,
+          torch='2.14.1', torchvision='0.29.1', torchaudio='2.11.0', transformers='5.19.0', detail='UI fixture')), flush=True)
+    sys.exit(0)
 if sys.argv[-2] == 'check':
     emit('check', ok=True, message='UI fixture ready'); sys.exit(0)
 request = json.load(open(sys.argv[-1]))
@@ -36,6 +40,8 @@ if request.get('promptEnhancement'):
         emit('enhancement_prompt', delta=text[offset:offset + 14]); time.sleep(.1)
     emit('enhancement_result', prompt=text.strip(), whRatio='1:1', ratioFollow='', duration=12)
     time.sleep(2)
+for step in range(1, 9):
+    emit('step', step=step, total=8); time.sleep(.5)
 shutil.copyfile(Path(__file__).with_name('sample.png'), request['output'])
 emit('done', status='completed', duration=14)
 '''
@@ -46,8 +52,8 @@ def write_json(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding='utf-8')
 
 
-def prepare(source, sample):
-    root = Path.home() / 'Library/Caches/LightX2V-APP-UI-Check'
+def prepare(source, sample, root=None):
+    root = root or Path.home() / 'Library/Caches/LightX2V-APP-UI-Check'
     app = root / 'LightX2V UI Check.app'
     if not (source / 'Contents/MacOS/LightX2VApp').is_file():
         raise SystemExit('Build the app with scripts/build.sh first.')
@@ -63,7 +69,7 @@ def prepare(source, sample):
     shutil.copyfile(sample, root / 'sample.png')
     executable = root / 'fixture-python'
     executable.write_text(FIXTURE, encoding='utf-8'); executable.chmod(0o755)
-    for name in ['source/lightx2v/infer.py', 'model/model_index.json', 'config.json',
+    for name in ['source/lightx2v/infer.py', 'Qwen-Image-2.1-Turbo/model_index.json', 'qwen_image_21_turbo.json',
                  'bin/llama-completion', 'bin/llama-mtmd-cli', 't2i.gguf', 'i2i.gguf',
                  't2i.txt', 'i2i.txt', 'mmproj.gguf']:
         path = root / name
@@ -74,7 +80,7 @@ def prepare(source, sample):
               t2iModel=str(root / 't2i.gguf'), t2iSystemPrompt=str(root / 't2i.txt'),
               i2iModel=str(root / 'i2i.gguf'), i2iSystemPrompt=str(root / 'i2i.txt'),
               visionProjector=str(root / 'mmproj.gguf'))
-    settings = dict(repository=str(root / 'source'), model=str(root / 'model'), config=str(root / 'config.json'),
+    settings = dict(repository=str(root / 'source'), model=str(root / 'Qwen-Image-2.1-Turbo'), config=str(root / 'qwen_image_21_turbo.json'),
                     python=str(executable), workingDirectory=str(root / 'workspace'), promptEnhancement=pe)
     workspace = root / 'workspace'
     for name in ['code', 'outputs', 'logs', 'cache', 'tmp']:
@@ -108,5 +114,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--app', type=Path, default=Path(__file__).resolve().parents[1] / 'dist/LightX2V APP.app')
     parser.add_argument('--sample', type=Path, required=True, help='PNG fixture copied into the cache before launching')
+    parser.add_argument('--root', type=Path, help='A separate cache directory for a fresh UI workspace')
     args = parser.parse_args()
-    prepare(args.app, args.sample)
+    prepare(args.app, args.sample, args.root)

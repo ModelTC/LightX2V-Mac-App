@@ -29,7 +29,8 @@ struct CoreChecks {
         print("PASS general path validation independent of model preparation")
         try inputImageChecks()
         try enhancementChecks()
-        print("11 core checks passed")
+        try turboModelChecks()
+        print("12 core checks passed")
     }
     static func invalidRequests() throws {
         for (prompt, width, height, seed) in [("", 1024, 1024, Int64(42)), ("test", 720, 1280, 42),

@@ -46,7 +46,7 @@ else:
     try JSONFile.write(WorkspaceData(settings: settings, hasCompletedGeneralSetup: true), to: layout.state)
     try JSONFile.write(WorkspaceLocation(workingDirectory: layout.root.path), to: support.appendingPathComponent("workspace_location.json"))
     let store = AppStore()
-    store.selectModel(.qwenImage21) // Source is absent, preventing an automatic check.
+    store.selectModel(.qwenImage21Turbo) // Source is absent, preventing an automatic check.
     let source = URL(fileURLWithPath: settings.repository).appendingPathComponent("lightx2v")
     try fm.createDirectory(at: source, withIntermediateDirectories: true)
     try Data().write(to: source.appendingPathComponent("infer.py"))

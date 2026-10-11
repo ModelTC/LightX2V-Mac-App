@@ -45,7 +45,7 @@ func creationChecks() async throws {
     try JSONFile.write(WorkspaceData(settings: settings, hasCompletedGeneralSetup: true), to: layout.state)
     try JSONFile.write(WorkspaceLocation(workingDirectory: workspace.path), to: support.appendingPathComponent("workspace_location.json"))
     let store = AppStore()
-    store.selectModel(.qwenImage21) // Incomplete source prevents a real environment check.
+    store.selectModel(.qwenImage21Turbo) // Incomplete source prevents a real environment check.
     try fm.createDirectory(at: source.appendingPathComponent("lightx2v"), withIntermediateDirectories: true)
     try fm.createDirectory(at: model, withIntermediateDirectories: true)
     try Data().write(to: source.appendingPathComponent("lightx2v/infer.py"))
@@ -145,11 +145,11 @@ func creationChecks() async throws {
     reopened.reference(second)
     try check(reopened.selectedModel == nil && reopened.inputImages.isEmpty && !reopened.isImportingImages,
               "reference cannot select a model or add an image while no model is selected")
-    reopened.selectModel(.qwenImage21)
+    reopened.selectModel(.qwenImage21Turbo)
     try await wait({ reopened.isChecking })
     reopened.reference(second); reopened.reference(second)
     try await wait({ reopened.isImportingImages || reopened.isChecking })
-    try check(reopened.selectedModel == .qwenImage21 && reopened.inputImages.count == 2
+    try check(reopened.selectedModel == .qwenImage21Turbo && reopened.inputImages.count == 2
               && Set(reopened.inputImages.map(\.id)).count == 2,
               "selecting Qwen enables repeated history references after relaunch")
     try check(reopened.prompt == "My fresh draft" && reopened.selectedID == first.id

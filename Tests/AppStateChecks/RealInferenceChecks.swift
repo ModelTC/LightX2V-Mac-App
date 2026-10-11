@@ -10,7 +10,7 @@ func realInferenceChecks(_ arguments: [String]) async throws {
     let fm = FileManager.default
     guard !fm.fileExists(atPath: root.path) else { throw AppError.message("Choose a new test results folder") }
     var settings = AppSettings(repository: arguments[0], model: arguments[1],
-                               config: arguments[0] + "/configs/platforms/mps/qwen_image_21_viggle_v03.json",
+                               config: arguments[0] + "/configs/platforms/mps/qwen_image_21_turbo.json",
                                python: arguments[2], workingDirectory: root.appendingPathComponent("workspace, 中文").path)
     settings.promptEnhancement.enabled = false // This check runs image inference without enhancement resources.
     let support = root.appendingPathComponent("support")
@@ -31,7 +31,7 @@ func realInferenceChecks(_ arguments: [String]) async throws {
             try await Task.sleep(for: .milliseconds(100))
         }
     }
-    store.selectModel(.qwenImage21)
+    store.selectModel(.qwenImage21Turbo)
     try await wait({ store.isChecking }, seconds: 110)
     try require(store.environmentReady, "real MPS environment check")
     let files = arguments[4...5].map { URL(fileURLWithPath: $0) }
@@ -47,7 +47,7 @@ func realInferenceChecks(_ arguments: [String]) async throws {
     try require(completed.status == .completed, "AppStore multi-image inference completed")
     let output = NSBitmapImageRep(data: try Data(contentsOf: URL(fileURLWithPath: completed.request.output)))!
     try require(output.pixelsWide == 1376 && output.pixelsHigh == 768, "landscape dimensions and H/W mapping")
-    try require(completed.request.inputImages.count == 2 && store.currentStep == 6, "input snapshots and all six progress events")
+    try require(completed.request.inputImages.count == 2 && store.currentStep == QwenImage21Turbo.inferenceSteps, "input snapshots and all eight Turbo progress events")
     store.reuse(completed)
     try require(store.inputImages == completed.request.inputImages, "completed history reuse restores inputs")
     store.generate()

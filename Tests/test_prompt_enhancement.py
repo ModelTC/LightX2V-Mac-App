@@ -106,7 +106,7 @@ elif a.aspect_ratio:
     x,y=map(int,a.aspect_ratio.split(':')); w=max(32,round(math.sqrt(a.resolution*a.resolution*x/y)/32)*32); h=max(32,round(math.sqrt(a.resolution*a.resolution*y/x)/32)*32)
 else: w=h=a.resolution
 Image.new('RGB',(w,h)).save(out)
-print('==> step_index: 6 / 6',flush=True)
+print('==> step_index: 8 / 8',flush=True)
 '''
 
 ENHANCER = '''
@@ -143,7 +143,6 @@ class EnhancementPipelineTests(unittest.TestCase):
         self.resources = self.root / 'resources'; self.resources.mkdir()
         for name in ['bridge.py', 'prompt_enhancement.py']:
             (self.resources / name).write_bytes((RESOURCES / name).read_bytes())
-        (self.resources / 'qwen_image_edit.py').write_text(INFER)
         self.repo = self.root / 'code'
         (self.repo / 'lightx2v').mkdir(parents=True)
         (self.repo / 'lightx2v/__init__.py').write_text('')
@@ -151,8 +150,10 @@ class EnhancementPipelineTests(unittest.TestCase):
         self.model = self.root / 'model'
         for name in ['transformer', 'text_encoder', 'vae', 'scheduler', 'processor']:
             (self.model / name).mkdir(parents=True)
+        sigmas = [1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568]
+        (self.model / 'model_index.json').write_text(json.dumps(dict(sample_sigmas=sigmas)))
         self.config = self.root / 'config.json'
-        self.config.write_text(json.dumps(dict(infer_steps=6, sigmas=[1,.9375,.875,.75,.5,.25], attn_type='torch_sdpa_mps', enable_cfg=False)))
+        self.config.write_text(json.dumps(dict(infer_steps=8, sigmas=sigmas, do_time_shift=False, sample_guide_scale=1.0, attn_type='torch_sdpa_mps', enable_cfg=False)))
         self.runtime = self.root / 'bin'; self.runtime.mkdir()
         for name in ['llama-completion', 'llama-mtmd-cli']:
             binary = self.runtime / name

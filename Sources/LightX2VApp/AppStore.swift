@@ -4,11 +4,11 @@ import LightX2VCore
 import UniformTypeIdentifiers
 
 enum GenerationModel: String, CaseIterable, Identifiable {
-    case qwenImage21
+    case qwenImage21Turbo
 
     var id: String { rawValue }
     var title: String {
-        switch self { case .qwenImage21: return "Qwen-Image-2.1" }
+        switch self { case .qwenImage21Turbo: return QwenImage21Turbo.title }
     }
 }
 
@@ -135,7 +135,7 @@ final class AppStore: ObservableObject {
     }
     var configurationBusy: Bool { isRunning || isChecking || isPreparingWorkspace || isPreparingResources }
     var busy: Bool { configurationBusy || isImportingImages }
-    var canReferenceImages: Bool { selectedModel == .qwenImage21 && !needsGeneralSetup && !isPreparingWorkspace && terminationCompletion == nil }
+    var canReferenceImages: Bool { selectedModel == .qwenImage21Turbo && !needsGeneralSetup && !isPreparingWorkspace && terminationCompletion == nil }
     var canAddImages: Bool { canReferenceImages && !isImportingImages }
     var needsGeneralSetup: Bool { !hasCompletedGeneralSetup || !settings.hasGeneralPaths }
     var hasUnsavedModelSettings: Bool { modelDirectory != settings.model || modelConfig != settings.config }
@@ -281,6 +281,10 @@ final class AppStore: ObservableObject {
         showInspector = true
         modelPreparationExpanded = true
         generationParametersExpanded = true
+        if modelDirectory.isEmpty {
+            modelDirectory = QwenImage21Turbo.suggestedModel(near: [settings.repository, settings.workingDirectory]) ?? ""
+        }
+        if modelConfig.isEmpty { modelConfig = QwenImage21Turbo.suggestedConfig(repository: settings.repository) ?? "" }
         if changed { environmentReady = false; checkEnvironment() }
     }
 
@@ -321,10 +325,10 @@ final class AppStore: ObservableObject {
         updated.workingDirectory = path(value.workingDirectory)
         updated.repository = path(value.repository)
         updated.python = path(value.python)
-        // Carry the same relative config to a newly downloaded checkout. Keep custom config choices.
+        // Default to the only supported model's config in the selected checkout.
         var suggested: String?
         if updated.config.isEmpty {
-            suggested = updated.repository + "/configs/platforms/mps/qwen_image_21_viggle_v03.json"
+            suggested = QwenImage21Turbo.suggestedConfig(repository: updated.repository)
         } else if updated.repository != settings.repository, !settings.repository.isEmpty,
                   updated.config.hasPrefix(settings.repository + "/") {
             suggested = updated.repository + updated.config.dropFirst(settings.repository.count)
@@ -540,7 +544,7 @@ final class AppStore: ObservableObject {
         case "status": if !isStopping { phase = event["message"] as? String ?? phase }
         case "step":
             currentStep = event["step"] as? Int ?? 0
-            let totalSteps = event["total"] as? Int ?? 6
+            let totalSteps = event["total"] as? Int ?? QwenImage21Turbo.inferenceSteps
             if !isStopping { phase = "正在生成 · 第 \(currentStep) / \(totalSteps) 步" }
         case "error":
             activeLog += "\n" + (event["message"] as? String ?? "未知错误") + "\n"

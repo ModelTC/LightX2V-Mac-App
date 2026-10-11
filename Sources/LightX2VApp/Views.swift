@@ -189,10 +189,10 @@ struct WelcomeView: View {
                         Image(systemName: "lock.shield").font(.system(size: 10))
                         Text("本地运行")
                         if let model = store.selectedModel {
-                            Text("·"); Text(model.title); Text("·"); Text("6 步生成")
+                            Text("·"); Text(model.title); Text("·"); Text("\(QwenImage21Turbo.inferenceSteps) 步生成")
                         }
                     }.font(.system(size: 10)).foregroundStyle(Palette.muted).padding(.top, 16)
-                    if store.selectedModel == .qwenImage21 {
+                    if store.selectedModel == .qwenImage21Turbo {
                         HStack(spacing: 10) {
                             ForEach(examples, id: \.0) { item in
                                 Button { store.usePrompt(item.2) } label: {
@@ -252,7 +252,7 @@ struct ComposerView: View {
 
     private var composerActions: some View {
         HStack(spacing: 7) {
-            if store.selectedModel == .qwenImage21 { attachmentButton }
+            if store.selectedModel == .qwenImage21Turbo { attachmentButton }
             ModelSelector()
             if store.selectedModel == nil {
                 Label("请先选择模型", systemImage: "arrow.left")
@@ -452,7 +452,7 @@ struct GenerationTurnView: View {
                         ProgressView().controlSize(.regular).tint(Palette.ink)
                         Text(store.phase).font(.system(size: 13, weight: .medium))
                         HStack(spacing: 5) {
-                            ForEach(1...6, id: \.self) { index in
+                            ForEach(1...QwenImage21Turbo.inferenceSteps, id: \.self) { index in
                                 Capsule().fill(index < store.currentStep ? Palette.ink : index == store.currentStep ? Palette.ink.opacity(0.45) : Palette.line)
                                     .frame(width: 25, height: 4)
                             }
@@ -487,7 +487,7 @@ struct GenerationTurnView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text("LightX2V").font(.system(size: 12, weight: .semibold))
-                    Text("Qwen-Image-2.1").font(.system(size: 10)).foregroundStyle(Palette.muted)
+                    Text(QwenImage21Turbo.title).font(.system(size: 10)).foregroundStyle(Palette.muted)
                 }
                 HStack(spacing: 6) {
                     if job.status == .completed {

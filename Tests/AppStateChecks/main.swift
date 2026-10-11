@@ -33,6 +33,10 @@ struct AppStateChecks {
             try await realInferenceChecks(Array(CommandLine.arguments.dropFirst(2)))
             return
         }
+        if CommandLine.arguments.dropFirst().first == "--turbo-real" {
+            try await turboRealInferenceChecks(Array(CommandLine.arguments.dropFirst(2)))
+            return
+        }
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("app-state-" + UUID().uuidString)
         try fm.createDirectory(at: root, withIntermediateDirectories: true)
@@ -69,9 +73,11 @@ struct AppStateChecks {
         let missingPreview = await LocalImagePreview.load(root.appendingPathComponent("missing.png").path, maximumDimension: 180)
         try check(missingPreview == nil, "missing preview fails without blocking app state")
         try check(store.selectedModel == nil && !store.modelPreparationExpanded && !store.generationParametersExpanded, "launch requires model selection with folded inspector")
+        try check(GenerationModel.allCases == [.qwenImage21Turbo] && GenerationModel.qwenImage21Turbo.title == QwenImage21Turbo.title,
+                  "Turbo is the sole model choice")
         store.addInputImages([original])
         try check(!store.isImportingImages && store.inputImages.isEmpty, "no model rejects attachment import")
-        store.selectModel(.qwenImage21)
+        store.selectModel(.qwenImage21Turbo)
         // Invalid fixture source deliberately prevents starting a real environment check.
         store.errorMessage = nil
         try check(store.modelPreparationExpanded && store.generationParametersExpanded, "model selection opens preparation and parameters")
@@ -157,6 +163,7 @@ struct AppStateChecks {
         try check(store.generations[0].status == .failed && store.errorMessage != nil, "failed launch has a visible history record")
         store.clearInputImages()
         try await creationChecks()
+        try await turboPreparationChecks()
         try await enhancementStateChecks()
         try await modelEnvironmentChecks()
         try await generalSettingsFocusChecks()

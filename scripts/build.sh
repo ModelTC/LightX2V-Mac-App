@@ -6,11 +6,15 @@ SCRATCH="${LIGHTX2V_BUILD_DIR:-$ROOT/.build}"
 
 swift build --package-path "$ROOT" --scratch-path "$SCRATCH" -c release --arch arm64 --product LightX2VApp
 BIN="$(swift build --package-path "$ROOT" --scratch-path "$SCRATCH" -c release --arch arm64 --show-bin-path)"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS"
+# Rebuild generated resources so removed adapters cannot survive an incremental build.
+rm -rf "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/Resources"
 cp "$BIN/LightX2VApp" "$APP/Contents/MacOS/LightX2VApp"
 # A .app uses the native Resources directory; SwiftPM's bundle remains a development fallback.
-cp "$BIN/LightX2VAPP_LightX2VApp.bundle/"*.py "$APP/Contents/Resources/"
-cp "$BIN/LightX2VAPP_LightX2VApp.bundle/requirements.txt" "$APP/Contents/Resources/requirements.txt"
+for resource in bridge.py prompt_enhancement.py requirements.txt; do
+    cp "$BIN/LightX2VAPP_LightX2VApp.bundle/$resource" "$APP/Contents/Resources/$resource"
+done
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

@@ -47,6 +47,8 @@ func enhancementStateChecks() async throws {
         emit('enhancement_prompt',delta=source); time.sleep(.2)
         emit('enhancement_result',prompt='Enhanced '+source,whRatio='3:2',ratioFollow='',duration=.2)
         time.sleep(.2)
+    for step in range(1,9):
+        emit('step', step=step); time.sleep(.01)
     shutil.copyfile(Path(__file__).with_name('fixture.png'),request['output'])
     emit('done',status='completed',duration=.4)
     """
@@ -70,7 +72,7 @@ func enhancementStateChecks() async throws {
     let layout = WorkspaceLayout(settings.workingDirectory); try layout.prepare()
     try JSONFile.write(WorkspaceData(settings: settings, hasCompletedGeneralSetup: true), to: layout.state)
     try JSONFile.write(WorkspaceLocation(workingDirectory: settings.workingDirectory), to: support.appendingPathComponent("workspace_location.json"))
-    let store = AppStore(); store.selectModel(.qwenImage21)
+    let store = AppStore(); store.selectModel(.qwenImage21Turbo)
     try await wait({ store.isChecking }); store.environmentReady = true
     try await wait({ !store.enhancementResourcesReady })
     try check(store.settings.promptEnhancement.enabled && store.enhancementResourcesReady, "enhancement is enabled by default and detects text resources without toggling")
@@ -95,6 +97,7 @@ func enhancementStateChecks() async throws {
     try check(store.settings.promptEnhancement.enabled, "enhancement cannot change midway through a run")
     try await wait({ store.isRunning })
     let first = store.generations[0]
+    try check(store.currentStep == 8 && store.logs.isEmpty, "eight Turbo steps are handled without an explicit total or workspace log noise")
     store.reference(first); store.reference(first)
     try await wait({ store.isImportingImages })
     store.prompt = "Reference input"; store.generate()

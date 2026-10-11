@@ -13,7 +13,7 @@ func enhancementChecks() throws {
         return url.path
     }
     let source = try file("code/LightX2V-commit/lightx2v/infer.py")
-    let model = try file("models/Qwen/Qwen-Image-2.1-merged/model_index.json")
+    let model = try file("models/Qwen/Qwen-Image-2.1-Turbo/model_index.json")
     let binary = try file(".qwen-image-pe-t2i/build/bin/llama-completion", executable: true)
     _ = try file(".qwen-image-pe-t2i/build/bin/llama-mtmd-cli", executable: true)
     for mode in ["T2I", "I2I"] {

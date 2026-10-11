@@ -36,7 +36,7 @@ if a.prompt=='SLEEP':
     (out.parent/'pid').write_text(str(os.getpid()))
     print('fixture ready',flush=True)
     time.sleep(30)
-for i in range(1,7): print(f'==> step_index: {i} / 6',flush=True)
+for i in range(1,9): print(f'==> step_index: {i} / 8',flush=True)
 Image.new('RGB',(a.size[1],a.size[0]) if a.size else (a.resolution,a.resolution),(100,150,190)).save(out)
 '''
 
@@ -53,7 +53,8 @@ class BridgeTests(unittest.TestCase):
         for folder in ("transformer", "text_encoder", "vae", "scheduler", "processor"):
             (self.model / folder).mkdir(parents=True)
         self.config = self.root / "source.json"
-        self.cfg = {"infer_steps":6,"sigmas":[1,.9375,.875,.75,.5,.25],"attn_type":"torch_sdpa_mps","enable_cfg":False,"cpu_offload":True,"dit_disk_streaming":True}
+        (self.model / "model_index.json").write_text(json.dumps({"sample_sigmas": bridge.TURBO_SIGMAS}))
+        self.cfg = {"infer_steps":8,"sigmas":bridge.TURBO_SIGMAS,"do_time_shift":False,"sample_guide_scale":1.0,"attn_type":"torch_sdpa_mps","enable_cfg":False,"cpu_offload":True,"dit_disk_streaming":True}
         self.config.write_text(json.dumps(self.cfg))
         self.request = {"repository":str(self.repo),"model":str(self.model),"config":str(self.config),
                         "prompt":"A picture; $(touch should-not-exist) `echo test` 中文\nnew line",
@@ -73,7 +74,8 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(child.returncode,0,err + out)
         events = [json.loads(line) for line in out.splitlines()]
         self.assertEqual(events[-1]['status'],'completed')
-        self.assertEqual([e['step'] for e in events if e['type']=='step'],list(range(1,7)))
+        self.assertEqual([e['step'] for e in events if e['type']=='step'],list(range(1,9)))
+        self.assertEqual({e['total'] for e in events if e['type']=='step'}, {8})
         received = json.loads((self.root/'run/received.json').read_text())
         self.assertEqual(received['prompt'],self.request['prompt'])
         self.assertEqual(received['size'],[256,512])
@@ -113,6 +115,20 @@ class BridgeTests(unittest.TestCase):
         self.config.write_text(json.dumps(self.cfg))
         self.request_path.write_text(json.dumps(self.request))
         with self.assertRaises(ValueError): bridge.load_request(self.request_path)
+
+    def test_turbo_requires_its_checkpoint_schedule_and_no_time_shift_or_cfg(self):
+        self.request_path.write_text(json.dumps(self.request))
+        bridge.load_request(self.request_path)
+        for override in ({'infer_steps':6}, {'sigmas':[1,.9375,.875,.75,.5,.25]},
+                         {'do_time_shift':True}, {'do_time_shift':None},
+                         {'enable_cfg':True}, {'sample_guide_scale':3.5}, {'attn_type':'torch_sdpa'}):
+            with self.subTest(override=override):
+                self.config.write_text(json.dumps({**self.cfg, **override}))
+                with self.assertRaises(ValueError): bridge.load_request(self.request_path)
+        self.config.write_text(json.dumps(self.cfg))
+        (self.model / 'model_index.json').write_text(json.dumps({'sample_sigmas':[1,.9375,.875,.75,.5,.25]}))
+        with self.assertRaisesRegex(ValueError, 'Turbo 权重目录'):
+            bridge.load_request(self.request_path)
 
     def test_all_1k_and_2k_presets_reach_cli_in_height_width_order(self):
         sizes = [(1024, 1024), (1184, 896), (896, 1184), (1248, 832),

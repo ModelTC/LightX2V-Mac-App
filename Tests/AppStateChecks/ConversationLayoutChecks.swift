@@ -149,7 +149,7 @@ func conversationLayoutChecks() async throws {
     store.selectedID = next.id
     try await settle("open multi-turn history in the whole workspace", in: workspaceHost)
     try checkBottom("whole workspace history", in: workspaceHost)
-    store.selectModel(.qwenImage21)
+    store.selectModel(.qwenImage21Turbo)
     store.errorMessage = nil
     try await settle("model selection in completed history", in: workspaceHost)
     let contentHeight = descendantScroll(workspaceHost)!.documentView!.frame.height

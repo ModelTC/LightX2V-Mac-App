@@ -16,6 +16,9 @@ import time
 # Bundled adapters must never add bytecode files inside the signed APP bundle.
 sys.dont_write_bytecode = True
 
+TURBO_STEPS = 8
+TURBO_SIGMAS = [1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568]
+
 
 def emit(kind, **fields):
     print(json.dumps({"type": kind, **fields}, ensure_ascii=False), flush=True)
@@ -34,15 +37,20 @@ def load_request(path):
     for folder in ("transformer", "text_encoder", "vae", "scheduler", "processor"):
         if not (model / folder).is_dir():
             raise ValueError(f"模型缺少目录或符号链接失效：{folder}")
+    with (model / "model_index.json").open(encoding="utf-8") as f:
+        metadata = json.load(f)
+    if metadata.get("sample_sigmas") != TURBO_SIGMAS:
+        raise ValueError("请选择 Qwen-Image-2.1-Turbo 权重目录，模型的 8 步采样配置不匹配")
     with config.open(encoding="utf-8") as f:
         cfg = json.load(f)
-    expected = [1.0, 0.9375, 0.875, 0.75, 0.5, 0.25]
-    if cfg.get("infer_steps") != 6 or cfg.get("sigmas") != expected:
-        raise ValueError("当前版本仅支持 Viggle v0.3 的固定 6 步配置，请选择脚本对应的 JSON")
+    if cfg.get("infer_steps") != TURBO_STEPS or cfg.get("sigmas") != TURBO_SIGMAS:
+        raise ValueError("请选择 qwen_image_21_turbo.json：Turbo 需要固定的 8 步采样配置")
     if cfg.get("attn_type") != "torch_sdpa_mps":
         raise ValueError("请选择使用 torch_sdpa_mps 的 MPS 配置")
-    if cfg.get("enable_cfg") is not False:
-        raise ValueError("Viggle v0.3 配置必须关闭 CFG")
+    if cfg.get("do_time_shift") is not False:
+        raise ValueError("Turbo 配置必须设置 do_time_shift=false")
+    if cfg.get("enable_cfg") is not False or cfg.get("sample_guide_scale") != 1.0:
+        raise ValueError("Turbo 配置必须关闭 CFG 并设置 sample_guide_scale=1.0")
     return request, cfg
 
 
@@ -103,9 +111,8 @@ def arguments(request, config_path):
         with Image.open(path) as reference:
             reference.verify()
         paths.append("inputs/" + path.name)
-    entry = [str(Path(__file__).with_name("qwen_image_edit.py"))] if images else ["-m", "lightx2v.infer"]
     # CLI expects HEIGHT WIDTH, whereas the interface displays WIDTH × HEIGHT.
-    cmd = [sys.executable, "-u", *entry,
+    cmd = [sys.executable, "-u", "-m", "lightx2v.infer",
             "--model_cls", "qwen_image_21", "--task", "i2i" if images else "t2i",
             "--model_path", request["model"], "--config_json", str(config_path),
             "--prompt", prompt, *size_args,
