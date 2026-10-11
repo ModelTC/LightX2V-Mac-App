@@ -17,6 +17,16 @@ func rejects(_ body: () throws -> Void) throws {
         let root = fm.temporaryDirectory.appendingPathComponent("LightX2V setup checks \(UUID().uuidString)")
         try fm.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: root) }
+        if let index = CommandLine.arguments.firstIndex(of: "--install-real"), CommandLine.arguments.count > index + 2 {
+            let workspace = WorkspaceLayout(CommandLine.arguments[index + 1])
+            let requirements = URL(fileURLWithPath: CommandLine.arguments[index + 2])
+            let value = try await PyTorchEnvironmentInstaller.install(workspace: workspace, requirements: requirements) { update in
+                if let line = update.logLine { print(line) } else { print("\(update.stage.title) \(update.detail)") }
+            }
+            try expect(value.isCompatible, "real installed environment incompatible")
+            print("PASS real managed installation: \(value.executable) | \(value.compatibilityDetail)")
+            return
+        }
         if CommandLine.arguments.contains("--download") {
             let workspace = WorkspaceLayout(root.path)
             let result = try await SourceDownloader.download(workspace: workspace) { print($0) }
@@ -46,7 +56,13 @@ func rejects(_ body: () throws -> Void) throws {
         print("PASS separate venv identities and alias deduplication")
         try await commands(root)
         print("PASS probe result parsing, missing torch, timeout and cancellation")
-        print("6 setup checks passed")
+        try environmentVersions()
+        print("PASS all dependency minimums, numeric versions, local builds and prereleases")
+        try await environmentDownload(root)
+        print("PASS installer byte progress, cache reuse, checksum rejection, HTTP failure and download cancellation")
+        try await environmentInstallation(root)
+        print("PASS managed installation, requirements, discovery, reuse, rejection, retry and process-group cancellation")
+        print("9 setup checks passed")
     }
 
     static func setupGuide(_ root: URL) throws {

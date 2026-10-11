@@ -21,6 +21,14 @@ struct SettingsView: View {
     @State private var searchError: String?
     @State private var searchCancelled = false
     @State private var operationID: UUID?
+    @State private var showInstallInstructions = false
+    @State private var showInstaller = false
+    @State private var installing = false
+    @State private var installProgress = EnvironmentInstallProgress(.download)
+    @State private var installLines: [String] = []
+    @State private var installError: String?
+    @State private var installCancelled = false
+    @State private var manualRequirements: URL?
 
     private var layout: WorkspaceLayout { WorkspaceLayout(normalized(settings.workingDirectory)) }
     private var hasWorkDirectory: Bool { (try? WorkspaceLayout.validate(normalized(settings.workingDirectory))) != nil }
@@ -82,12 +90,12 @@ struct SettingsView: View {
                             }
                         }.id(GeneralSetupStep.source)
                         SettingsSection(step: .python, progress: setupProgress, animation: guideAnimation,
-                                        title: "PyTorch 环境", subtitle: "搜索已安装的 Python 环境，选择支持 Apple Silicon MPS 的一项。") {
+                                        title: "PyTorch 环境", subtitle: "搜索符合版本要求的本机环境，或在工作目录中安装。") {
                             pathRow("PyTorch 环境", value: $settings.python, directory: false)
                             HStack(spacing: 10) {
-                                Button { startSearch() } label: { Label("搜索", systemImage: "magnifyingglass") }
+                                Button { startSearch() } label: { Label("搜索本机环境", systemImage: "magnifyingglass") }
                                     .disabled(store.busy || !hasWorkDirectory)
-                                Text("检测 PyTorch 与 MPS · 不会安装或修改环境")
+                                Text("检查依赖版本与 MPS")
                                     .font(.system(size: 10)).foregroundStyle(Palette.muted)
                                 Spacer(minLength: 0)
                             }.font(.system(size: 11))
@@ -142,7 +150,7 @@ struct SettingsView: View {
                          placeholder: String? = nil) -> some View {
         HStack(spacing: 4) {
             PathInputField(title: title,
-                           placeholder: placeholder ?? (directory ? "选择文件夹，或粘贴完整路径" : "选择环境中的 bin/python，或点击下方搜索"),
+                           placeholder: placeholder ?? (directory ? "选择文件夹，或粘贴完整路径" : "选择环境中的 bin/python，或搜索本机环境"),
                            symbol: directory ? "folder" : "terminal", text: value,
                            onCommit: { updateGuide() })
             Button(directory ? "选择…" : "手动选择…") {
@@ -163,65 +171,29 @@ struct SettingsView: View {
     }
 
     private var environmentPicker: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("选择 PyTorch 环境").font(.system(size: 18, weight: .semibold))
-                    Text(searching ? "正在检测 \(checkedCount) / \(totalCount) 个环境…" : "\(searchCancelled ? "搜索已停止" : "检测完成") · 找到 \(environments.filter(\.mpsAvailable).count) 个可用环境")
-                        .font(.system(size: 11)).foregroundStyle(Palette.muted)
+        EnvironmentSearchView(environments: environments, searching: searching, cancelled: searchCancelled,
+                              checked: checkedCount, total: totalCount, error: searchError,
+                              managedInstallIssue: PyTorchEnvironmentInstaller.installationIssue(in: layout),
+                              onSelect: { environment in
+                                  guard environment.isCompatible else { return }
+                                  settings.python = environment.executable
+                                  updateGuide(); store.setupTask?.cancel(); showEnvironments = false
+                              }, onSearch: startSearch, onStop: { store.setupTask?.cancel() },
+                              onInstructions: showInstructions, onInstall: startInstall,
+                              onClose: { store.setupTask?.cancel(); showEnvironments = false })
+            .sheet(isPresented: $showInstallInstructions) {
+                if let manualRequirements {
+                    EnvironmentInstallInstructions(workspace: layout, requirements: manualRequirements,
+                                                   onClose: { showInstallInstructions = false })
                 }
-                Spacer()
-                if searching { ProgressView().controlSize(.small) }
             }
-            ScrollView {
-                VStack(spacing: 8) {
-                    if environments.isEmpty {
-                        VStack(spacing: 10) {
-                            Image(systemName: "terminal").font(.system(size: 25)).foregroundStyle(Palette.muted)
-                            Text(searching ? "正在查找 Conda、venv、pyenv 等常见环境" : "没有找到 Python 环境")
-                                .font(.system(size: 12))
-                        }.frame(maxWidth: .infinity).padding(.vertical, 60)
-                    }
-                    ForEach(environments) { environment in
-                        Button {
-                            settings.python = environment.executable
-                            updateGuide()
-                            store.setupTask?.cancel(); showEnvironments = false
-                        } label: {
-                            HStack(alignment: .top, spacing: 12) {
-                                Image(systemName: environment.mpsAvailable ? "checkmark.circle.fill" : "minus.circle")
-                                    .foregroundStyle(environment.mpsAvailable ? Palette.green : Palette.muted).padding(.top, 2)
-                                VStack(alignment: .leading, spacing: 7) {
-                                    HStack {
-                                        Text(environment.name).font(.system(size: 12, weight: .semibold))
-                                        Spacer()
-                                        if environment.mpsAvailable {
-                                            Text("MPS 可用").font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.green)
-                                        }
-                                    }
-                                    Text(environment.executable).font(.system(size: 10, design: .monospaced))
-                                        .lineLimit(2).foregroundStyle(Palette.muted).multilineTextAlignment(.leading)
-                                    Text([environment.pythonVersion.isEmpty ? "" : "Python \(environment.pythonVersion)", environment.torchVersion.isEmpty ? "" : "PyTorch \(environment.torchVersion)", environment.mpsAvailable ? "" : environment.detail].filter { !$0.isEmpty }.joined(separator: " · "))
-                                        .font(.system(size: 10)).foregroundStyle(Palette.muted).multilineTextAlignment(.leading)
-                                }
-                            }.padding(13).frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10))
-                                .contentShape(RoundedRectangle(cornerRadius: 10))
-                        }.buttonStyle(HoverButtonStyle(radius: 10, border: true, dimsWhenDisabled: false)).disabled(!environment.mpsAvailable).help(environment.detail)
-                    }
-                }.subtleScrollbars()
-            }.frame(height: 290)
-            if let searchError { Text(searchError).font(.system(size: 11)).foregroundStyle(Palette.accent) }
-            Text("只搜索常见环境位置。未找到时，可返回手动选择环境中的 bin/python。")
-                .font(.system(size: 11)).foregroundStyle(Palette.muted)
-            HStack {
-                if searching { Button("停止搜索") { store.setupTask?.cancel() } }
-                else { Button("重新搜索") { startSearch() }.disabled(store.busy) }
-                Spacer()
-                Button("返回") { store.setupTask?.cancel(); showEnvironments = false }.keyboardShortcut(.cancelAction)
+            .sheet(isPresented: $showInstaller, onDismiss: { if installing { store.setupTask?.cancel() } }) {
+                EnvironmentInstallView(workspace: layout, progress: installProgress, lines: installLines,
+                                       installing: installing, cancelled: installCancelled, error: installError,
+                                       onCancel: { store.setupTask?.cancel() }, onRetry: startInstall,
+                                       onSearch: { showInstaller = false; startSearch() },
+                                       onClose: { showInstaller = false })
             }
-        }.padding(24).frame(width: 610).background(Palette.canvas).foregroundStyle(Palette.ink)
-            .buttonStyle(SettingsActionStyle())
     }
 
     private func normalized(_ value: String) -> String {
@@ -271,6 +243,51 @@ struct SettingsView: View {
             } catch {
                 if Task.isCancelled { searchCancelled = true }
                 else { searchError = error.localizedDescription }
+            }
+        }
+    }
+
+    private var bundledRequirements: URL? {
+        Bundle.main.url(forResource: "requirements", withExtension: "txt")
+            ?? Bundle.module.url(forResource: "requirements", withExtension: "txt")
+    }
+
+    private func showInstructions() {
+        do {
+            guard let bundledRequirements else { throw AppError.message("APP 中的依赖文件缺失，请重新下载 APP。") }
+            manualRequirements = try PyTorchEnvironmentInstaller.prepareRequirements(bundledRequirements, workspace: layout)
+            showInstallInstructions = true
+        } catch { searchError = error.localizedDescription }
+    }
+
+    private func startInstall() {
+        guard !store.busy else { return }
+        guard let bundledRequirements else { searchError = "APP 中的依赖文件缺失，请重新下载 APP。"; return }
+        showInstaller = true; installing = true; installError = nil; installCancelled = false
+        installLines = []; installProgress = .init(.download); store.isPreparingResources = true
+        let workspace = layout; let token = UUID(); operationID = token
+        store.setupTask = Task {
+            defer { installing = false; operationID = nil; store.finishSetupTask() }
+            do {
+                _ = try await PyTorchEnvironmentInstaller.install(workspace: workspace, requirements: bundledRequirements) { value in
+                    Task { @MainActor in
+                        guard operationID == token else { return }
+                        if value.stage.rawValue >= installProgress.stage.rawValue {
+                            if value.logLine == nil { installProgress = value }
+                            else if value.stage != installProgress.stage { installProgress = .init(value.stage) }
+                        }
+                        if let line = value.logLine, !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            let clean = line.replacingOccurrences(of: #"\x1b\[[0-9;]*[A-Za-z]"#, with: "", options: .regularExpression)
+                                .replacingOccurrences(of: "\r", with: "")
+                            installLines.append(String(clean.prefix(1000)))
+                            if installLines.count > 160 { installLines.removeFirst(installLines.count - 160) }
+                        }
+                    }
+                }
+                installProgress = .init(.completed, detail: "TorchLightX2V 已就绪，请重新点击“搜索本机环境”。")
+            } catch {
+                if Task.isCancelled { installCancelled = true }
+                else { installError = error.localizedDescription }
             }
         }
     }

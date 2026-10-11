@@ -10,6 +10,11 @@ struct AppStateChecks {
         _ = NSApplication.shared
         if CommandLine.arguments.dropFirst().first == "--settings-only" {
             try await generalSettingsFocusChecks()
+            try await environmentPresentationChecks()
+            return
+        }
+        if CommandLine.arguments.dropFirst().first == "--environment-only" || CommandLine.arguments.dropFirst().first == "--environment-snapshots" {
+            try await environmentPresentationChecks()
             return
         }
         if CommandLine.arguments.dropFirst().first == "--enhancement-only" {
@@ -150,6 +155,7 @@ struct AppStateChecks {
         try await creationChecks()
         try await enhancementStateChecks()
         try await generalSettingsFocusChecks()
+        try await environmentPresentationChecks()
         try await conversationLayoutChecks()
         print("App state checks passed")
     }

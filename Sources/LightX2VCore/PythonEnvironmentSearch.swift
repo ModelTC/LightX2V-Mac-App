@@ -1,12 +1,74 @@
 import Foundation
 
+public struct PythonDependency: Sendable {
+    public let name: String
+    public let minimum: String
+    public init(_ name: String, _ minimum: String) { self.name = name; self.minimum = minimum }
+}
+
+public enum PyTorchRequirements {
+    public static let dependencies = [PythonDependency("torch", "2.14.1"), PythonDependency("torchvision", "0.29.1"),
+                                      PythonDependency("torchaudio", "2.11.0"), PythonDependency("transformers", "5.19.0")]
+    public static var summary: String { dependencies.map { "\($0.name) ≥ \($0.minimum)" }.joined(separator: " · ") }
+
+    /// Compare release components numerically, including common PEP 440 suffixes.
+    /// A prerelease of the minimum itself is lower; local build tags do not affect the minimum.
+    public static func meetsMinimum(_ version: String, _ minimum: String) -> Bool {
+        let pattern = #"^v?([0-9]+(?:\.[0-9]+)*)(?:(?:[._-]?)(a|b|rc|alpha|beta|pre|preview)[0-9]*)?(?:[._-]?post[0-9]*)?(?:[._-]?(dev)[0-9]*)?(?:\+[a-z0-9._-]+)?$"#
+        func parse(_ text: String) -> ([Int], Bool)? {
+            let text = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let expression = try? NSRegularExpression(pattern: pattern),
+                  let match = expression.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+                  let range = Range(match.range(at: 1), in: text) else { return nil }
+            let release = text[range].split(separator: ".").compactMap { Int($0) }
+            guard !release.isEmpty else { return nil }
+            return (release, match.range(at: 2).location != NSNotFound || match.range(at: 3).location != NSNotFound)
+        }
+        guard let (actual, prerelease) = parse(version), let (required, _) = parse(minimum) else { return false }
+        for index in 0..<max(actual.count, required.count) {
+            let a = index < actual.count ? actual[index] : 0
+            let b = index < required.count ? required[index] : 0
+            if a != b { return a > b }
+        }
+        return !prerelease
+    }
+}
+
 public struct PythonEnvironment: Identifiable, Codable, Equatable {
     public var id: String { executable }
     public let executable: String
     public var pythonVersion: String = ""
     public var torchVersion: String = ""
+    public var torchvisionVersion: String = ""
+    public var torchaudioVersion: String = ""
+    public var transformersVersion: String = ""
+    public var architecture: String = ""
     public var mpsAvailable = false
     public var detail: String = ""
+    public func version(of package: String) -> String {
+        switch package {
+        case "torch": return torchVersion
+        case "torchvision": return torchvisionVersion
+        case "torchaudio": return torchaudioVersion
+        case "transformers": return transformersVersion
+        default: return ""
+        }
+    }
+    public var versionIssues: [String] {
+        PyTorchRequirements.dependencies.compactMap { dependency in
+            let current = version(of: dependency.name)
+            if current.isEmpty { return "缺少 \(dependency.name)" }
+            return PyTorchRequirements.meetsMinimum(current, dependency.minimum) ? nil : "\(dependency.name) \(current)，需要 ≥ \(dependency.minimum)"
+        }
+    }
+    public var isCompatible: Bool { mpsAvailable && architecture == "arm64" && versionIssues.isEmpty }
+    public var compatibilityDetail: String {
+        if isCompatible { return "版本符合要求 · MPS 可用" }
+        var issues = versionIssues
+        if !architecture.isEmpty && architecture != "arm64" { issues.append("需要 Apple Silicon arm64 环境") }
+        if !mpsAvailable { issues.append(detail.isEmpty ? "MPS 不可用" : detail) }
+        return issues.joined(separator: "；")
+    }
     public var name: String {
         let prefix = URL(fileURLWithPath: executable).deletingLastPathComponent().deletingLastPathComponent()
         return ["usr", "opt"].contains(prefix.lastPathComponent) ? "系统 Python" : prefix.lastPathComponent
@@ -43,6 +105,9 @@ public enum PythonEnvironmentSearch {
             let root = URL(fileURLWithPath: workspace)
             for name in [".venv", "venv", "env"] { prefix(root.appendingPathComponent(name)) }
             for env in children(root.appendingPathComponent("envs")) { prefix(env) }
+            let manager = PyTorchEnvironmentInstaller.manager(in: WorkspaceLayout(workspace))
+            prefix(manager)
+            for env in children(manager.appendingPathComponent("envs")) { prefix(env) }
         }
         for name in ["miniconda3", "anaconda3", "miniforge3", "mambaforge"] {
             for root in [home.appendingPathComponent(name), URL(fileURLWithPath: "/opt/\(name)")] {
@@ -91,8 +156,11 @@ public enum PythonEnvironmentSearch {
     public static func probe(_ executable: String, workspace: WorkspaceLayout) async throws -> PythonEnvironment {
         var result = PythonEnvironment(executable: executable)
         let script = #"""
-import json, platform
-result = {"python": platform.python_version(), "torch": "", "mps": False, "detail": ""}
+import json, platform, importlib.metadata
+result = {"python": platform.python_version(), "architecture": platform.machine(), "mps": False, "detail": ""}
+for name in ("torch", "torchvision", "torchaudio", "transformers"):
+    try: result[name] = importlib.metadata.version(name)
+    except importlib.metadata.PackageNotFoundError: result[name] = ""
 try:
     import torch
     result["torch"] = str(torch.__version__)
@@ -111,6 +179,10 @@ print("LIGHTX2V_ENV:" + json.dumps(result, ensure_ascii=False))
             }
             result.pythonVersion = info["python"] as? String ?? ""
             result.torchVersion = info["torch"] as? String ?? ""
+            result.torchvisionVersion = info["torchvision"] as? String ?? ""
+            result.torchaudioVersion = info["torchaudio"] as? String ?? ""
+            result.transformersVersion = info["transformers"] as? String ?? ""
+            result.architecture = info["architecture"] as? String ?? ""
             result.mpsAvailable = info["mps"] as? Bool ?? false
             result.detail = info["detail"] as? String ?? "检测失败"
         } catch {
@@ -135,7 +207,7 @@ print("LIGHTX2V_ENV:" + json.dumps(result, ensure_ascii=False))
                 }
                 for try await value in group {
                     results.append(value)
-                    results.sort { lhs, rhs in lhs.mpsAvailable != rhs.mpsAvailable ? lhs.mpsAvailable : lhs.executable < rhs.executable }
+                    results.sort { lhs, rhs in lhs.isCompatible != rhs.isCompatible ? lhs.isCompatible : lhs.executable < rhs.executable }
                     progress(results, results.count, paths.count)
                 }
             }
