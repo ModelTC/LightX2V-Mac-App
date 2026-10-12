@@ -15,7 +15,18 @@ extension SetupChecks {
         var env = PythonEnvironment(executable: "/fixture/bin/python")
         env.architecture = "arm64"; env.mpsAvailable = true; env.torchVersion = "2.14.1"
         env.torchvisionVersion = "0.29.1"; env.torchaudioVersion = "2.11.0"; env.transformersVersion = "5.19.0"
+        env.diffusersVersion = "0.41.0"
         try expect(env.isCompatible, "exact minimums should qualify")
+        for version in ["", "0.40.99", "0.41.0rc1", "0.41.0.dev1"] {
+            env.diffusersVersion = version
+            let issue = version.isEmpty ? "缺少 diffusers" : "diffusers \(version)，需要 ≥ 0.41.0"
+            try expect(!env.isCompatible && env.compatibilityDetail.contains(issue), "missing or old diffusers was accepted or not explained: \(version)")
+        }
+        for version in ["0.41.0", "0.41.1", "0.42.0"] {
+            env.diffusersVersion = version
+            try expect(env.isCompatible, "qualifying diffusers rejected: \(version)")
+        }
+        env.diffusersVersion = "0.41.0"
         env.transformersVersion = "4.57.3"
         try expect(!env.isCompatible && env.compatibilityDetail.contains("transformers 4.57.3"), "old transformers was accepted or not explained")
         env.transformersVersion = "5.20.0"; env.torchaudioVersion = ""
@@ -31,7 +42,7 @@ extension SetupChecks {
         let layout = WorkspaceLayout(root.appendingPathComponent("managed ' 环境 with spaces").path)
         try layout.prepare()
         let requirements = root.appendingPathComponent("requirements.txt")
-        try Data("torch==2.14.1\ntorchvision==0.29.1\ntorchaudio==2.11.0\ntransformers==5.19.0\n".utf8).write(to: requirements)
+        try Data("torch==2.14.1\ntorchvision==0.29.1\ntorchaudio==2.11.0\ntransformers==5.19.0\ndiffusers==0.41.0\n".utf8).write(to: requirements)
         let cache = layout.root.appendingPathComponent("cache/miniconda")
         try fm.createDirectory(at: cache, withIntermediateDirectories: true)
         let installer = cache.appendingPathComponent("fixture.sh")
@@ -74,7 +85,7 @@ if [ "${3:-}" = '-m' ]; then
     fi
     exit 0
 fi
-printf '%s\n' 'LIGHTX2V_ENV:{"python":"3.11.14","architecture":"arm64","torch":"2.14.1","torchvision":"0.29.1","torchaudio":"2.11.0","transformers":"5.19.0","mps":true,"detail":"ready"}'
+printf '%s\n' 'LIGHTX2V_ENV:{"python":"3.11.14","architecture":"arm64","torch":"2.14.1","torchvision":"0.29.1","torchaudio":"2.11.0","transformers":"5.19.0","diffusers":"0.41.0","mps":true,"detail":"ready"}'
 """#
         try Data(script.utf8).write(to: fakePython)
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakePython.path)

@@ -8,7 +8,8 @@ public struct PythonDependency: Sendable {
 
 public enum PyTorchRequirements {
     public static let dependencies = [PythonDependency("torch", "2.14.1"), PythonDependency("torchvision", "0.29.1"),
-                                      PythonDependency("torchaudio", "2.11.0"), PythonDependency("transformers", "5.19.0")]
+                                      PythonDependency("torchaudio", "2.11.0"), PythonDependency("transformers", "5.19.0"),
+                                      PythonDependency("diffusers", "0.41.0")]
     public static var summary: String { dependencies.map { "\($0.name) ≥ \($0.minimum)" }.joined(separator: " · ") }
 
     /// Compare release components numerically, including common PEP 440 suffixes.
@@ -42,6 +43,7 @@ public struct PythonEnvironment: Identifiable, Codable, Equatable {
     public var torchvisionVersion: String = ""
     public var torchaudioVersion: String = ""
     public var transformersVersion: String = ""
+    public var diffusersVersion: String = ""
     public var architecture: String = ""
     public var mpsAvailable = false
     public var detail: String = ""
@@ -51,6 +53,7 @@ public struct PythonEnvironment: Identifiable, Codable, Equatable {
         case "torchvision": return torchvisionVersion
         case "torchaudio": return torchaudioVersion
         case "transformers": return transformersVersion
+        case "diffusers": return diffusersVersion
         default: return ""
         }
     }
@@ -158,7 +161,7 @@ public enum PythonEnvironmentSearch {
         let script = #"""
 import json, platform, importlib.metadata
 result = {"python": platform.python_version(), "architecture": platform.machine(), "mps": False, "detail": ""}
-for name in ("torch", "torchvision", "torchaudio", "transformers"):
+for name in ("torch", "torchvision", "torchaudio", "transformers", "diffusers"):
     try: result[name] = importlib.metadata.version(name)
     except importlib.metadata.PackageNotFoundError: result[name] = ""
 try:
@@ -182,6 +185,7 @@ print("LIGHTX2V_ENV:" + json.dumps(result, ensure_ascii=False))
             result.torchvisionVersion = info["torchvision"] as? String ?? ""
             result.torchaudioVersion = info["torchaudio"] as? String ?? ""
             result.transformersVersion = info["transformers"] as? String ?? ""
+            result.diffusersVersion = info["diffusers"] as? String ?? ""
             result.architecture = info["architecture"] as? String ?? ""
             result.mpsAvailable = info["mps"] as? Bool ?? false
             result.detail = info["detail"] as? String ?? "检测失败"

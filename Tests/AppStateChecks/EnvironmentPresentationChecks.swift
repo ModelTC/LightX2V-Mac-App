@@ -12,6 +12,7 @@ func environmentPresentationChecks() async throws {
     var old = PythonEnvironment(executable: "/opt/miniconda3/envs/torch/bin/python")
     old.pythonVersion = "3.11.14"; old.architecture = "arm64"; old.mpsAvailable = true
     old.torchVersion = "2.14.1"; old.torchvisionVersion = "0.29.1"; old.torchaudioVersion = "2.11.0"; old.transformersVersion = "4.57.3"
+    old.diffusersVersion = "0.41.0"
     var ready = old; ready.transformersVersion = "5.19.0"
     let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 650, height: 720),
                           styleMask: [.titled, .closable], backing: .buffered, defer: false)
@@ -43,6 +44,10 @@ func environmentPresentationChecks() async throws {
     try await render("searching", search([], searching: true))
     try await render("no-matching-environment", search([old]))
     try await render("ready-environment", search([ready]))
+    var missingDiffusers = ready; missingDiffusers.diffusersVersion = ""
+    try await render("missing-diffusers", search([missingDiffusers]))
+    var oldDiffusers = ready; oldDiffusers.diffusersVersion = "0.40.0"
+    try await render("old-diffusers", search([oldDiffusers]))
     try await render("manual-instructions", EnvironmentInstallInstructions(onClose: {}))
     for (name, progress, installing, cancelled, error) in [
         ("installing", EnvironmentInstallProgress(.dependencies), true, false, Optional<String>.none),

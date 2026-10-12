@@ -78,7 +78,7 @@ else:
         try check(fm.fileExists(atPath: modelRan.path) == accepted, "incompatible environment cannot reach the model checker")
         if !accepted { try check(store.environmentMessage == searched.compatibilityDetail, "model check displays the same rejection as search") }
     }
-    for (package, old) in [("torch", "2.14.0"), ("torchvision", "0.29.0"), ("torchaudio", "2.10.9"), ("transformers", "5.18.0")] {
+    for (package, old) in [("torch", "2.14.0"), ("torchvision", "0.29.0"), ("torchaudio", "2.10.9"), ("transformers", "5.18.0"), ("diffusers", "0.40.0")] {
         var info = minimum; info[package] = old
         try await run(info, accepted: false)
         info[package] = ""
@@ -92,6 +92,7 @@ else:
     try await run(minimum, accepted: true)
     var newer = minimum
     newer["torch"] = "2.15.0"; newer["torchvision"] = "0.30.0"; newer["torchaudio"] = "2.12.0"; newer["transformers"] = "5.20.0"
+    newer["diffusers"] = "0.42.0"
     try await run(newer, accepted: true)
     try Data().write(to: root.appendingPathComponent("fail-model"))
     store.checkEnvironment()

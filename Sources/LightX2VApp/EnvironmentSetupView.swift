@@ -129,7 +129,7 @@ struct EnvironmentInstallInstructions: View {
     let onClose: () -> Void
     private var commands: String {
         return """
-        pip install torch torchvision torchaudio transformers diffusers -U
+        pip install torch torchvision torchaudio transformers 'diffusers>=0.41.0' -U
         pip install loguru
         pip install imageio
         pip install imageio_ffmpeg
