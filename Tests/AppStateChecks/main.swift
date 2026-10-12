@@ -176,6 +176,9 @@ struct AppStateChecks {
         let model = root.appendingPathComponent("model")
         try fm.createDirectory(at: model, withIntermediateDirectories: true)
         try Data("{}".utf8).write(to: model.appendingPathComponent("model_index.json"))
+        for name in ["transformer", "text_encoder", "vae", "scheduler", "processor"] {
+            try fm.createDirectory(at: model.appendingPathComponent(name), withIntermediateDirectories: true)
+        }
         let config = root.appendingPathComponent("config.json"); try Data("{}".utf8).write(to: config)
         let invalidExecutable = root.appendingPathComponent("invalid-python")
         try Data("this is not an executable".utf8).write(to: invalidExecutable)

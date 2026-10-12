@@ -15,7 +15,8 @@ public enum ModelResource: String, CaseIterable, Identifiable, Sendable {
     }
     public var modelName: String { repository.components(separatedBy: "/").last! }
     public var url: URL { URL(string: "https://huggingface.co/" + repository)! }
-    public func destination(in workspace: WorkspaceLayout) -> URL { workspace.root.appendingPathComponent("models/" + modelName) }
+    public func destination(in workspace: WorkspaceLayout) -> URL { workspace.root.appendingPathComponent("models/" + repository) }
+    public var relativeCommand: String { command(destination: "./models/" + repository) }
     public func command(destination: String) -> String {
         "hf download " + repository + " --local-dir '" + destination.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
     }

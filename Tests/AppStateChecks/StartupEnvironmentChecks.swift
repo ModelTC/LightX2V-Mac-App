@@ -175,9 +175,9 @@ print('LIGHTX2V_ENV:' + (root / 'versions.json').read_text(), flush=True)
     }
     try Data("{}".utf8).write(to: URL(fileURLWithPath: settings.config))
     reopened.modelDirectory = settings.model
-    reopened.applyModelSettings()
-    try check(reopened.environmentReady && reopened.canGenerate && !reopened.isChecking && !reopened.hasUnsavedModelSettings && count() == beforeModel,
-              "selecting and saving model paths preserve the independent environment status without a check")
+    try await waitUntil { reopened.readyModelResources.contains(.turbo) }
+    try check(reopened.environmentReady && reopened.canGenerate && !reopened.isChecking && count() == beforeModel,
+              "selecting and automatically saving model paths preserve the independent environment status without a check")
     try await snapshot("workspace-environment-ready", WorkspaceView().environmentObject(reopened), size: NSSize(width: 1150, height: 840))
     missing = minimum; missing["pydantic"] = ""
     try write(missing)

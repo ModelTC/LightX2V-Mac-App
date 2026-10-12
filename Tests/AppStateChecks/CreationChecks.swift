@@ -51,6 +51,9 @@ func creationChecks() async throws {
     try fm.createDirectory(at: model, withIntermediateDirectories: true)
     try Data().write(to: source.appendingPathComponent("lightx2v/infer.py"))
     try Data("{}".utf8).write(to: model.appendingPathComponent("model_index.json"))
+    for name in ["transformer", "text_encoder", "vae", "scheduler", "processor"] {
+        try fm.createDirectory(at: model.appendingPathComponent(name), withIntermediateDirectories: true)
+    }
     try Data("{}".utf8).write(to: config)
     let script = """
     #!/usr/bin/env python3

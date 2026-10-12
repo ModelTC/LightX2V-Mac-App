@@ -42,19 +42,17 @@ func turboPreparationChecks() async throws {
     try check(!store.needsGeneralSetup && store.selectedModel == nil && store.settings.config.isEmpty,
               "saving first setup leaves configuration APP-managed and still requires model selection")
     store.selectModel(.qwenImage21Turbo)
-    try check(store.modelDirectory == weights.path && store.hasUnsavedModelSettings,
-              "selecting Turbo prepares nearby weights for explicit save")
+    try check(store.modelDirectory == weights.path && store.settings.model == weights.path,
+              "selecting Turbo automatically persists nearby weights")
     store.setPromptEnhancementEnabled(false)
-    store.applyModelSettings()
     while store.isChecking { try await Task.sleep(for: .milliseconds(10)) }
-    try check(store.settings.model == weights.path && !store.hasUnsavedModelSettings && !store.environmentReady,
+    try check(store.settings.model == weights.path && !store.environmentReady,
               "preparation saves Turbo paths without treating an invalid Python as ready")
     store.modelDirectory = root.appendingPathComponent("custom-weights").path
     store.selectModel(.qwenImage21Turbo)
-    try check(store.modelDirectory.hasSuffix("custom-weights"), "model selection preserves an explicit model draft")
-    store.discardModelSettings()
+    try check(store.modelDirectory.hasSuffix("custom-weights"), "model selection preserves an explicit model path")
     let reopened = AppStore()
-    try check(!reopened.needsGeneralSetup && reopened.selectedModel == nil && reopened.modelDirectory == weights.path
+    try check(!reopened.needsGeneralSetup && reopened.selectedModel == nil && reopened.modelDirectory == root.appendingPathComponent("custom-weights").path
               && !reopened.modelPreparationExpanded,
               "relaunch remembers the prepared paths without selecting or expanding the model")
 }

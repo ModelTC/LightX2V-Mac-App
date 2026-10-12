@@ -10,16 +10,9 @@ struct InspectorView: View {
                 InspectorSectionsView().environmentObject(store).preferredColorScheme(.light)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
-            if store.selectedModel != nil && store.modelPreparationExpanded {
-                separator
-                ModelPreparationFooter()
-            }
         }.padding(.top, 28).padding(.horizontal, 20).background(Palette.inspector)
     }
 
-    private var separator: some View {
-        Rectangle().fill(Palette.line).frame(height: 1).padding(.horizontal, -20)
-    }
 }
 
 private struct InspectorSectionsView: View {

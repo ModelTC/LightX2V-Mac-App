@@ -23,7 +23,7 @@ args = sys.argv[1:]
 assert args[0] == 'download' and args[2] == '--local-dir', args
 path = pathlib.Path(args[3]); path.mkdir(parents=True, exist_ok=True)
 (path / 'arguments.json').write_text(json.dumps(args))
-assert os.environ['HF_HOME'].startswith(str(path.parents[1]))
+assert os.environ['HF_HOME'].startswith(str(path.parents[2]))
 print('Fetching files: 25%', end='\r', flush=True)
 if 'failure' in str(path): print('network unavailable', flush=True); sys.exit(3)
 if 'cancel' in str(path) and not (path / 'partial').exists():
@@ -44,6 +44,8 @@ print('Fetching files: 100%', flush=True)
         try Data(script.utf8).write(to: hf); try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hf.path)
         let workspace = WorkspaceLayout(root.appendingPathComponent("models space 中文 ' $(literal)").path)
         for resource in ModelResource.allCases {
+            try expect(resource.relativeCommand == "hf download " + resource.repository + " --local-dir './models/" + resource.repository + "'", "guide command must be relative and include repository owner")
+            try expect(resource.destination(in: workspace).path == workspace.root.path + "/models/" + resource.repository, "automatic download must include repository owner")
             let updates = ModelDownloadUpdates()
             let directory = try await HuggingFaceModelDownloader.download(resource, python: python.path, workspace: workspace) { updates.append($0) }
             try expect(directory == resource.destination(in: workspace).path && updates.hasProgress, "HF download lost local-dir or carriage-return progress")

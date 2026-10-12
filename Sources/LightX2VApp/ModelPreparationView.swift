@@ -23,46 +23,7 @@ struct ModelPreparationView: View {
             ModelDownloadCard(resource: .t2i, path: $store.t2iDirectory)
             ModelDownloadCard(resource: .i2i, path: $store.i2iDirectory)
         }
-        .onChange(of: store.modelDirectory) { _, _ in store.modelPathChanged(.turbo) }
-        .onChange(of: store.t2iDirectory) { _, _ in store.modelPathChanged(.t2i) }
-        .onChange(of: store.i2iDirectory) { _, _ in store.modelPathChanged(.i2i) }
         .allowsHitTesting(!store.isImportingImages)
-    }
-}
-
-struct ModelPreparationFooter: View {
-    @EnvironmentObject var store: AppStore
-    @State private var showsEnvironment = false
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Group {
-                    if store.isChecking { ProgressView().controlSize(.mini) }
-                    else { Image(systemName: store.environmentReady ? "checkmark.circle.fill" : "xmark.circle").foregroundStyle(store.environmentReady ? Palette.green : Palette.accent) }
-                }.frame(width: 14, height: 14)
-                Text(store.isChecking ? "正在检查环境" : store.environmentReady ? "环境就绪" : "环境未就绪")
-                Spacer(minLength: 4)
-                Button("详情") { showsEnvironment = true }
-                    .accessibilityLabel("查看环境检查详情")
-                    .popover(isPresented: $showsEnvironment, arrowEdge: .leading) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("环境检查").font(.system(size: 13, weight: .semibold))
-                            Text(store.environmentReady ? "环境依赖符合要求。" : "环境依赖不符合要求，请在通用设置中更改依赖环境。")
-                                .font(.system(size: 11)).fixedSize(horizontal: false, vertical: true)
-                        }.padding(18).frame(width: 320)
-                    }
-            }.font(.system(size: 10)).foregroundStyle(Palette.muted).buttonStyle(HoverButtonStyle(radius: 6)).frame(height: 22)
-            HStack(spacing: 8) {
-                Button("撤销") { store.discardModelSettings() }
-                    .buttonStyle(SettingsActionStyle()).disabled(!store.hasUnsavedModelSettings || store.busy)
-                Button("保存模型设置") { store.applyModelSettings() }
-                    .frame(maxWidth: .infinity).buttonStyle(SettingsActionStyle(prominent: true))
-                    .disabled(store.modelDirectory.isEmpty || store.busy)
-            }.font(.system(size: 11)).frame(height: 32)
-            Text("8 步生成 · 推理配置随每次任务保存")
-                .font(.system(size: 10)).foregroundStyle(Palette.muted).frame(maxWidth: .infinity, alignment: .center)
-                .help("APP 使用内置 MPS 配置，无需手动选择。每个任务文件夹中的 config.json 可供查看。")
-        }.padding(.vertical, 10)
     }
 }
 
@@ -72,10 +33,11 @@ private struct ModelDownloadCard: View {
     @Binding var path: String
     @State private var showsGuide = false
     @State private var copied = false
-    @State private var showsStatus = false
+    @State private var statusPinned = false
+    @State private var statusHovered = false
+    private var showsStatus: Bool { statusPinned || statusHovered }
     private var optionalDisabled: Bool { resource != .turbo && !store.settings.promptEnhancement.enabled }
     private var downloading: Bool { store.activeModelDownload == resource }
-    private var destination: String { resource.destination(in: WorkspaceLayout(store.settings.workingDirectory)).path }
     private var ready: Bool { store.readyModelResources.contains(resource) && !store.modelDownloadErrors.contains(resource) && !downloading }
     private var status: String {
         if optionalDisabled { return "Prompt 增强已关闭，无需配置" }
@@ -115,23 +77,18 @@ private struct ModelDownloadCard: View {
                 }.disabled(optionalDisabled || (store.busy && !downloading))
                     .accessibilityLabel((downloading ? "停止下载" : "自动下载") + resource.title)
                 Spacer(minLength: 0)
-                Button { showsStatus.toggle() } label: {
+                Button { statusPinned.toggle() } label: {
                     Group {
                         if downloading { ProgressView().controlSize(.mini).tint(statusColor) }
                         else { Image(systemName: optionalDisabled ? "minus.circle" : ready ? "checkmark.circle.fill" : "xmark.circle.fill").font(.system(size: 13)) }
                     }.foregroundStyle(statusColor).frame(width: 20, height: 22).contentShape(Rectangle())
-                }.buttonStyle(.plain)
+                }.buttonStyle(HoverButtonStyle(radius: 6))
                     .accessibilityLabel(resource.title + "文件状态").accessibilityValue(status)
-                    .onHover { showsStatus = $0 }
+                    .onHover { statusHovered = $0 }
                     .overlay(alignment: .bottomTrailing) {
                         if showsStatus {
-                            Text(status).font(.system(size: 11)).foregroundStyle(Palette.ink)
-                                .fixedSize(horizontal: false, vertical: true).padding(10)
-                                .frame(width: 240, alignment: .leading)
-                                .background(Palette.surface, in: RoundedRectangle(cornerRadius: 8))
-                                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line, lineWidth: 1))
-                                .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
-                                .offset(y: -28).allowsHitTesting(false).accessibilityHidden(true)
+                            ModelStatusBubble(message: status)
+                                .offset(y: -24).allowsHitTesting(false).accessibilityHidden(true)
                         }
                     }
             }.font(.system(size: 10)).buttonStyle(HoverButtonStyle(radius: 6)).frame(height: 22)
@@ -146,18 +103,17 @@ private struct ModelDownloadCard: View {
             Text(resource.repository).font(.system(size: 13, weight: .semibold)).textSelection(.enabled)
             Text("模型下载命令。可保存到任意位置，若点击自动下载，则会统一保存到工作目录下的models文件夹中。")
                 .font(.system(size: 11)).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
-            Text(resource.command(destination: destination)).font(.system(size: 11, design: .monospaced))
+            Text(resource.relativeCommand).font(.system(size: 11, design: .monospaced))
                 .textSelection(.enabled).fixedSize(horizontal: false, vertical: true).padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading).background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8))
             HStack {
-                Link("打开 Hugging Face", destination: resource.url)
+                Link(destination: resource.url) { Text("打开 Hugging Face").underline().padding(.horizontal, 6).padding(.vertical, 5) }
+                    .buttonStyle(HoverButtonStyle(radius: 6))
                 Spacer()
                 Button(copied ? "已复制" : "复制命令") {
-                    NSPasteboard.general.clearContents(); NSPasteboard.general.setString(resource.command(destination: destination), forType: .string); copied = true
+                    NSPasteboard.general.clearContents(); NSPasteboard.general.setString(resource.relativeCommand, forType: .string); copied = true
                 }.buttonStyle(SettingsActionStyle())
             }.font(.system(size: 11))
-            Text("找不到 hf 时，在所选环境中运行：python -m pip install -U huggingface_hub。停止后重试会继续下载已有文件。")
-                .font(.system(size: 10)).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
         }.padding(20).frame(width: 430).foregroundStyle(Palette.ink)
     }
 
@@ -171,5 +127,46 @@ private struct ModelDownloadCard: View {
         panel.allowsMultipleSelection = false; panel.title = "选择" + resource.title + "目录"
         panel.directoryURL = path.isEmpty ? URL(fileURLWithPath: store.settings.workingDirectory) : URL(fileURLWithPath: path).deletingLastPathComponent()
         if panel.runModal() == .OK, let url = panel.url { path = url.path }
+    }
+}
+
+private struct ModelStatusBubble: View {
+    let message: String
+
+    private var width: CGFloat {
+        min(240, max(112, ceil((message as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 11)]).width + 24)))
+    }
+
+    var body: some View {
+        Text(message).font(.system(size: 11)).foregroundStyle(Palette.ink)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 16)
+            .frame(width: width, alignment: .leading)
+            .background(ModelStatusBubbleShape().fill(Palette.surface))
+            .overlay(ModelStatusBubbleShape().stroke(Palette.line, lineWidth: 1))
+            .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
+    }
+}
+
+private struct ModelStatusBubbleShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let r: CGFloat = 8
+        let bottom = rect.maxY - 6
+        let tip = rect.maxX - 12
+        var path = Path()
+        path.move(to: CGPoint(x: r, y: 0))
+        path.addLine(to: CGPoint(x: rect.maxX - r, y: 0))
+        path.addQuadCurve(to: CGPoint(x: rect.maxX, y: r), control: CGPoint(x: rect.maxX, y: 0))
+        path.addLine(to: CGPoint(x: rect.maxX, y: bottom - r))
+        path.addQuadCurve(to: CGPoint(x: rect.maxX - r, y: bottom), control: CGPoint(x: rect.maxX, y: bottom))
+        path.addLine(to: CGPoint(x: tip + 4, y: bottom))
+        path.addLine(to: CGPoint(x: tip, y: rect.maxY))
+        path.addLine(to: CGPoint(x: tip - 4, y: bottom))
+        path.addLine(to: CGPoint(x: r, y: bottom))
+        path.addQuadCurve(to: CGPoint(x: 0, y: bottom - r), control: CGPoint(x: 0, y: bottom))
+        path.addLine(to: CGPoint(x: 0, y: r))
+        path.addQuadCurve(to: CGPoint(x: r, y: 0), control: .zero)
+        path.closeSubpath()
+        return path
     }
 }

@@ -31,9 +31,9 @@ func modelPreparationRealChecks(_ args: [String]) async throws {
     store.start(); try await wait { store.isChecking }
     try check(store.environmentReady && store.selectedModel == nil, "real startup verifies environment and keeps model selection empty")
     store.selectModel(.qwenImage21Turbo); store.modelDirectory = args[1]
-    store.t2iDirectory = args[4]; store.i2iDirectory = args[5]; store.applyModelSettings()
+    store.t2iDirectory = args[4]; store.i2iDirectory = args[5]
     try await wait { !store.enhancementResourcesReady }
-    try check(store.settings.config.isEmpty && !store.hasUnsavedModelSettings, "one save resolves all real model folders without a user config")
+    try check(store.settings.config.isEmpty, "automatic persistence resolves all real model folders without a user config")
     var report: [[String: Any]] = []
     for mode in ["t2i", "i2i"] {
         if mode == "i2i" {

@@ -49,6 +49,9 @@ func generationLogChecks() async throws {
     let python = try file("fixture-python", script, executable: true)
     _ = try file("source/lightx2v/infer.py")
     _ = try file("model/model_index.json", "{}")
+    for name in ["transformer", "text_encoder", "vae", "scheduler", "processor"] {
+        try fm.createDirectory(at: root.appendingPathComponent("model/" + name), withIntermediateDirectories: true)
+    }
     let config = try file("config.json", "{}")
     let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 32, pixelsHigh: 32,
                                   bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
