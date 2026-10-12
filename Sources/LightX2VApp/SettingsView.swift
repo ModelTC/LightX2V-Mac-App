@@ -189,8 +189,8 @@ struct FirstLaunchSetupView: View {
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Palette.line, lineWidth: 1))
             .shadow(color: .black.opacity(0.03), radius: 20, y: 6)
-            .padding(40)
-            .frame(minWidth: 760, minHeight: 540)
+            .padding(24)
+            .frame(minWidth: 768, minHeight: 660)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Palette.sidebar)
             .overlay(alignment: .top) { WindowDragArea(isNativeTitleBar: true).frame(height: 28) }

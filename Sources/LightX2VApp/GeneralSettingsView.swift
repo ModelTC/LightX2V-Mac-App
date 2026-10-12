@@ -4,16 +4,14 @@ import LightX2VCore
 
 struct SettingsView: View {
     @EnvironmentObject var store: AppStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var headerFocused: Bool
-    @Namespace private var guideAnimation
+    @State private var focusStep: GeneralSetupStep?
+    @State private var focusRequest = 0
     @State var settings: AppSettings
     @State private var setupProgress = GeneralSetupProgress()
     @State private var saveError: String?
-    @State private var downloadMessage = ""
-    @State private var downloading = false
-    @State private var runtimeDownloadMessage = ""
-    @State private var runtimeDownloading = false
+    @StateObject var downloads = GeneralSettingsDownloads()
+    @State private var showsSaveDetails = false
     @State private var showEnvironments = false
     @State private var searching = false
     @State private var environments: [PythonEnvironment] = []
@@ -35,138 +33,28 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 12) {
-                BrandMark(size: 34)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(store.needsGeneralSetup ? "欢迎使用 LightX2V" : "通用设置")
-                        .font(.system(size: 20, weight: .semibold))
-                    Text(store.needsGeneralSetup ? "仅需首次配置，后续无需重复填写。" : "配置已保存，可随时在此修改。")
-                        .font(.system(size: 11)).foregroundStyle(Palette.muted)
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 8) {
-                    Text("已填写 \(setupProgress.completed.count) / \(GeneralSetupStep.allCases.count)")
-                        .font(.system(size: 10, weight: .medium)).monospacedDigit()
-                        .foregroundStyle(Palette.muted)
-                    HStack(spacing: 4) {
-                        ForEach(GeneralSetupStep.allCases, id: \.self) { step in
-                            Capsule().fill(setupProgress.completed.contains(step) ? Palette.ink : Palette.line)
-                                .frame(width: 22, height: 3)
-                        }
-                    }.accessibilityHidden(true)
-                }.accessibilityLabel("通用设置已填写 \(setupProgress.completed.count) 项，共 \(GeneralSetupStep.allCases.count) 项")
-            }.padding(26)
-                .focusable().focusEffectDisabled().focused($headerFocused)
-            ScrollViewReader { scroll in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        SettingsSection(step: .workspace, progress: setupProgress, animation: guideAnimation,
-                                        title: "LightX2V 工作目录", subtitle: "配置、历史、图片、日志和缓存都保存在这里。") {
-                            pathRow("LightX2V 工作目录", value: $settings.workingDirectory, directory: true, create: true)
-                            if !store.generations.isEmpty && normalized(settings.workingDirectory) != store.settings.workingDirectory {
-                                Text("更换后从空历史开始，原有记录与作品留在旧目录。")
-                                    .font(.system(size: 10)).foregroundStyle(Palette.muted)
-                            }
-                        }.id(GeneralSetupStep.workspace)
-                        SettingsSection(step: .source, progress: setupProgress, animation: guideAnimation,
-                                        title: "LightX2V 源码目录", subtitle: "选择已有源码，或自动下载 GitHub main 的最新版本。") {
-                            pathRow("LightX2V 源码目录", value: $settings.repository, directory: true,
-                                    placeholder: "选择已有源码文件夹，或点击下方自动下载")
-                            HStack(spacing: 10) {
-                                Button { downloadSource() } label: {
-                                    Label("自动下载", systemImage: "arrow.down.to.line")
-                                }.disabled(store.busy || !hasWorkDirectory)
-                                Text("存入工作目录 / code · 不含 Git 历史")
-                                    .font(.system(size: 10)).foregroundStyle(Palette.muted)
-                                Spacer(minLength: 0)
-                            }.font(.system(size: 11))
-                            if !downloadMessage.isEmpty {
-                                HStack(spacing: 8) {
-                                    if downloading { ProgressView().controlSize(.mini) }
-                                    Text(downloadMessage).font(.system(size: 10)).foregroundStyle(Palette.muted)
-                                    Spacer()
-                                    if downloading { Button("取消下载") { store.setupTask?.cancel() }.font(.system(size: 10)) }
-                                }
-                            }
-                        }.id(GeneralSetupStep.source)
-                        SettingsSection(step: .python, progress: setupProgress, animation: guideAnimation,
-                                        title: "PyTorch 环境", subtitle: "搜索依赖齐全且符合版本要求的本机环境，或在工作目录中安装。") {
-                            pathRow("PyTorch 环境", value: $settings.python, directory: false)
-                            HStack(spacing: 10) {
-                                Button { startSearch() } label: { Label("搜索本机环境", systemImage: "magnifyingglass") }
-                                    .disabled(store.busy || !hasWorkDirectory)
-                                Button("检查环境") { store.checkEnvironment() }
-                                    .disabled(store.busy || store.needsGeneralSetup || normalized(settings.python) != store.settings.python)
-                                Spacer(minLength: 0)
-                            }.font(.system(size: 11))
-                            if normalized(settings.python) == store.settings.python && !store.needsGeneralSetup {
-                                HStack(alignment: .top, spacing: 7) {
-                                    if store.isChecking { ProgressView().controlSize(.mini) }
-                                    else { Image(systemName: store.environmentReady ? "checkmark.circle.fill" : "xmark.circle") }
-                                    Text(store.environmentMessage).lineLimit(3).help(store.environmentMessage).textSelection(.enabled)
-                                }.font(.system(size: 10)).foregroundStyle(store.environmentReady ? Palette.green : Palette.muted)
-                            } else {
-                                Text("保存设置后自动检查环境依赖与 MPS。")
-                                    .font(.system(size: 10)).foregroundStyle(Palette.muted)
-                            }
-                        }.id(GeneralSetupStep.python)
-                        SettingsSection(step: .llama, progress: setupProgress, animation: guideAnimation,
-                                        title: "llama.cpp 运行目录（bin）", subtitle: "Prompt 增强共用的本地运行程序，支持文字和参考图增强。") {
-                            pathRow("llama.cpp 运行目录（bin）", value: $settings.promptEnhancement.runtimeDirectory, directory: true,
-                                    placeholder: "选择已有 bin 目录，或点击下方自动下载")
-                            HStack(spacing: 10) {
-                                Button { downloadRuntime() } label: {
-                                    Label("自动下载", systemImage: "arrow.down.to.line")
-                                }.disabled(store.busy || !hasWorkDirectory)
-                                    .accessibilityLabel("自动下载 llama.cpp")
-                                Text("存入工作目录 / runtimes · b11564 · Apple Silicon")
-                                    .font(.system(size: 10)).foregroundStyle(Palette.muted)
-                                Spacer(minLength: 0)
-                            }.font(.system(size: 11))
-                            if !runtimeDownloadMessage.isEmpty {
-                                HStack(spacing: 8) {
-                                    if runtimeDownloading { ProgressView().controlSize(.mini) }
-                                    Text(runtimeDownloadMessage).font(.system(size: 10)).foregroundStyle(Palette.muted)
-                                    Spacer()
-                                    if runtimeDownloading { Button("取消下载") { store.setupTask?.cancel() }.font(.system(size: 10)) }
-                                }
-                            }
-                        }.id(GeneralSetupStep.llama)
-                    }.padding(.horizontal, 26).padding(.bottom, 22).subtleScrollbars()
-                }.frame(maxHeight: 490)
-                .onChange(of: setupProgress.current) { _, step in
-                    if let step {
-                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.28)) {
-                            scroll.scrollTo(step, anchor: .center)
-                        }
-                    }
-                }
-            }
-            if let error = saveError ?? (store.needsGeneralSetup ? store.errorMessage : nil) {
-                Label(error, systemImage: "exclamationmark.circle")
-                    .font(.system(size: 11)).foregroundStyle(Palette.accent).lineLimit(3).help(error)
-                    .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
-                    .padding(.horizontal, 26).padding(.bottom, 12)
-            }
+            header
+            VStack(spacing: 8) {
+                workspaceCard
+                sourceCard
+                pythonCard
+                runtimeCard
+            }.padding(.horizontal, 24).padding(.bottom, 12)
             Rectangle().fill(Palette.line).frame(height: 1)
             HStack(spacing: 10) {
-                if store.isPreparingWorkspace {
-                    ProgressView().controlSize(.small)
-                    Text("正在保存工作区…").font(.system(size: 11)).foregroundStyle(Palette.muted)
-                }
-                Spacer()
+                footerSummary.frame(maxWidth: .infinity, alignment: .leading)
                 Button("关闭") { store.closeGeneralSettings() }.keyboardShortcut(.cancelAction)
                     .disabled(store.isPreparingWorkspace)
                 Button("保存设置") { save() }
                     .buttonStyle(SettingsActionStyle(prominent: true))
                     .keyboardShortcut(.defaultAction).disabled(store.busy || !settings.hasGeneralPaths)
-            }.padding(.horizontal, 26).padding(.vertical, 18)
-        }.frame(width: 660).background(Palette.canvas).foregroundStyle(Palette.ink)
+            }.padding(.horizontal, 24).frame(height: 60)
+        }.frame(width: 720).background(Palette.canvas).foregroundStyle(Palette.ink)
             .buttonStyle(SettingsActionStyle())
             // Present neutrally. AppKit otherwise focuses and selects the first
             // path automatically; subsequent clicks and Tab retain native focus.
             .defaultFocus($headerFocused, true, priority: .userInitiated)
-            .onAppear { updateGuide(animated: false) }
+            .onAppear { updateGuide() }
             .onChange(of: settings) { _, _ in saveError = nil }
             .onDisappear { store.setupTask?.cancel() }
             .sheet(isPresented: $showEnvironments, onDismiss: { if searching { store.setupTask?.cancel() } }) {
@@ -174,14 +62,183 @@ struct SettingsView: View {
             }
     }
 
-    private func pathRow(_ title: String, value: Binding<String>, directory: Bool, create: Bool = false,
+    private var header: some View {
+        HStack(spacing: 12) {
+            BrandMark(size: 30)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(store.needsGeneralSetup ? "欢迎使用 LightX2V" : "通用设置")
+                    .font(.system(size: 18, weight: .semibold))
+                Text("共 4 项配置，填写一次即可。").font(.system(size: 11)).foregroundStyle(Palette.muted)
+            }
+            Spacer()
+            Text("已配置 \(setupProgress.completed.count) / 4")
+                .font(.system(size: 11, weight: .medium)).monospacedDigit().foregroundStyle(Palette.muted)
+                .accessibilityLabel("通用设置已配置 \(setupProgress.completed.count) 项，共 4 项")
+        }.padding(.horizontal, 24).frame(height: 64)
+            .focusable().focusEffectDisabled().focused($headerFocused)
+    }
+
+    private var workspaceCard: some View {
+        SettingsSection(step: .workspace, current: setupProgress.current, title: "LightX2V 工作目录",
+                        status: pathStatus(.workspace), details: workspaceMessage) {
+            pathRow("LightX2V 工作目录", value: $settings.workingDirectory, directory: true)
+        } actions: {
+            chooseButton("LightX2V 工作目录", value: $settings.workingDirectory, directory: true, create: true)
+            Spacer()
+        }
+    }
+
+    private var workspaceMessage: String {
+        if !store.generations.isEmpty && normalized(settings.workingDirectory) != store.settings.workingDirectory {
+            return "更换后从空历史开始，原有记录与作品留在旧目录。"
+        }
+        return "配置、历史、图片、日志和缓存都保存在这里。"
+    }
+
+    private var sourceCard: some View {
+        SettingsSection(step: .source, current: setupProgress.current, title: "LightX2V 源码目录",
+                        status: pathStatus(.source),
+                        details: "选择已有源码，或自动下载 GitHub main 的最新版本。\n存入工作目录 / code，不含 Git 历史。\n\n" + downloads.sourceMessage) {
+            pathRow("LightX2V 源码目录", value: $settings.repository, directory: true,
+                    placeholder: "选择已有源码文件夹，或自动下载")
+        } actions: {
+            chooseButton("LightX2V 源码目录", value: $settings.repository, directory: true)
+            downloadButton("自动下载 LightX2V 源码", action: downloadSource)
+            SettingsStatusLine(message: downloads.sourceMessage,
+                               running: downloads.sourceRunning, cancel: { store.setupTask?.cancel() })
+        }
+    }
+
+    private var pythonCard: some View {
+        SettingsSection(step: .python, current: setupProgress.current, title: "PyTorch 环境",
+                        status: pythonStatus, statusColor: pythonMatchesSaved && store.environmentReady ? Palette.green : Palette.muted,
+                        details: "搜索依赖齐全且符合版本要求的本机环境，或在工作目录中安装。\n保存设置后自动检查环境依赖与 MPS。\n\n" + pythonMessage) {
+            pathRow("PyTorch 环境", value: $settings.python, directory: false)
+        } actions: {
+            chooseButton("PyTorch 环境", value: $settings.python, directory: false)
+            Button { startSearch() } label: { Label("搜索本机环境", systemImage: "magnifyingglass") }
+                .disabled(store.busy || !hasWorkDirectory)
+            Button("检查环境") { store.checkEnvironment() }
+                .disabled(store.busy || !pythonMatchesSaved)
+            SettingsStatusLine(message: pythonMatchesSaved && store.environmentMessage != "尚未检查运行环境" ? pythonMessage : "",
+                               running: pythonMatchesSaved && store.isChecking,
+                               color: pythonMatchesSaved && store.environmentReady ? Palette.green : Palette.muted)
+        }
+    }
+
+    private var pythonMatchesSaved: Bool {
+        !store.needsGeneralSetup && normalized(settings.python) == store.settings.python
+            && normalized(settings.repository) == store.settings.repository
+            && normalized(settings.workingDirectory) == store.settings.workingDirectory
+    }
+
+    private var pythonStatus: String {
+        guard setupProgress.completed.contains(.python) else { return pathStatus(.python) }
+        guard pythonMatchesSaved else { return "待检查" }
+        if store.isChecking { return "检查中" }
+        if store.environmentReady { return "检查通过" }
+        return store.environmentMessage == "尚未检查运行环境" ? "待检查" : "检查未通过"
+    }
+
+    private var pythonMessage: String {
+        pythonMatchesSaved ? store.environmentMessage : "保存设置后自动检查环境依赖与 MPS。"
+    }
+
+    private var runtimeCard: some View {
+        SettingsSection(step: .llama, current: setupProgress.current, title: "llama.cpp 运行目录（bin）",
+                        status: pathStatus(.llama),
+                        details: "Prompt 增强共用的本地运行程序，支持文字和参考图增强。\n自动下载 b11564 Apple Silicon 版本到工作目录 / runtimes。\n\n" + downloads.runtimeMessage) {
+            pathRow("llama.cpp 运行目录（bin）", value: $settings.promptEnhancement.runtimeDirectory, directory: true,
+                    placeholder: "选择已有 bin 目录，或自动下载")
+        } actions: {
+            chooseButton("llama.cpp 运行目录（bin）", value: $settings.promptEnhancement.runtimeDirectory, directory: true)
+            downloadButton("自动下载 llama.cpp", action: downloadRuntime)
+            SettingsStatusLine(message: downloads.runtimeMessage,
+                               running: downloads.runtimeRunning, cancel: { store.setupTask?.cancel() })
+        }
+    }
+
+    private func downloadButton(_ label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) { Label("自动下载", systemImage: "arrow.down.to.line") }
+            .disabled(store.busy || !hasWorkDirectory).accessibilityLabel(label)
+    }
+
+    private func pathStatus(_ step: GeneralSetupStep) -> String {
+        if setupProgress.completed.contains(step) { return "已配置" }
+        let value: String
+        switch step {
+        case .workspace: value = settings.workingDirectory
+        case .source: value = settings.repository
+        case .python: value = settings.python
+        case .llama: value = settings.promptEnhancement.runtimeDirectory
+        }
+        return normalized(value).isEmpty ? "未配置" : "路径无效"
+    }
+
+    private var footerError: String? { saveError ?? (store.needsGeneralSetup ? store.errorMessage : nil) }
+
+    private var footerSummary: some View {
+        Group {
+            if let error = footerError {
+                Button { showsSaveDetails = true } label: {
+                    Label(error, systemImage: "exclamationmark.circle").lineLimit(1).truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }.buttonStyle(HoverButtonStyle(radius: 4)).foregroundStyle(Palette.accent).help(error)
+                    .accessibilityLabel("查看设置错误详情")
+                    .popover(isPresented: $showsSaveDetails) { SettingsDetails(title: "设置错误", message: error) }
+            } else if store.isPreparingWorkspace {
+                Label("正在保存设置…", systemImage: "arrow.triangle.2.circlepath").foregroundStyle(Palette.muted)
+            } else if let step = setupProgress.current {
+                Button { focusStep = step; focusRequest += 1 } label: {
+                    Label(remainingMessage, systemImage: "circle.dashed").lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }.buttonStyle(HoverButtonStyle(radius: 4)).foregroundStyle(Palette.muted)
+                    .accessibilityLabel("配置下一项：\(stepTitle(step))")
+                    .disabled(store.busy)
+            } else {
+                Text("四项配置已填写完整").foregroundStyle(Palette.muted)
+            }
+        }.font(.system(size: 11)).frame(height: 24, alignment: .leading)
+    }
+
+    private var remainingMessage: String {
+        let missing = GeneralSetupStep.allCases.filter { !setupProgress.completed.contains($0) }
+        guard let first = missing.first else { return "" }
+        return missing.count == 1 ? "还需配置：\(stepTitle(first))" : "还需配置 \(missing.count) 项 · 从\(stepTitle(first))开始"
+    }
+
+    private func stepTitle(_ step: GeneralSetupStep) -> String {
+        switch step {
+        case .workspace: return "工作目录"
+        case .source: return "LightX2V 源码"
+        case .python: return "PyTorch 环境"
+        case .llama: return "llama.cpp 运行目录"
+        }
+    }
+
+    private func inputTitle(_ step: GeneralSetupStep) -> String {
+        switch step {
+        case .workspace: return "LightX2V 工作目录"
+        case .source: return "LightX2V 源码目录"
+        case .python: return "PyTorch 环境"
+        case .llama: return "llama.cpp 运行目录（bin）"
+        }
+    }
+
+    private func pathRow(_ title: String, value: Binding<String>, directory: Bool,
                          placeholder: String? = nil) -> some View {
-        HStack(spacing: 4) {
-            PathInputField(title: title,
-                           placeholder: placeholder ?? (directory ? "选择文件夹，或粘贴完整路径" : "选择环境中的 bin/python，或搜索本机环境"),
-                           symbol: directory ? "folder" : "terminal", text: value,
-                           onCommit: { updateGuide() })
-            Button(directory ? "选择…" : "手动选择…") {
+        PathInputField(title: title,
+                       placeholder: placeholder ?? (directory ? "选择文件夹，或粘贴完整路径" : "选择环境中的 bin/python，或搜索本机环境"),
+                       symbol: directory ? "folder" : "terminal", text: value,
+                       onCommit: { updateGuide() },
+                       focusRequest: focusStep.map { inputTitle($0) == title } == true ? focusRequest : 0)
+            .background(Palette.surface, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line, lineWidth: 1))
+            .disabled(store.busy)
+    }
+
+    private func chooseButton(_ title: String, value: Binding<String>, directory: Bool, create: Bool = false) -> some View {
+        Button(directory ? "选择…" : "手动选择…") {
                 let panel = NSOpenPanel()
                 panel.canChooseDirectories = directory; panel.canChooseFiles = !directory
                 panel.canCreateDirectories = create; panel.allowsMultipleSelection = false
@@ -191,10 +248,7 @@ struct SettingsView: View {
                     value.wrappedValue = url.path
                     updateGuide()
                 }
-            }.font(.system(size: 11)).accessibilityLabel("选择\(title)")
-                .padding(.trailing, 10)
-        }.background(Palette.surface, in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line, lineWidth: 1))
+        }.accessibilityLabel("选择\(title)")
             .disabled(store.busy)
     }
 
@@ -225,30 +279,28 @@ struct SettingsView: View {
         (value.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath
     }
 
-    private func updateGuide(animated: Bool = true) {
+    private func updateGuide() {
         let progress = GeneralSetupProgress(settings: settings)
         guard progress != setupProgress else { return }
-        withAnimation(animated && !reduceMotion ? .easeInOut(duration: 0.28) : nil) {
-            setupProgress = progress
-        }
+        setupProgress = progress
     }
 
     private func downloadSource() {
         guard !store.busy else { return }
-        saveError = nil; downloading = true; store.isPreparingResources = true
+        saveError = nil; downloads.sourceMessage = "正在连接 GitHub…"; downloads.sourceRunning = true; store.isPreparingResources = true
         let workspace = layout; let token = UUID(); operationID = token
         store.setupTask = Task {
-            defer { downloading = false; operationID = nil; store.finishSetupTask() }
+            defer { downloads.sourceRunning = false; operationID = nil; store.finishSetupTask() }
             do {
                 let result = try await SourceDownloader.download(workspace: workspace) { message in
-                    Task { @MainActor in if operationID == token { downloadMessage = message } }
+                    Task { @MainActor in if operationID == token { downloads.sourceMessage = message } }
                 }
                 settings.repository = result.directory
                 updateGuide()
-                downloadMessage = "已就绪 · main · \(result.commit.prefix(8))"
+                downloads.sourceMessage = "已就绪 · main · \(result.commit.prefix(8))"
             } catch {
-                if Task.isCancelled { downloadMessage = "下载已取消，可随时重试。" }
-                else { downloadMessage = ""; saveError = "下载失败：\(error.localizedDescription)" }
+                if Task.isCancelled { downloads.sourceMessage = "下载已取消，可随时重试。" }
+                else { downloads.sourceMessage = "下载失败：\(error.localizedDescription)" }
             }
         }
     }
@@ -274,20 +326,20 @@ struct SettingsView: View {
 
     private func downloadRuntime() {
         guard !store.busy, hasWorkDirectory else { return }
-        saveError = nil; runtimeDownloading = true; store.isPreparingResources = true
+        saveError = nil; downloads.runtimeMessage = "正在连接 GitHub · b11564…"; downloads.runtimeRunning = true; store.isPreparingResources = true
         let workspace = layout; let token = UUID(); operationID = token
         store.setupTask = Task {
-            defer { runtimeDownloading = false; operationID = nil; store.finishSetupTask() }
+            defer { downloads.runtimeRunning = false; operationID = nil; store.finishSetupTask() }
             do {
                 let result = try await LlamaRuntimeDownloader.download(workspace: workspace) { message in
-                    Task { @MainActor in if operationID == token { runtimeDownloadMessage = message } }
+                    Task { @MainActor in if operationID == token { downloads.runtimeMessage = message } }
                 }
                 settings.promptEnhancement.runtimeDirectory = result.directory
                 updateGuide()
-                runtimeDownloadMessage = "已就绪 · \(result.version)"
+                downloads.runtimeMessage = "已就绪 · \(result.version)"
             } catch {
-                if Task.isCancelled { runtimeDownloadMessage = "下载已取消，可随时重试。" }
-                else { runtimeDownloadMessage = ""; saveError = "llama.cpp 下载失败：\(error.localizedDescription)" }
+                if Task.isCancelled { downloads.runtimeMessage = "下载已取消，可随时重试。" }
+                else { downloads.runtimeMessage = "llama.cpp 下载失败：\(error.localizedDescription)" }
             }
         }
     }
@@ -339,49 +391,84 @@ struct SettingsView: View {
     }
 }
 
-private struct SettingsSection<Content: View>: View {
+/// Shared live transfer state also lets native layout checks sample real redraws.
+final class GeneralSettingsDownloads: ObservableObject {
+    @Published var sourceMessage = ""
+    @Published var sourceRunning = false
+    @Published var runtimeMessage = ""
+    @Published var runtimeRunning = false
+}
+
+private struct SettingsSection<Content: View, Actions: View>: View {
     let step: GeneralSetupStep
-    let progress: GeneralSetupProgress
-    let animation: Namespace.ID
+    let current: GeneralSetupStep?
     let title: String
-    let subtitle: String
+    let status: String
+    var statusColor: Color = Palette.muted
+    let details: String
     @ViewBuilder let content: Content
-    private var isCurrent: Bool { progress.current == step }
-    private var isComplete: Bool { progress.completed.contains(step) }
+    @ViewBuilder let actions: Actions
+    @State private var showsDetails = false
     var body: some View {
-        VStack(alignment: .leading, spacing: 11) {
-            HStack(alignment: .top, spacing: 9) {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
                 Text(String(step.rawValue)).font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(isCurrent ? Palette.onButton : Palette.muted)
-                    .frame(width: 24, height: 24)
-                    .background(isCurrent ? Palette.ink : Palette.selection, in: Circle())
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(title).font(.system(size: 12, weight: .semibold))
-                    Text(subtitle).font(.system(size: 10)).foregroundStyle(Palette.muted)
-                }.padding(.top, 2)
+                    .foregroundStyle(current == step ? Palette.onButton : Palette.muted)
+                    .frame(width: 20, height: 20)
+                    .background(current == step ? Palette.ink : Palette.selection, in: Circle())
+                Text(title).font(.system(size: 12, weight: .semibold))
+                Button { showsDetails = true } label: { Image(systemName: "info.circle").frame(width: 20, height: 20) }
+                    .buttonStyle(HoverButtonStyle(radius: 4)).foregroundStyle(Palette.muted)
+                    .accessibilityLabel("查看\(title)详情")
+                    .help("查看说明和完整状态")
+                    .popover(isPresented: $showsDetails) { SettingsDetails(title: title, message: details) }
                 Spacer(minLength: 4)
-                Group {
-                    if isComplete {
-                        Image(systemName: "checkmark").accessibilityLabel("已填写")
-                    } else if isCurrent {
-                        Text(step == .workspace ? "从这里开始" : "下一步")
-                    }
-                }.font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.muted).padding(.top, 5)
-            }
-            content
+                Text(status).font(.system(size: 10, weight: .medium)).foregroundStyle(statusColor)
+                    .frame(width: 80, alignment: .trailing).lineLimit(1)
+            }.frame(height: 20)
+            content.padding(.top, 4).frame(height: 48)
+            HStack(spacing: 8) { actions }.padding(.top, 4).frame(height: 30)
         }
-        .padding(14)
-        .background(isCurrent ? Palette.surfaceSubtle.opacity(0.65) : Palette.canvas,
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(current == step ? Palette.surfaceSubtle.opacity(0.65) : Palette.canvas,
                     in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12)
-            .strokeBorder(isCurrent ? Palette.borderStrong : Palette.line.opacity(0.7), lineWidth: 1))
-        .overlay(alignment: .leading) {
-            if isCurrent {
-                Capsule().fill(Palette.ink).frame(width: 3, height: 22)
-                    .matchedGeometryEffect(id: "current-setup-step", in: animation)
-                    .padding(.leading, -1)
-                    .allowsHitTesting(false).accessibilityHidden(true)
-            }
+            .strokeBorder(current == step ? Palette.borderStrong : Palette.line.opacity(0.7), lineWidth: 1))
+    }
+}
+
+private struct SettingsStatusLine: View {
+    let message: String
+    var running = false
+    var color: Color = Palette.muted
+    var cancel: (() -> Void)?
+    var body: some View {
+        HStack(spacing: 6) {
+            Group {
+                if running { ProgressView().controlSize(.mini) }
+                else { Color.clear.accessibilityHidden(true) }
+            }.frame(width: 14, height: 14)
+            Text(message).lineLimit(1).truncationMode(.middle).help(message)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button("取消下载") { cancel?() }
+                .buttonStyle(HoverButtonStyle(radius: 4)).frame(width: 60)
+                .opacity(running && cancel != nil ? 1 : 0)
+                .disabled(!running || cancel == nil).accessibilityHidden(!running || cancel == nil)
         }
+        .font(.system(size: 10)).foregroundStyle(color).frame(height: 18)
+    }
+}
+
+private struct SettingsDetails: View {
+    let title: String
+    let message: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title).font(.system(size: 13, weight: .semibold))
+            ScrollView {
+                Text(message).font(.system(size: 11)).textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }.frame(maxHeight: 220)
+        }.padding(18).frame(width: 360).foregroundStyle(Palette.ink)
     }
 }

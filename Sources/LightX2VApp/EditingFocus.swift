@@ -23,6 +23,7 @@ struct OutsideClickObserver: NSViewRepresentable {
     let isEnabled: Bool
     var onHoverChange: ((Bool) -> Void)?
     var cornerRadius: CGFloat = 0
+    var focusRequest = 0
 
     func makeNSView(context: Context) -> EditingBoundaryView { EditingBoundaryView() }
 
@@ -32,6 +33,7 @@ struct OutsideClickObserver: NSViewRepresentable {
         view.inputCornerRadius = cornerRadius
         view.onHoverChange = onHoverChange
         view.updateTrackingAreas()
+        view.requestInputFocus(focusRequest)
     }
 
     static func dismantleNSView(_ view: EditingBoundaryView, coordinator: ()) {
@@ -51,6 +53,28 @@ final class EditingBoundaryView: NSView {
     private var cursorUpdateScheduled = false
     private var pointerArea: NSTrackingArea?
     private var windowObservers: [NSObjectProtocol] = []
+    private var lastFocusRequest = 0
+
+    func requestInputFocus(_ request: Int) {
+        guard request != lastFocusRequest else { return }
+        lastFocusRequest = request
+        guard request > 0 else { return }
+        // Focus after SwiftUI has laid out the update and dispatched the button.
+        // AppKit then updates the input's normal FocusState, as for a direct click.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.lastFocusRequest == request, self.isInputEnabled,
+                  !self.isHiddenOrHasHiddenAncestor, let window = self.window,
+                  let content = window.contentView else { return }
+            func fields(_ view: NSView) -> [NSTextField] {
+                (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(fields)
+            }
+            let inputBounds = self.convert(self.bounds, to: content)
+            if let field = fields(content).first(where: {
+                let frame = $0.convert($0.bounds, to: content)
+                return $0.isEditable && $0.isEnabled && inputBounds.contains(NSPoint(x: frame.midX, y: frame.midY))
+            }) { window.makeFirstResponder(field) }
+        }
+    }
 
     // The observer measures the input, but never intercepts its clicks.
     override func hitTest(_ point: NSPoint) -> NSView? { nil }

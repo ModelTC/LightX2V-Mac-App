@@ -8,6 +8,7 @@ struct PathInputField: View {
     let symbol: String
     @Binding var text: String
     var onCommit: () -> Void = {}
+    var focusRequest = 0
     @Environment(\.isEnabled) private var enabled
     @FocusState private var focused: Bool
     @State private var hovered = false
@@ -27,7 +28,7 @@ struct PathInputField: View {
         .simultaneousGesture(TapGesture().onEnded { if enabled { focused = true } })
         .inputHoverSurface(hovered: hovered)
         .background(OutsideClickObserver(isEditing: focused, isEnabled: enabled,
-                                        onHoverChange: { hovered = $0 }, cornerRadius: 8))
+                                        onHoverChange: { hovered = $0 }, cornerRadius: 8, focusRequest: focusRequest))
         .onChange(of: focused) { wasFocused, isFocused in
             if wasFocused && !isFocused { onCommit() }
         }

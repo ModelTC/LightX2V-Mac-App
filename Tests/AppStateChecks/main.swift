@@ -14,8 +14,17 @@ struct AppStateChecks {
         }
         if CommandLine.arguments.dropFirst().first == "--settings-only" {
             try await generalRuntimeChecks()
+            try await generalSettingsLayoutChecks()
             try await generalSettingsFocusChecks()
             try await environmentPresentationChecks()
+            return
+        }
+        if CommandLine.arguments.dropFirst().first == "--settings-layout-only" {
+            try await generalSettingsLayoutChecks()
+            return
+        }
+        if CommandLine.arguments.dropFirst().first == "--settings-focus-only" {
+            try await generalSettingsFocusChecks()
             return
         }
         if CommandLine.arguments.dropFirst().first == "--environment-only" || CommandLine.arguments.dropFirst().first == "--environment-snapshots" {
@@ -178,6 +187,7 @@ struct AppStateChecks {
         try await enhancementStateChecks()
         try await startupEnvironmentChecks()
         try await generalRuntimeChecks()
+        try await generalSettingsLayoutChecks()
         try await generalSettingsFocusChecks()
         try await environmentPresentationChecks()
         try await modelSelectionLayoutChecks()

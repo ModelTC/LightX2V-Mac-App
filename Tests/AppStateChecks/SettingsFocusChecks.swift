@@ -19,7 +19,7 @@ func generalSettingsFocusChecks() async throws {
     try JSONFile.write(WorkspaceData(settings: settings, hasCompletedGeneralSetup: true), to: layout.state)
     try JSONFile.write(WorkspaceLocation(workingDirectory: layout.root.path), to: support.appendingPathComponent("workspace_location.json"))
     let store = AppStore()
-    let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 1000, height: 800),
+    let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 768, height: 680),
                           styleMask: [.titled, .closable], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     defer { window.orderOut(nil); window.contentView = nil }
@@ -28,6 +28,9 @@ func generalSettingsFocusChecks() async throws {
 
     func fields(_ view: NSView) -> [NSTextField] {
         (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(fields)
+    }
+    func boundaries(_ view: NSView) -> [EditingBoundaryView] {
+        (view as? EditingBoundaryView).map { [$0] } ?? view.subviews.flatMap(boundaries)
     }
     func check(_ good: Bool, _ message: String) throws {
         guard good else { throw AppError.message(message) }
@@ -42,6 +45,17 @@ func generalSettingsFocusChecks() async throws {
         let inputs = fields(content).filter(\.isEditable)
         try check(inputs.count == 4 && inputs.allSatisfy { $0.currentEditor() == nil },
                   "settings opening \(opening) leaves every path unselected")
+        try check(inputs.allSatisfy { content.bounds.contains($0.convert($0.bounds, to: content)) },
+                  "default compact settings sheet shows all four paths without scrolling")
+        let runtimeField = inputs.first { $0.stringValue == settings.promptEnhancement.runtimeDirectory }!
+        let runtimeFrame = runtimeField.convert(runtimeField.bounds, to: content)
+        let runtimeBoundary = boundaries(content).first {
+            $0.convert($0.bounds, to: content).contains(NSPoint(x: runtimeFrame.midX, y: runtimeFrame.midY))
+        }!
+        runtimeBoundary.requestInputFocus(opening)
+        try await Task.sleep(for: .milliseconds(150))
+        try check(runtimeField.currentEditor() != nil && inputs.filter { $0 !== runtimeField }.allSatisfy { $0.currentEditor() == nil },
+                  "missing-setting focus request selects only the fourth path")
         let workspaceField = inputs.first { $0.stringValue == settings.workingDirectory }!
         sheet.makeFirstResponder(workspaceField)
         try await Task.sleep(for: .milliseconds(100))
