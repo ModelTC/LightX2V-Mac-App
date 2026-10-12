@@ -8,6 +8,15 @@ struct AppStateChecks {
     @MainActor static func main() async throws {
         setbuf(stdout, nil)
         _ = NSApplication.shared
+        if CommandLine.arguments.dropFirst().first == "--models-real" {
+            try await modelPreparationRealChecks(Array(CommandLine.arguments.dropFirst(2)))
+            return
+        }
+        if CommandLine.arguments.dropFirst().first == "--models-only" {
+            try await unifiedModelPreparationChecks()
+            try await turboPreparationChecks()
+            return
+        }
         if CommandLine.arguments.dropFirst().first == "--startup-only" {
             try await startupEnvironmentChecks()
             return
@@ -172,7 +181,7 @@ struct AppStateChecks {
         try Data("this is not an executable".utf8).write(to: invalidExecutable)
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: invalidExecutable.path)
         store.settings.model = model.path; store.modelDirectory = model.path
-        store.settings.config = config.path; store.modelConfig = config.path
+        store.settings.config = config.path
         store.settings.python = invalidExecutable.path; store.environmentReady = true
         store.prompt = "keep this draft"
         store.addInputImages([original]); try await waitForImport()
@@ -184,6 +193,7 @@ struct AppStateChecks {
         try await creationChecks()
         try await generationLogChecks()
         try await turboPreparationChecks()
+        try await unifiedModelPreparationChecks()
         try await enhancementStateChecks()
         try await startupEnvironmentChecks()
         try await generalRuntimeChecks()

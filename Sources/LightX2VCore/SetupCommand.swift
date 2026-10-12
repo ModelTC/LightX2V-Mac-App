@@ -59,7 +59,7 @@ public enum SetupCommand {
                             while let data = try reader.read(upToCount: 65536), !data.isEmpty {
                                 captured.append(data); pending.append(data)
                                 if captured.count > 2_000_000 { captured.removeFirst(captured.count - 2_000_000) }
-                                while let end = pending.firstIndex(of: 10) {
+                                while let end = pending.firstIndex(where: { $0 == 10 || $0 == 13 }) {
                                     onOutput(String(decoding: pending[..<end], as: UTF8.self))
                                     pending.removeSubrange(...end)
                                 }

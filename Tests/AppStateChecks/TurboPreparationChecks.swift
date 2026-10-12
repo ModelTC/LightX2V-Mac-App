@@ -21,36 +21,40 @@ func turboPreparationChecks() async throws {
     }
     try Data().write(to: source.appendingPathComponent("lightx2v/infer.py"))
     try Data("{}".utf8).write(to: config)
+    try fm.createDirectory(at: weights.appendingPathComponent("transformer"), withIntermediateDirectories: true)
+    try fm.createDirectory(at: weights.appendingPathComponent("text_encoder"), withIntermediateDirectories: true)
+    try fm.createDirectory(at: weights.appendingPathComponent("vae"), withIntermediateDirectories: true)
+    try fm.createDirectory(at: weights.appendingPathComponent("scheduler"), withIntermediateDirectories: true)
+    try fm.createDirectory(at: weights.appendingPathComponent("processor"), withIntermediateDirectories: true)
     try Data("{}".utf8).write(to: weights.appendingPathComponent("model_index.json"))
     func check(_ value: Bool, _ message: String) throws {
         guard value else { throw AppError.message(message) }
         print("PASS \(message)")
     }
     let store = AppStore()
-    try check(store.needsGeneralSetup && store.modelDirectory.isEmpty && store.modelConfig.isEmpty,
+    try check(store.needsGeneralSetup && store.modelDirectory.isEmpty,
               "first launch has no model paths or general setup")
     var settings = AppSettings(repository: source.path, model: "", config: "", python: "/usr/bin/false",
                                workingDirectory: root.appendingPathComponent("workspace").path)
     settings.promptEnhancement.runtimeDirectory = try runtimeFixture(in: root)
     try await store.applyGeneralSettings(settings)
     while store.isChecking { try await Task.sleep(for: .milliseconds(10)) }
-    try check(!store.needsGeneralSetup && store.selectedModel == nil && store.settings.config == config.path,
-              "saving first setup discovers the Turbo config and still requires model selection")
+    try check(!store.needsGeneralSetup && store.selectedModel == nil && store.settings.config.isEmpty,
+              "saving first setup leaves configuration APP-managed and still requires model selection")
     store.selectModel(.qwenImage21Turbo)
-    try check(store.modelDirectory == weights.path && store.modelConfig == config.path && store.hasUnsavedModelSettings,
+    try check(store.modelDirectory == weights.path && store.hasUnsavedModelSettings,
               "selecting Turbo prepares nearby weights for explicit save")
+    store.setPromptEnhancementEnabled(false)
     store.applyModelSettings()
     while store.isChecking { try await Task.sleep(for: .milliseconds(10)) }
     try check(store.settings.model == weights.path && !store.hasUnsavedModelSettings && !store.environmentReady,
               "preparation saves Turbo paths without treating an invalid Python as ready")
-    let custom = root.appendingPathComponent("custom-turbo.json")
-    try Data("{}".utf8).write(to: custom)
-    store.modelConfig = custom.path
+    store.modelDirectory = root.appendingPathComponent("custom-weights").path
     store.selectModel(.qwenImage21Turbo)
-    try check(store.modelConfig == custom.path, "model selection preserves an explicit configuration draft")
+    try check(store.modelDirectory.hasSuffix("custom-weights"), "model selection preserves an explicit model draft")
     store.discardModelSettings()
     let reopened = AppStore()
     try check(!reopened.needsGeneralSetup && reopened.selectedModel == nil && reopened.modelDirectory == weights.path
-              && reopened.modelConfig == config.path && !reopened.modelPreparationExpanded,
+              && !reopened.modelPreparationExpanded,
               "relaunch remembers the prepared paths without selecting or expanding the model")
 }

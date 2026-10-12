@@ -7,6 +7,7 @@ struct PathInputField: View {
     let placeholder: String
     let symbol: String?
     @Binding var text: String
+    var minimumHeight: CGFloat = 44
     var onCommit: () -> Void = {}
     var focusRequest = 0
     @Environment(\.isEnabled) private var enabled
@@ -25,7 +26,7 @@ struct PathInputField: View {
                 .onSubmit(onCommit)
         }
         .padding(.horizontal, 10)
-        .frame(maxWidth: .infinity, minHeight: 44)
+        .frame(maxWidth: .infinity, minHeight: minimumHeight)
         .contentShape(RoundedRectangle(cornerRadius: 8))
         .simultaneousGesture(TapGesture().onEnded { if enabled { focused = true } })
         .inputHoverSurface(hovered: hovered)

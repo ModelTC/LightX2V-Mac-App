@@ -135,5 +135,5 @@ func enhancementStateChecks() async throws {
     store.setPromptEnhancementEnabled(true)
     store.settings.promptEnhancement.t2iModel = "/missing/model.gguf"
     store.prompt = "Keep draft"; let count = store.generations.count; store.generate()
-    try check(store.showEnhancementSettings && !store.isRunning && store.prompt == "Keep draft" && store.generations.count == count, "missing resources opens configuration and preserves unsubmitted draft")
+    try check(store.modelPreparationExpanded && store.showInspector && !store.isRunning && store.prompt == "Keep draft" && store.generations.count == count, "missing resources opens inline model preparation and preserves unsubmitted draft")
 }

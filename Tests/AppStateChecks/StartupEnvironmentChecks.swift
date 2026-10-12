@@ -170,8 +170,11 @@ print('LIGHTX2V_ENV:' + (root / 'versions.json').read_text(), flush=True)
     settings.config = root.appendingPathComponent("config.json").path
     try fm.createDirectory(atPath: settings.model, withIntermediateDirectories: true)
     try Data("{}".utf8).write(to: URL(fileURLWithPath: settings.model).appendingPathComponent("model_index.json"))
+    for name in ["transformer", "text_encoder", "vae", "scheduler", "processor"] {
+        try fm.createDirectory(atPath: settings.model + "/" + name, withIntermediateDirectories: true)
+    }
     try Data("{}".utf8).write(to: URL(fileURLWithPath: settings.config))
-    reopened.modelDirectory = settings.model; reopened.modelConfig = settings.config
+    reopened.modelDirectory = settings.model
     reopened.applyModelSettings()
     try check(reopened.environmentReady && reopened.canGenerate && !reopened.isChecking && !reopened.hasUnsavedModelSettings && count() == beforeModel,
               "selecting and saving model paths preserve the independent environment status without a check")

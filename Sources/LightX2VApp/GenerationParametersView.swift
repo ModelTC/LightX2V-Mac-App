@@ -49,7 +49,6 @@ struct GenerationParametersView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("输出尺寸")
             .accessibilityValue(store.generationSize.dimensions.map { "宽 \($0.width)，高 \($0.height) 像素" } ?? "自动确定")
-            PromptEnhancementControl().padding(.top, 4)
         }
     }
 

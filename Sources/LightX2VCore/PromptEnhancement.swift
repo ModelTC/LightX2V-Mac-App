@@ -10,6 +10,8 @@ public enum PromptEnhancementMode: String, Codable {
 public struct PromptEnhancementSettings: Codable, Equatable {
     public var enabled = true
     public var runtimeDirectory = ""
+    public var t2iDirectory = ""
+    public var i2iDirectory = ""
     public var t2iModel = ""
     public var t2iSystemPrompt = ""
     public var i2iModel = ""
@@ -17,11 +19,42 @@ public struct PromptEnhancementSettings: Codable, Equatable {
     public var visionProjector = ""
     public init() {}
 
+    private enum CodingKeys: String, CodingKey {
+        case enabled, runtimeDirectory, t2iDirectory, i2iDirectory, t2iModel, t2iSystemPrompt, i2iModel, i2iSystemPrompt, visionProjector
+    }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try values.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        runtimeDirectory = try values.decodeIfPresent(String.self, forKey: .runtimeDirectory) ?? ""
+        t2iDirectory = try values.decodeIfPresent(String.self, forKey: .t2iDirectory) ?? ""
+        i2iDirectory = try values.decodeIfPresent(String.self, forKey: .i2iDirectory) ?? ""
+        t2iModel = try values.decodeIfPresent(String.self, forKey: .t2iModel) ?? ""
+        t2iSystemPrompt = try values.decodeIfPresent(String.self, forKey: .t2iSystemPrompt) ?? ""
+        i2iModel = try values.decodeIfPresent(String.self, forKey: .i2iModel) ?? ""
+        i2iSystemPrompt = try values.decodeIfPresent(String.self, forKey: .i2iSystemPrompt) ?? ""
+        visionProjector = try values.decodeIfPresent(String.self, forKey: .visionProjector) ?? ""
+    }
+
+    /// Resolve only within the selected repository. Request snapshots retain exact files.
+    public func resolvedResources(for selectedMode: PromptEnhancementMode? = nil) throws -> Self {
+        var value = self
+        for mode in [PromptEnhancementMode.t2i, .i2i] {
+            if let selectedMode, mode != selectedMode { continue }
+            let directory = mode == .t2i ? t2iDirectory : i2iDirectory
+            guard !directory.isEmpty else { continue }
+            let files = try ModelResource.enhancementFiles(in: directory, mode: mode)
+            if mode == .t2i { value.t2iModel = files.model; value.t2iSystemPrompt = files.system }
+            else { value.i2iModel = files.model; value.i2iSystemPrompt = files.system; value.visionProjector = files.projector! }
+        }
+        return value
+    }
+
     public func validate(for mode: PromptEnhancementMode) throws {
+        let resolved = try resolvedResources(for: mode)
         let binary = runtimeDirectory + (mode == .t2i ? "/llama-completion" : "/llama-mtmd-cli")
         let files = mode == .t2i
-            ? [("T2I 模型", t2iModel), ("T2I 系统提示词", t2iSystemPrompt)]
-            : [("I2I 模型", i2iModel), ("I2I 系统提示词", i2iSystemPrompt), ("视觉编码器", visionProjector)]
+            ? [("T2I 模型", resolved.t2iModel), ("T2I 系统提示词", resolved.t2iSystemPrompt)]
+            : [("I2I 模型", resolved.i2iModel), ("I2I 系统提示词", resolved.i2iSystemPrompt), ("视觉编码器", resolved.visionProjector)]
         let fm = FileManager.default
         var directory: ObjCBool = false
         guard binary.hasPrefix("/"), fm.fileExists(atPath: binary, isDirectory: &directory),
@@ -34,7 +67,7 @@ public struct PromptEnhancementSettings: Codable, Equatable {
             guard path.hasPrefix("/"), fm.fileExists(atPath: path, isDirectory: &isDirectory),
                   !isDirectory.boolValue, fm.isReadableFile(atPath: path),
                   stat(path, &metadata) == 0, metadata.st_size > 0 else {
-                throw AppError.message("找不到\(label)，请在 Prompt 增强设置中选择对应文件。")
+                throw AppError.message("找不到\(label)，请在模型准备中选择完整的增强模型文件夹。")
             }
         }
     }

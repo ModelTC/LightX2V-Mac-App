@@ -15,6 +15,7 @@ cp "$BIN/LightX2VApp" "$APP/Contents/MacOS/LightX2VApp"
 for resource in bridge.py prompt_enhancement.py requirements.txt; do
     cp "$BIN/LightX2VAPP_LightX2VApp.bundle/$resource" "$APP/Contents/Resources/$resource"
 done
+cp "$BIN/LightX2VAPP_LightX2VCore.bundle/qwen_image_21_turbo.json" "$APP/Contents/Resources/qwen_image_21_turbo.json"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

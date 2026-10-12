@@ -20,7 +20,14 @@ final class AppStore: ObservableObject {
         }
     }
     @Published var modelDirectory: String
-    @Published var modelConfig: String
+    @Published var t2iDirectory: String
+    @Published var i2iDirectory: String
+    @Published var activeModelDownload: ModelResource?
+    @Published var modelDownloadMessages: [ModelResource: String] = [:]
+    @Published var modelDownloadErrors: Set<ModelResource> = []
+    @Published var readyModelResources: Set<ModelResource> = []
+    @Published var modelResourceMessages: [ModelResource: String] = [:]
+    private var modelResourceTask: Task<Void, Never>?
     @Published var generations: [Generation]
     @Published var selectedID: UUID? {
         didSet { logGenerationID = selectedID; loadSelectedLog() }
@@ -49,7 +56,6 @@ final class AppStore: ObservableObject {
     @Published var errorMessage: String?
     @Published var showSettings = false
     @Published var showStartupSettings = true
-    @Published var showEnhancementSettings = false
     @Published private(set) var hasCompletedGeneralSetup = false
     @Published var showLogs = false
     @Published var showInspector = true
@@ -91,7 +97,7 @@ final class AppStore: ObservableObject {
             }.value
             guard !Task.isCancelled, let self, self.settings.promptEnhancement == value else { return }
             self.enhancementAvailability = availability
-            if presentIfMissing && value.enabled && availability[mode] != true { self.showEnhancementSettings = true }
+            if presentIfMissing && value.enabled && availability[mode] != true { self.showModelPreparation() }
         }
     }
 
@@ -110,7 +116,7 @@ final class AppStore: ObservableObject {
         var updated = value
         updated.runtimeDirectory = settings.promptEnhancement.runtimeDirectory
         settings.promptEnhancement = updated
-        persist(); showEnhancementSettings = false
+        persist()
     }
 
     func thinkingStream(for job: Generation) -> EnhancementTextStream {
@@ -145,10 +151,13 @@ final class AppStore: ObservableObject {
     var canReferenceImages: Bool { selectedModel == .qwenImage21Turbo && !needsGeneralSetup && !isPreparingWorkspace && terminationCompletion == nil }
     var canAddImages: Bool { canReferenceImages && !isImportingImages }
     var needsGeneralSetup: Bool { !hasCompletedGeneralSetup || !settings.hasGeneralPaths }
-    var hasUnsavedModelSettings: Bool { modelDirectory != settings.model || modelConfig != settings.config }
+    var hasUnsavedModelSettings: Bool {
+        modelDirectory != settings.model || (settings.promptEnhancement.enabled &&
+            (t2iDirectory != settings.promptEnhancement.t2iDirectory || i2iDirectory != settings.promptEnhancement.i2iDirectory))
+    }
     var width: Int? { generationSize.dimensions?.width }
     var height: Int? { generationSize.dimensions?.height }
-    var canGenerate: Bool { selectedModel != nil && !needsGeneralSetup && environmentReady && !settings.model.isEmpty && !settings.config.isEmpty && !busy && !isComposingPrompt && !hasUnsavedModelSettings && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var canGenerate: Bool { selectedModel != nil && !needsGeneralSetup && environmentReady && !settings.model.isEmpty && !busy && !isComposingPrompt && (!settings.promptEnhancement.enabled || enhancementResourcesReady) && !hasUnsavedModelSettings && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var bridgePath: String {
         (Bundle.main.url(forResource: "bridge", withExtension: "py")
          ?? Bundle.module.url(forResource: "bridge", withExtension: "py")!).path
@@ -170,11 +179,25 @@ final class AppStore: ObservableObject {
             readError = "无法读取原工作区，原文件已保留。\(error.localizedDescription)"
         }
         data.recoverInterrupted()
+        // Existing complete HF folders can populate the inline directory controls.
+        for resource in [ModelResource.t2i, .i2i] {
+            let files = data.settings.promptEnhancement
+            let model = resource == .t2i ? files.t2iModel : files.i2iModel
+            let system = resource == .t2i ? files.t2iSystemPrompt : files.i2iSystemPrompt
+            let current = resource == .t2i ? files.t2iDirectory : files.i2iDirectory
+            let folder = URL(fileURLWithPath: model).deletingLastPathComponent().path
+            if current.isEmpty, model.hasPrefix("/"), URL(fileURLWithPath: system).deletingLastPathComponent().path == folder,
+               (try? resource.validate(directory: folder)) != nil {
+                if resource == .t2i { data.settings.promptEnhancement.t2iDirectory = folder }
+                else { data.settings.promptEnhancement.i2iDirectory = folder }
+            }
+        }
         settings = data.settings; generations = data.generations
-        modelDirectory = data.settings.model; modelConfig = data.settings.config
+        modelDirectory = data.settings.model
+        t2iDirectory = data.settings.promptEnhancement.t2iDirectory; i2iDirectory = data.settings.promptEnhancement.i2iDirectory
         hasCompletedGeneralSetup = data.hasCompletedGeneralSetup
         errorMessage = readError
-        refreshEnhancementResources()
+        refreshEnhancementResources(); refreshModelResources()
     }
 
     func persist() {
@@ -290,7 +313,14 @@ final class AppStore: ObservableObject {
         if modelDirectory.isEmpty {
             modelDirectory = QwenImage21Turbo.suggestedModel(near: [settings.repository, settings.workingDirectory]) ?? ""
         }
-        if modelConfig.isEmpty { modelConfig = QwenImage21Turbo.suggestedConfig(repository: settings.repository) ?? "" }
+        for resource in [ModelResource.t2i, .i2i] {
+            let candidate = resource.destination(in: WorkspaceLayout(settings.workingDirectory)).path
+            if (try? resource.validate(directory: candidate)) != nil {
+                if resource == .t2i && t2iDirectory.isEmpty { t2iDirectory = candidate }
+                if resource == .i2i && i2iDirectory.isEmpty { i2iDirectory = candidate }
+            }
+        }
+        refreshModelResources()
     }
 
     func reuse(_ generation: Generation) {
@@ -331,15 +361,6 @@ final class AppStore: ObservableObject {
         updated.repository = path(value.repository)
         updated.python = path(value.python)
         updated.promptEnhancement.runtimeDirectory = path(value.promptEnhancement.runtimeDirectory)
-        // Default to the only supported model's config in the selected checkout.
-        var suggested: String?
-        if updated.config.isEmpty {
-            suggested = QwenImage21Turbo.suggestedConfig(repository: updated.repository)
-        } else if updated.repository != settings.repository, !settings.repository.isEmpty,
-                  updated.config.hasPrefix(settings.repository + "/") {
-            suggested = updated.repository + updated.config.dropFirst(settings.repository.count)
-        }
-        if let suggested, FileManager.default.fileExists(atPath: suggested) { updated.config = suggested }
         try updated.validateGeneralPaths()
         let preserveModelDraft = hasUnsavedModelSettings
         isPreparingWorkspace = true
@@ -352,7 +373,7 @@ final class AppStore: ObservableObject {
         let changedWorkspace = stateURL.standardizedFileURL.resolvingSymlinksInPath() != WorkspaceLayout(saved.settings.workingDirectory).state
         settings = saved.settings; generations = saved.generations
         if changedWorkspace { selectedID = nil; draftCreationID = UUID(); logs = ""; showLogs = false; clearInputImages() }
-        if !preserveModelDraft { modelDirectory = settings.model; modelConfig = settings.config }
+        if !preserveModelDraft { discardModelDraft() }
         stateURL = WorkspaceLayout(settings.workingDirectory).state
         canPersist = true; hasCompletedGeneralSetup = true; environmentReady = false
         errorMessage = nil
@@ -361,20 +382,92 @@ final class AppStore: ObservableObject {
         checkEnvironment()
     }
 
+    func resourceDirectory(_ resource: ModelResource) -> String {
+        switch resource { case .turbo: return modelDirectory; case .t2i: return t2iDirectory; case .i2i: return i2iDirectory }
+    }
+
+    func modelPathChanged(_ resource: ModelResource) {
+        if activeModelDownload != resource { modelDownloadMessages.removeValue(forKey: resource); modelDownloadErrors.remove(resource) }
+        refreshModelResources()
+    }
+
+    func refreshModelResources() {
+        modelResourceTask?.cancel()
+        let paths = Dictionary(uniqueKeysWithValues: ModelResource.allCases.map { ($0, resourceDirectory($0)) })
+        modelResourceTask = Task { [weak self] in
+            let errors = await Task.detached(priority: .utility) {
+                var result: [ModelResource: String] = [:]
+                for resource in ModelResource.allCases {
+                    do { try resource.validate(directory: paths[resource]!) }
+                    catch { result[resource] = error.localizedDescription }
+                }
+                return result
+            }.value
+            guard !Task.isCancelled, let self else { return }
+            self.modelResourceMessages = errors
+            self.readyModelResources = Set(ModelResource.allCases.filter { errors[$0] == nil })
+        }
+    }
+
     func applyModelSettings() {
         guard selectedModel != nil, !busy else { return }
+        func normalized(_ value: String) -> String { (value.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath }
         var updated = settings
-        updated.model = modelDirectory
-        updated.config = modelConfig
+        updated.model = normalized(modelDirectory)
+        updated.config = "" // Each run receives the APP's bundled config in its own case directory.
+        updated.promptEnhancement.t2iDirectory = normalized(t2iDirectory)
+        updated.promptEnhancement.i2iDirectory = normalized(i2iDirectory)
         do {
             try updated.validatePaths()
-            settings = updated; persist()
+            try ModelResource.turbo.validate(directory: updated.model)
+            if updated.promptEnhancement.enabled {
+                try ModelResource.t2i.validate(directory: updated.promptEnhancement.t2iDirectory)
+                try ModelResource.i2i.validate(directory: updated.promptEnhancement.i2iDirectory)
+                updated.promptEnhancement = try updated.promptEnhancement.resolvedResources()
+                try updated.promptEnhancement.validate(for: .t2i)
+                try updated.promptEnhancement.validate(for: .i2i)
+            }
+            settings = updated
+            discardModelDraft(); errorMessage = nil; persist(); refreshModelResources(); refreshEnhancementResources()
         } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func discardModelDraft() {
+        modelDirectory = settings.model
+        t2iDirectory = settings.promptEnhancement.t2iDirectory; i2iDirectory = settings.promptEnhancement.i2iDirectory
     }
 
     func discardModelSettings() {
         guard !busy else { return }
-        modelDirectory = settings.model; modelConfig = settings.config
+        discardModelDraft(); errorMessage = nil; refreshModelResources()
+    }
+
+    func downloadModel(_ resource: ModelResource) {
+        guard !busy, !needsGeneralSetup else { return }
+        activeModelDownload = resource; isPreparingResources = true
+        modelDownloadErrors.remove(resource); modelDownloadMessages[resource] = "正在启动 hf 下载…"
+        let python = settings.python; let layout = WorkspaceLayout(settings.workingDirectory)
+        setupTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.activeModelDownload = nil; self.finishSetupTask() }
+            do {
+                let path = try await HuggingFaceModelDownloader.download(resource, python: python, workspace: layout) { [weak self] line in
+                    let text = line.replacingOccurrences(of: "\u{1B}\\[[0-9;]*[A-Za-z]", with: "", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !text.isEmpty else { return }
+                    Task { @MainActor [weak self] in
+                        guard let self, self.activeModelDownload == resource else { return }
+                        self.modelDownloadMessages[resource] = String(text.suffix(500))
+                    }
+                }
+                try Task.checkCancellation()
+                switch resource { case .turbo: self.modelDirectory = path; case .t2i: self.t2iDirectory = path; case .i2i: self.i2iDirectory = path }
+                self.modelDownloadMessages[resource] = "下载完成 · 保存模型设置后使用"
+                self.refreshModelResources()
+            } catch {
+                if Task.isCancelled { self.modelDownloadMessages[resource] = "已停止 · 再次下载可继续" }
+                else { self.modelDownloadErrors.insert(resource); self.modelDownloadMessages[resource] = error.localizedDescription }
+            }
+        }
     }
 
     func showModelPreparation() {
@@ -443,7 +536,8 @@ final class AppStore: ObservableObject {
         do {
             try settings.validatePaths()
             if settings.promptEnhancement.enabled && (try? settings.promptEnhancement.validate(for: enhancementMode)) == nil {
-                showEnhancementSettings = true
+                showModelPreparation()
+                errorMessage = "请在模型准备中配置完整的增强模型文件夹，或关闭 Prompt 增强。"
                 return
             }
             let seed = Int64.random(in: 0...4294967295)
@@ -451,10 +545,13 @@ final class AppStore: ObservableObject {
             let formatter = DateFormatter(); formatter.dateFormat = "yyyyMMdd-HHmmss"
             let directory = URL(fileURLWithPath: settings.outputDirectory)
                 .appendingPathComponent(formatter.string(from: Date()) + "-" + id.uuidString.prefix(8))
-            var request = try InferenceRequest(settings: settings, prompt: prompt, width: width, height: height,
+            var runSettings = settings
+            if runSettings.promptEnhancement.enabled { runSettings.promptEnhancement = try runSettings.promptEnhancement.resolvedResources(for: enhancementMode) }
+            var request = try InferenceRequest(settings: runSettings, prompt: prompt, width: width, height: height,
                                                seed: seed, output: directory.appendingPathComponent("image.png").path,
                                                inputImages: inputImages, resolution: generationSize.automaticResolution)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            request.config = try QwenImage21Turbo.writeConfig(in: directory)
             request.inputImages = try InputImages.snapshot(inputImages, in: directory)
             let requestURL = directory.appendingPathComponent("request.json")
             try JSONFile.write(request, to: requestURL)

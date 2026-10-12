@@ -46,11 +46,11 @@ struct WorkspaceView: View {
                     }.frame(maxWidth: .infinity, maxHeight: .infinity)
                     if store.showLogs { LogPanel().frame(height: 205) }
                     ComposerView().padding(.horizontal, 30).padding(.top, 12).padding(.bottom, 20)
-                    // The two sidebars and separators occupy 514 points in total.
-                }.frame(minWidth: max(1, minimumWindowSize.width - 514)).background(Palette.canvas)
+                    // The two sidebars and separators occupy 554 points in total.
+                }.frame(minWidth: max(1, minimumWindowSize.width - 554)).background(Palette.canvas)
                 if store.showInspector {
                     Rectangle().fill(Palette.line).frame(width: 1)
-                    InspectorView().frame(width: 280)
+                    InspectorView().frame(width: 320)
                 }
             }
         }
@@ -60,9 +60,7 @@ struct WorkspaceView: View {
         .overlay(alignment: .top) { WindowDragArea(isNativeTitleBar: true).frame(height: 28) }
         .ignoresSafeArea(.container, edges: .top)
         .sheet(isPresented: $store.showSettings) { SettingsView(settings: store.settings).environmentObject(store) }
-        .sheet(isPresented: $store.showEnhancementSettings) {
-            PromptEnhancementSettingsView(settings: store.settings.promptEnhancement, mode: store.enhancementMode).environmentObject(store)
-        }
+
         .alert("LightX2V APP", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
             Button("好") { store.errorMessage = nil }
         } message: { Text(store.errorMessage ?? "") }

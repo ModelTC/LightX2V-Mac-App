@@ -77,7 +77,8 @@ func rejects(_ body: () throws -> Void) throws {
         print("PASS managed installation, requirements, discovery, reuse, rejection, retry and process-group cancellation")
         try await llamaRuntimeDownload(root)
         print("PASS llama.cpp download, dynamic libraries, reuse, checksum, HTTP, archive rejection, cancellation and retry")
-        print("10 setup checks passed")
+        try await modelDownloadChecks(root)
+        print("11 setup checks passed")
     }
 
     static func setupGuide(_ root: URL) throws {

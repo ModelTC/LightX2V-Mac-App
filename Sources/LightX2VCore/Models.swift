@@ -61,10 +61,7 @@ public struct AppSettings: Codable, Equatable {
     public func validatePaths() throws {
         let fm = FileManager.default
         try validateGeneralPaths()
-        for (label, value) in [("模型", model), ("配置", config)] {
-            guard value.hasPrefix("/") else { throw AppError.message("\(label)必须使用绝对路径") }
-        }
-        guard fm.fileExists(atPath: config) else { throw AppError.message("找不到 MPS 推理配置。") }
+        guard model.hasPrefix("/") else { throw AppError.message("模型目录必须使用绝对路径。") }
         guard fm.fileExists(atPath: model + "/model_index.json") else { throw AppError.message("模型目录缺少 model_index.json。") }
     }
 }
