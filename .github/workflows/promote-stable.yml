@@ -1,6 +1,8 @@
 name: Promote Latest to Stable
 
 on:
+  push:
+    tags: [stable]
   workflow_dispatch:
 
 # Share the publisher lock so Latest cannot change during promotion.
