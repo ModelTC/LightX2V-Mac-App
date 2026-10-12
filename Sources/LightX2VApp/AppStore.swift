@@ -362,6 +362,7 @@ final class AppStore: ObservableObject {
         updated.python = path(value.python)
         updated.promptEnhancement.runtimeDirectory = path(value.promptEnhancement.runtimeDirectory)
         try updated.validateGeneralPaths()
+        let keepEnvironmentReady = environmentReady && !needsGeneralSetup && updated.python == path(settings.python)
         isPreparingWorkspace = true
         defer { isPreparingWorkspace = false; finishTerminationIfNeeded() }
         let snapshot = WorkspaceData(settings: updated, generations: generations, hasCompletedGeneralSetup: true)
@@ -377,11 +378,15 @@ final class AppStore: ObservableObject {
         stateURL = WorkspaceLayout(settings.workingDirectory).state
         restoringModelPaths = false
         refreshModelResources()
-        canPersist = true; hasCompletedGeneralSetup = true; environmentReady = false
+        canPersist = true; hasCompletedGeneralSetup = true; environmentReady = keepEnvironmentReady
         errorMessage = nil
         isPreparingWorkspace = false
+        if !keepEnvironmentReady {
+            checkEnvironment()
+            await setupTask?.value
+            guard environmentReady else { return }
+        }
         showStartupSettings = false; showSettings = false
-        checkEnvironment()
     }
 
     func resourceDirectory(_ resource: ModelResource) -> String {

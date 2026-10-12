@@ -179,13 +179,31 @@ print('LIGHTX2V_ENV:' + (root / 'versions.json').read_text(), flush=True)
     try check(reopened.environmentReady && reopened.canGenerate && !reopened.isChecking && count() == beforeModel,
               "selecting and automatically saving model paths preserve the independent environment status without a check")
     try await snapshot("workspace-environment-ready", WorkspaceView().environmentObject(reopened), size: NSSize(width: 1150, height: 840))
+    let beforeSave = count()
+    reopened.showSettings = true
+    try await reopened.applyGeneralSettings(reopened.settings)
+    try check(!reopened.showSettings && reopened.environmentReady && !reopened.isChecking && count() == beforeSave,
+              "saving an already verified Python environment preserves readiness without another probe")
+    let secondPython = root.appendingPathComponent("fixture-python-2")
+    try Data(script.utf8).write(to: secondPython)
+    try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: secondPython.path)
+    var changed = reopened.settings; changed.python = secondPython.path
+    reopened.showSettings = true
+    let saving = Task { try await reopened.applyGeneralSettings(changed) }
+    try await waitUntil { reopened.isChecking }
+    try check(reopened.showSettings && !reopened.environmentReady, "changed Python keeps settings open while saving checks dependencies")
+    try await saving.value
+    try check(!reopened.showSettings && !reopened.isChecking, "saving closes settings only after the new environment passes")
+    try check(reopened.environmentReady && count() == beforeSave + 1, "saving a different Python environment performs one probe")
     missing = minimum; missing["pydantic"] = ""
     try write(missing)
+    reopened.checkEnvironment()
+    try await waitUntil { !reopened.isChecking }
     reopened.showSettings = true
     try await reopened.applyGeneralSettings(reopened.settings)
     try await waitUntil { !reopened.isChecking }
-    try check(!reopened.showSettings && !reopened.showStartupSettings && !reopened.environmentReady && reopened.environmentMessage == "Missing pydantic",
-              "saved settings dismiss the page while a failed dependency check keeps the workspace unready")
+    try check(reopened.showSettings && !reopened.showStartupSettings && !reopened.environmentReady && reopened.environmentMessage == "Missing pydantic",
+              "saving failed dependencies keeps settings open and the workspace unready")
     try write(minimum)
     reopened.showSettings = true
     try await reopened.applyGeneralSettings(reopened.settings)
