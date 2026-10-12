@@ -31,9 +31,7 @@ struct EnvironmentSearchView: View {
             }
             VStack(alignment: .leading, spacing: 7) {
                 Text("依赖要求 · Apple Silicon MPS").font(.system(size: 10, weight: .medium))
-                Text(PyTorchRequirements.versionSummary).font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true).lineSpacing(3)
-                Text("仅需安装：\(PyTorchRequirements.presenceSummary)").font(.system(size: 10, design: .monospaced))
+                Text(PyTorchRequirements.summary).font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true).lineSpacing(3)
             }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
                 .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10))

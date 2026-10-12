@@ -147,6 +147,13 @@ print('LIGHTX2V_ENV:' + (root / 'versions.json').read_text(), flush=True)
     try check(reopened.environmentReady && !reopened.showStartupSettings && reopened.selectedModel == nil
               && reopened.settings.model.isEmpty && reopened.settings.config.isEmpty,
               "each relaunch checks dependencies and enters the workspace without model paths or selection")
+    reopened.showSettings = true
+    reopened.checkEnvironment()
+    try await waitUntil { !reopened.isChecking }
+    try check(reopened.environmentReady && reopened.showSettings && !reopened.showStartupSettings,
+              "a successful manual environment check keeps the general settings sheet open")
+    reopened.closeGeneralSettings()
+    try check(!reopened.showSettings, "only closing general settings dismisses the manually opened sheet")
 
     let beforeModel = count()
     reopened.selectModel(.qwenImage21Turbo)
@@ -169,9 +176,27 @@ print('LIGHTX2V_ENV:' + (root / 'versions.json').read_text(), flush=True)
     try await waitUntil { !reopened.isChecking }
     try check(reopened.showSettings && !reopened.environmentReady && reopened.environmentMessage == "缺少 pydantic",
               "saving general settings rechecks dependencies and keeps failed settings closable")
+    try write(minimum)
+    try await reopened.applyGeneralSettings(reopened.settings)
+    try await waitUntil { !reopened.isChecking }
+    try check(reopened.showSettings && reopened.environmentReady,
+              "saving valid general settings keeps the settings sheet open after a successful check")
     reopened.closeGeneralSettings()
 
+    try write(missing)
+    let retry = try savedStore()
+    retry.start()
+    try await waitUntil { !retry.isChecking }
+    try check(retry.showStartupSettings && !retry.environmentReady, "failed startup presents general settings for repair")
     try write(minimum)
+    retry.checkEnvironment()
+    try await waitUntil { !retry.isChecking }
+    try check(retry.showStartupSettings && retry.environmentReady,
+              "manual recheck after repairing startup dependencies keeps the setup page open")
+    try await snapshot("manual-check-ready-in-setup", FirstLaunchSetupView().environmentObject(retry), size: NSSize(width: 900, height: 840))
+    retry.closeGeneralSettings()
+    try check(!retry.showStartupSettings && retry.environmentReady, "closing repaired startup settings enters the workspace with a ready environment")
+
     try Data().write(to: root.appendingPathComponent("slow-probe"))
     let cancelled = try savedStore()
     cancelled.start()

@@ -133,7 +133,7 @@ struct SettingsView: View {
                 Spacer()
                 Button("关闭") { store.closeGeneralSettings() }.keyboardShortcut(.cancelAction)
                     .disabled(store.isPreparingWorkspace)
-                Button(store.needsGeneralSetup ? "保存并开始" : "保存设置") { save() }
+                Button("保存设置") { save() }
                     .buttonStyle(SettingsActionStyle(prominent: true))
                     .keyboardShortcut(.defaultAction).disabled(store.busy || !settings.hasGeneralPaths)
             }.padding(.horizontal, 26).padding(.vertical, 18)

@@ -13,10 +13,12 @@ public enum PyTorchRequirements {
                                       PythonDependency("loguru"), PythonDependency("imageio"), PythonDependency("imageio_ffmpeg"),
                                       PythonDependency("safetensors"), PythonDependency("einops"), PythonDependency("gguf"),
                                       PythonDependency("opencv-python"), PythonDependency("prometheus_client"), PythonDependency("pydantic")]
-    public static var versionSummary: String {
-        dependencies.compactMap { dependency in dependency.minimum.map { "\(dependency.name) ≥ \($0)" } }.joined(separator: " · ")
+    public static var summary: String {
+        dependencies.map { dependency in
+            if let minimum = dependency.minimum { return "\(dependency.name) ≥ \(minimum)" }
+            return dependency.name
+        }.joined(separator: " · ")
     }
-    public static var presenceSummary: String { dependencies.filter { $0.minimum == nil }.map(\.name).joined(separator: " · ") }
 
     /// Compare release components numerically, including common PEP 440 suffixes.
     /// A prerelease of the minimum itself is lower; local build tags do not affect the minimum.

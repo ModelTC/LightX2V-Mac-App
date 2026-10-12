@@ -384,7 +384,7 @@ final class AppStore: ObservableObject {
         guard !didStart else { return }
         didStart = true
         if needsGeneralSetup { environmentMessage = "请先完成通用设置。"; return }
-        checkEnvironment()
+        checkEnvironment(enterWorkspaceOnSuccess: true)
     }
 
     func closeGeneralSettings() {
@@ -392,7 +392,7 @@ final class AppStore: ObservableObject {
         showStartupSettings = false; showSettings = false
     }
 
-    func checkEnvironment() {
+    func checkEnvironment(enterWorkspaceOnSuccess: Bool = false) {
         guard !busy, terminationCompletion == nil else { return }
         guard !needsGeneralSetup else {
             environmentReady = false
@@ -414,7 +414,7 @@ final class AppStore: ObservableObject {
                     try Task.checkCancellation()
                     environmentReady = environment.isCompatible
                     environmentMessage = environment.compatibilityDetail
-                    if environmentReady { showStartupSettings = false; showSettings = false }
+                    if environmentReady && enterWorkspaceOnSuccess { showStartupSettings = false }
                 } catch {
                     environmentReady = false
                     environmentMessage = Task.isCancelled ? "环境检查已取消。" : error.localizedDescription

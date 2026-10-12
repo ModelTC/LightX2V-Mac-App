@@ -105,12 +105,9 @@ struct ModelPreparationView: View {
                     .popover(isPresented: $showsDetails, arrowEdge: .leading) {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("环境检查").font(.system(size: 13, weight: .semibold))
-                            ScrollView {
-                                Text(store.environmentMessage).font(.system(size: 11))
-                                    .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).subtleScrollbars()
-                            }.frame(maxHeight: 180)
-                            Text("启动时自动检查 Python 环境依赖与 MPS，可在通用设置中重新检查。")
-                                .font(.system(size: 10)).foregroundStyle(Palette.muted)
+                            Text(store.environmentReady ? "环境依赖符合要求。" : "环境依赖不符合要求，请在通用设置中更改依赖环境。")
+                                .font(.system(size: 11)).textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
                         }.padding(18).frame(width: 320)
                     }
             }.font(.system(size: 10)).buttonStyle(HoverButtonStyle(radius: 6)).foregroundStyle(Palette.muted)
