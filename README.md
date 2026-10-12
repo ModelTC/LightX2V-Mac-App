@@ -15,6 +15,12 @@ Each channel keeps one APP package. Updating Stable replaces its previous packag
 
 **First launch on macOS:** macOS may block the APP because the developer cannot be verified. After attempting to open it, go to **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** for LightX2V APP. Authenticate if prompted, then confirm **Open**. Only do this for an APP downloaded from this repository's releases.
 
+## Supported models
+
+- [Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1)
+- [Qwen-Image-2.1-PE-T2I-GGUF-Q8_0](https://huggingface.co/lightx2v/Qwen-Image-2.1-PE-T2I-GGUF-Q8_0)
+- [Qwen-Image-2.1-PE-I2I-GGUF-Q8_0](https://huggingface.co/lightx2v/Qwen-Image-2.1-PE-I2I-GGUF-Q8_0)
+
 ## Build from source
 
 Install Apple's Command Line Tools, then run:
