@@ -4,7 +4,7 @@ name: Build macOS App
 on:
   push:
     branches: ['**']
-    tags-ignore: [latest]
+    tags-ignore: [latest, stable]
   workflow_dispatch:
 
 # Finish the active build; keep only the newest pending build during a push burst.
@@ -59,8 +59,8 @@ jobs:
             printf -- '- Target: macOS 14+, arm64\n'
             printf -- '- Package: APP contents, arm64 architecture and signature verified\n'
             printf -- '- Signing: ad-hoc (not notarized)\n'
-            printf -- '- Retention: no expiry; only the latest successful APP package is kept\n'
-            printf -- '- This stable URL always serves the latest package, including from older run summaries\n'
+            printf -- '- Retention: no expiry; one APP package per Latest / Stable channel\n'
+            printf -- '- This fixed Latest URL always serves the latest package, including from older run summaries\n'
             printf -- '- Requires a local LightX2V checkout, model weights and Python inference environment\n\n'
             printf 'See the [latest release](https://github.com/%s/releases/tag/latest) for its commit and SHA-256.\n' "$GITHUB_REPOSITORY"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -15,8 +15,10 @@ spec.loader.exec_module(publisher)
 class FakeGitHub:
     repository = "example/app"
 
-    def __init__(self, existing=True):
-        self.release = {"id": 1, "tag_name": "latest", "draft": False} if existing else None
+    def __init__(self, existing=True, tag="latest"):
+        self.tag = tag
+        self.requests = []
+        self.release = {"id": 1, "tag_name": tag, "draft": False} if existing else None
         self.assets = {8: {"id": 8, "name": publisher.ASSET_NAME, "label": "lightx2v-run:5; commit:old"}} if existing else {}
         self.assets[7] = {"id": 7, "name": "unrelated.txt"}
         self.artifacts = {20: {"id": 20, "name": "LightX2V-APP-macOS-arm64-123abcd.zip"},
@@ -28,13 +30,14 @@ class FakeGitHub:
         self.upload_count = 0
 
     def api(self, method, path, payload=None, missing_ok=False):
+        self.requests.append((method, path))
         route = path.split("?")[0]
         if method == "GET":
-            if route == "releases/tags/latest":
+            if route == f"releases/tags/{self.tag}":
                 return {**self.release, "assets": copy.deepcopy(list(self.assets.values()))} if self.release else None
             if route == "releases/1/assets": return copy.deepcopy(list(self.assets.values()))
             if route == "actions/artifacts": return {"artifacts": copy.deepcopy(list(self.artifacts.values()))}
-            if route == "git/ref/tags/latest": return copy.deepcopy(self.ref)
+            if route == f"git/ref/tags/{self.tag}": return copy.deepcopy(self.ref)
         if method == "POST" and route == "releases":
             self.release = {"id": 1, **payload}
             return copy.deepcopy(self.release)
@@ -118,3 +121,27 @@ class LatestReleaseTests(unittest.TestCase):
 
 
 if __name__ == "__main__": unittest.main(verbosity=2)
+
+
+class StableReleaseTests(unittest.TestCase):
+    def test_stable_replaces_only_its_package_and_keeps_latest_untouched(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / publisher.ASSET_NAME
+            archive.write_bytes(b"verified stable zip")
+            client = FakeGitHub(tag="stable")
+            publisher.publish(client, archive, "stable-commit", 1, "stable-run", "1", tag="stable")
+            self.assertEqual({a["name"] for a in client.assets.values()}, {publisher.ASSET_NAME, "unrelated.txt"})
+            self.assertEqual(set(client.artifacts), {20, 21})
+            self.assertEqual(client.release["make_latest"], "false")
+            self.assertEqual(client.ref["object"]["sha"], "stable-commit")
+            self.assertFalse(any("latest" in path or "actions/artifacts" in path for _, path in client.requests))
+
+    def test_failed_stable_promotion_retains_old_download(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / publisher.ASSET_NAME
+            archive.write_bytes(b"stable zip")
+            client = FakeGitHub(tag="stable"); client.fail_promotion = True
+            with self.assertRaises(RuntimeError):
+                publisher.publish(client, archive, "stable-commit", 1, "stable-run", "1", tag="stable")
+            self.assertEqual(client.assets[8]["name"], publisher.ASSET_NAME)
+            self.assertEqual(client.ref["object"]["sha"], "old")

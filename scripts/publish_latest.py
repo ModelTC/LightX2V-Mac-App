@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Maintain one non-expiring APP release; called under workflow concurrency control."""
+"""Maintain one non-expiring APP per release channel; called under workflow concurrency control."""
 import hashlib
 import json
 import os
@@ -53,23 +53,26 @@ def list_all(client, path, key=None):
     raise RuntimeError("Too many results; refusing incomplete cleanup")
 
 
-def publish(client, archive, sha, run_number, run_id, attempt):
+def publish(client, archive, sha, run_number, run_id, attempt, tag="latest"):
+    if tag not in {"latest", "stable"}:
+        raise ValueError("Unknown release channel")
+    title = "Latest build" if tag == "latest" else "Stable"
     blob = archive.read_bytes()
     digest = hashlib.sha256(blob).hexdigest()
-    release = client.api("GET", "releases/tags/latest", missing_ok=True)
+    release = client.api("GET", f"releases/tags/{tag}", missing_ok=True)
     old = None
     if release:
         if release.get("immutable"):
-            raise RuntimeError("The latest release is immutable and cannot be replaced")
+            raise RuntimeError("The release is immutable and cannot be replaced")
         old = next((a for a in release["assets"] if a["name"] == ASSET_NAME), None)
         previous_run = re.search(r"lightx2v-run:(\d+)", (old or {}).get("label") or "")
-        if previous_run and int(previous_run[1]) > run_number:
+        if tag == "latest" and previous_run and int(previous_run[1]) > run_number:
             print("A newer successful build is already published; leaving it unchanged.")
             return False
     else:
         release = client.api("POST", "releases", {
-            "tag_name": "latest", "target_commitish": sha, "draft": True,
-            "name": "LightX2V APP · Latest build", "body": "Preparing the first build."})
+            "tag_name": tag, "target_commitish": sha, "draft": True,
+            "name": f"LightX2V APP · {title}", "body": "Preparing the first build."})
 
     # Stage and verify the new upload before changing the working download.
     staged = client.upload(release["id"], f"{PREFIX}{run_id}-{attempt}.zip", blob)
@@ -89,22 +92,24 @@ def publish(client, archive, sha, run_number, run_id, attempt):
             client.api("PATCH", old_path, {"name": ASSET_NAME})
         raise
 
-    ref = client.api("GET", "git/ref/tags/latest", missing_ok=True)
+    ref = client.api("GET", f"git/ref/tags/{tag}", missing_ok=True)
     if ref:
-        client.api("PATCH", "git/refs/tags/latest", {"sha": sha, "force": True})
+        client.api("PATCH", f"git/refs/tags/{tag}", {"sha": sha, "force": True})
     else:
-        client.api("POST", "git/refs", {"ref": "refs/tags/latest", "sha": sha})
+        client.api("POST", "git/refs", {"ref": f"refs/tags/{tag}", "sha": sha})
     url = f"https://github.com/{client.repository}"
+    retention = ("Updated after every successful build; only one Latest APP is kept."
+                 if tag == "latest" else "Updated only by manual promotion; only one Stable APP is kept.")
     notes = (
-        f"[下载最新 APP]({url}/releases/download/latest/{ASSET_NAME})\n\n"
-        "此包无自动过期时间；每次成功构建后更新，只保留最新 APP。\n\n"
-        f"- Commit: `{sha}`\n- [构建记录]({url}/actions/runs/{run_id})\n"
-        "- Apple Silicon / macOS 14+\n- ad-hoc 签名，未进行 Apple 公证\n"
-        "- 运行时仍需本地 LightX2V、模型权重和 Python 环境\n\n"
+        f"[Download {tag.title()} APP]({url}/releases/download/{tag}/{ASSET_NAME})\n\n"
+        f"{retention} Downloads do not expire automatically.\n\n"
+        f"- Commit: `{sha}`\n- [Publication workflow]({url}/actions/runs/{run_id})\n"
+        "- Apple Silicon / macOS 14+\n- Ad-hoc signed; not notarized\n"
+        "- Requires local LightX2V source, model weights and a Python inference environment\n\n"
         f"SHA-256:\n```text\n{digest}  {ASSET_NAME}\n```\n")
     client.api("PATCH", f"releases/{release['id']}", {
-        "name": "LightX2V APP · Latest build", "target_commitish": sha,
-        "body": notes, "draft": False, "prerelease": False, "make_latest": "true"})
+        "name": f"LightX2V APP · {title}", "target_commitish": sha,
+        "body": notes, "draft": False, "prerelease": False, "make_latest": "true" if tag == "latest" else "false"})
 
     # Only retire APP assets managed by this workflow, after successful publication.
     assets = list_all(client, f"releases/{release['id']}/assets")
@@ -112,11 +117,11 @@ def publish(client, archive, sha, run_number, run_id, attempt):
         if asset["id"] != staged["id"] and asset["name"].startswith(PREFIX) and asset["name"].endswith(".zip"):
             client.api("DELETE", f"releases/assets/{asset['id']}")
     # Migrate away from the former 30-day Actions packages; retain logs and unrelated artifacts.
-    artifacts = list_all(client, "actions/artifacts", "artifacts")
+    artifacts = list_all(client, "actions/artifacts", "artifacts") if tag == "latest" else []
     for artifact in artifacts:
         if re.fullmatch(r"LightX2V-APP-macOS-arm64(?:-[0-9a-f]{7,40})?\.zip", artifact["name"]):
             client.api("DELETE", f"actions/artifacts/{artifact['id']}")
-    print(f"Published {url}/releases/download/latest/{ASSET_NAME}\nSHA-256: {digest}")
+    print(f"Published {url}/releases/download/{tag}/{ASSET_NAME}\nSHA-256: {digest}")
     return True
 
 

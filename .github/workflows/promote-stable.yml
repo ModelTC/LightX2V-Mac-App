@@ -1,0 +1,30 @@
+name: Promote Latest to Stable
+
+on:
+  workflow_dispatch:
+
+# Share the publisher lock so Latest cannot change during promotion.
+concurrency:
+  group: lightx2v-latest-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    name: Publish one Stable app package
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out publisher
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Promote verified Latest package
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/promote_stable.py
+      - name: Publish download summary
+        run: |
+          printf '[Download Stable APP](https://github.com/%s/releases/download/stable/LightX2V-APP-macOS-arm64.zip)\n\nOnly one Stable package is kept. Latest is unchanged.\n' "$GITHUB_REPOSITORY" >> "$GITHUB_STEP_SUMMARY"
