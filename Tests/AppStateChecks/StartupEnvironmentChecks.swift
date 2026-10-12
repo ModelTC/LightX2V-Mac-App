@@ -160,7 +160,7 @@ print('LIGHTX2V_ENV:' + (root / 'versions.json').read_text(), flush=True)
     try check(reopened.environmentReady && reopened.showSettings && !reopened.showStartupSettings,
               "a successful manual environment check keeps the general settings sheet open")
     reopened.closeGeneralSettings()
-    try check(!reopened.showSettings, "only closing general settings dismisses the manually opened sheet")
+    try check(!reopened.showSettings, "closing general settings dismisses the manually opened sheet")
 
     let beforeModel = count()
     reopened.selectModel(.qwenImage21Turbo)
@@ -181,14 +181,14 @@ print('LIGHTX2V_ENV:' + (root / 'versions.json').read_text(), flush=True)
     reopened.showSettings = true
     try await reopened.applyGeneralSettings(reopened.settings)
     try await waitUntil { !reopened.isChecking }
-    try check(reopened.showSettings && !reopened.environmentReady && reopened.environmentMessage == "缺少 pydantic",
-              "saving general settings rechecks dependencies and keeps failed settings closable")
+    try check(!reopened.showSettings && !reopened.showStartupSettings && !reopened.environmentReady && reopened.environmentMessage == "缺少 pydantic",
+              "saved settings dismiss the page while a failed dependency check keeps the workspace unready")
     try write(minimum)
+    reopened.showSettings = true
     try await reopened.applyGeneralSettings(reopened.settings)
     try await waitUntil { !reopened.isChecking }
-    try check(reopened.showSettings && reopened.environmentReady,
-              "saving valid general settings keeps the settings sheet open after a successful check")
-    reopened.closeGeneralSettings()
+    try check(!reopened.showSettings && !reopened.showStartupSettings && reopened.environmentReady,
+              "saving valid settings dismisses the page and completes the dependency check")
 
     try write(missing)
     let retry = try savedStore()

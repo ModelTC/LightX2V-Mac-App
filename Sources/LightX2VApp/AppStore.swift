@@ -357,6 +357,7 @@ final class AppStore: ObservableObject {
         canPersist = true; hasCompletedGeneralSetup = true; environmentReady = false
         errorMessage = nil
         isPreparingWorkspace = false
+        showStartupSettings = false; showSettings = false
         checkEnvironment()
     }
 

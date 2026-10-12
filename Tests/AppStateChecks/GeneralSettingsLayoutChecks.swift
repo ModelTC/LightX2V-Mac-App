@@ -57,7 +57,7 @@ func generalSettingsLayoutChecks() async throws {
         host.cacheDisplay(in: host.bounds, to: bitmap)
         try bitmap.representation(using: .png, properties: [:])!.write(to: directory.appendingPathComponent(name + ".png"))
     }
-    let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 720, height: 617),
+    let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 640, height: 619),
                           styleMask: [.titled, .closable], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     defer { window.orderOut(nil); window.contentView = nil }
@@ -134,7 +134,7 @@ func generalSettingsLayoutChecks() async throws {
 
     let first = try store(settings, completed: false)
     let firstHost = NSHostingView(rootView: FirstLaunchSetupView().environmentObject(first).preferredColorScheme(.light))
-    window.contentView = firstHost; window.setContentSize(NSSize(width: 768, height: 680))
+    window.contentView = firstHost; window.setContentSize(NSSize(width: 688, height: 680))
     try await Task.sleep(for: .milliseconds(200))
     try check(firstHost.fittingSize.height <= 680, "first-launch card fits a compact laptop window")
     _ = try geometry(firstHost)

@@ -49,14 +49,16 @@ struct SettingsView: View {
                     .buttonStyle(SettingsActionStyle(prominent: true))
                     .keyboardShortcut(.defaultAction).disabled(store.busy || !settings.hasGeneralPaths)
             }.padding(.horizontal, 24).frame(height: 60)
-        }.frame(width: 720).background(Palette.canvas).foregroundStyle(Palette.ink)
+        }.frame(width: 640).background(Palette.canvas).foregroundStyle(Palette.ink)
             .buttonStyle(SettingsActionStyle())
             // Present neutrally. AppKit otherwise focuses and selects the first
             // path automatically; subsequent clicks and Tab retain native focus.
             .defaultFocus($headerFocused, true, priority: .userInitiated)
             .onAppear { updateGuide() }
             .onChange(of: settings) { _, _ in saveError = nil }
-            .onDisappear { store.setupTask?.cancel() }
+            // Resource transfers belong to this page. The post-save dependency
+            // check belongs to the workspace and must survive its dismissal.
+            .onDisappear { if store.isPreparingResources { store.setupTask?.cancel() } }
             .sheet(isPresented: $showEnvironments, onDismiss: { if searching { store.setupTask?.cancel() } }) {
                 environmentPicker
             }
@@ -418,20 +420,20 @@ private struct SettingsSection<Content: View, Actions: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                Text(String(step.rawValue)).font(.system(size: 11, weight: .semibold))
+                Text(String(step.rawValue)).font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(current == step ? Palette.onButton : Palette.muted)
-                    .frame(width: 20, height: 20)
+                    .frame(width: 22, height: 22)
                     .background(current == step ? Palette.ink : Palette.selection, in: Circle())
-                Text(title).font(.system(size: 12, weight: .semibold))
+                Text(title).font(.system(size: 15, weight: .semibold)).lineLimit(1)
                 Button { showsDetails = true } label: { Image(systemName: "info.circle").frame(width: 20, height: 20) }
                     .buttonStyle(HoverButtonStyle(radius: 4)).foregroundStyle(Palette.muted)
                     .accessibilityLabel("查看\(title)详情")
                     .help("查看说明和完整状态")
                     .popover(isPresented: $showsDetails) { SettingsDetails(title: title, message: details) }
                 Spacer(minLength: 4)
-                Text(status).font(.system(size: 10, weight: .medium)).foregroundStyle(statusColor)
+                Text(status).font(.system(size: 11, weight: .medium)).foregroundStyle(statusColor)
                     .frame(width: 80, alignment: .trailing).lineLimit(1)
-            }.frame(height: 20)
+            }.frame(height: 24)
             content.padding(.top, 4).frame(height: 48)
             if hasActions {
                 HStack(spacing: 8) { actions }.padding(.top, 4).frame(height: 30)

@@ -2,7 +2,7 @@
 
 **Goal:** Show all four required settings in the default window and keep their fields and controls stationary during downloads, checks, errors and completion.
 
-**Architecture:** Replace the scrolling expanded cards with four compact cards. Embed a folder icon at the right edge of each path bar; keep its hit area separate from the editable text. The workspace card contains only its heading and path, without an empty action row. Keep download, search and check buttons below the other three paths, alongside fixed progress slots. Remove inline purpose text; retain explanations and full results in detail popovers. Preserve existing download, save, close and startup behavior; a fixed footer names incomplete configuration and focuses its input on request.
+**Architecture:** Use a 640-point panel with four compact cards and 15-point semibold section headings. The first-launch wrapper adds 24-point padding around the same panel. Embed a folder icon at the right edge of each path bar; keep its hit area separate from the editable text. The workspace card contains only its heading and path, without an empty action row. Keep download, search and check buttons below the other three paths, alongside fixed progress slots. Remove inline purpose text; retain explanations and full results in detail popovers. Successful saves dismiss settings while dependency checking continues in the workspace; failed saves and manual environment checks keep the page open. A fixed footer names incomplete configuration and focuses its input on request.
 
 **Tech Stack:** SwiftUI, AppKit, native input focus, existing cancellable resource tasks and app-state checks.
 
@@ -25,10 +25,10 @@ Files: Tests/AppStateChecks/GeneralSettingsLayoutChecks.swift, SettingsFocusChec
 1. Measure all four native fields in the default settings sheet and first-launch card, without scrolling; inspect primary controls in production snapshots.
 2. Sample field positions and fitting height across real view updates for source/runtime progress, cancellation, completion, long errors, environment checking, rejection, success and saving.
 3. Capture production snapshots for empty configuration, missing fourth setting, busy downloads, environment failure and ready settings; inspect them visually.
-4. Verify missing-field focus, normal editing, keyboard access and existing startup/save/close behavior.
+4. Verify missing-field focus, normal editing and keyboard access. Verify successful saves dismiss settings without cancelling the dependency probe, failed saves keep the page open, and manual checks never dismiss it.
 
 ### Task 3: Verification and publication
 
-1. Build in a fresh isolated scratch directory and run relevant core, setup and full app-state checks.
+1. Build in a fresh isolated scratch directory and run relevant app-state checks; GitHub retains quick core, setup, native input and bridge checks.
 2. Compare original workspace and locator hashes, check whitespace, commit and push main.
 3. Wait for the corresponding GitHub Actions release; verify commit/tag/asset metadata and the downloaded APP package digest before providing the download link.

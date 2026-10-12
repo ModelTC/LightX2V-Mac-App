@@ -13,6 +13,8 @@ func generalSettingsFocusChecks() async throws {
     var settings = AppSettings.defaults
     settings.workingDirectory = layout.root.path
     settings.repository = root.appendingPathComponent("source").path
+    try fm.createDirectory(atPath: settings.repository + "/lightx2v", withIntermediateDirectories: true)
+    try Data().write(to: URL(fileURLWithPath: settings.repository + "/lightx2v/infer.py"))
     settings.python = "/usr/bin/false"
     settings.promptEnhancement.runtimeDirectory = try runtimeFixture(in: root)
     setenv("LIGHTX2V_APP_STATE_DIR", support.path, 1)
@@ -75,6 +77,36 @@ func generalSettingsFocusChecks() async throws {
         store.showSettings = false
         try await Task.sleep(for: .milliseconds(450))
     }
+
+    // Saving dismisses the real sheet before a delayed dependency probe finishes.
+    // Its onDisappear must not cancel that probe as if the user clicked Close.
+    let python = root.appendingPathComponent("fixture-python")
+    var versions: [String: Any] = ["python": "3.11.17", "architecture": "arm64", "mps": true, "detail": "MPS 可用"]
+    for dependency in PyTorchRequirements.dependencies { versions[dependency.name] = dependency.minimum ?? "0.0.1.dev1" }
+    let result = String(data: try JSONSerialization.data(withJSONObject: versions), encoding: .utf8)!
+    try Data(("#!/usr/bin/python3\nimport time\ntime.sleep(0.7)\nprint('LIGHTX2V_ENV:' + " + String(reflecting: result) + ", flush=True)\n").utf8).write(to: python)
+    try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: python.path)
+    var updated = settings; updated.python = python.path
+    store.showSettings = true
+    try await Task.sleep(for: .milliseconds(700))
+    try await store.applyGeneralSettings(updated)
+    try check(!store.showSettings && !store.showStartupSettings && store.isChecking,
+              "successful save dismisses settings and starts the background dependency check")
+    for _ in 0..<300 where store.isChecking || window.attachedSheet != nil {
+        try await Task.sleep(for: .milliseconds(20))
+    }
+    try check(window.attachedSheet == nil && store.environmentReady && store.setupTask == nil,
+              "dependency check survives the settings sheet disappearing after save")
+
+    store.showSettings = true
+    try await Task.sleep(for: .milliseconds(700))
+    var invalid = updated; invalid.python = root.appendingPathComponent("missing-python").path
+    var rejected = false
+    do { try await store.applyGeneralSettings(invalid) } catch { rejected = true }
+    try check(rejected && store.showSettings && window.attachedSheet != nil && store.settings.python == updated.python,
+              "failed save keeps the settings sheet and previously saved paths")
+    store.closeGeneralSettings()
+    try await Task.sleep(for: .milliseconds(450))
 
     // The same view is also the first-launch setup card, outside a sheet.
     try JSONFile.write(WorkspaceData(settings: settings, hasCompletedGeneralSetup: false), to: layout.state)
