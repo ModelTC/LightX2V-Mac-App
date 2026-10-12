@@ -22,13 +22,13 @@ public struct LlamaRuntimeDownload: Codable, Sendable {
 public enum LlamaRuntimeDownloader {
     public static func validateRuntime(_ directory: String) throws {
         let fm = FileManager.default
-        guard directory.hasPrefix("/") else { throw AppError.message("请选择 llama.cpp 运行目录（bin），并使用绝对路径。") }
+        guard directory.hasPrefix("/") else { throw AppError.message("请选择 llama.cpp 二进制文件目录，并使用绝对路径。") }
         for name in ["llama-completion", "llama-mtmd-cli"] {
             let file = URL(fileURLWithPath: directory).appendingPathComponent(name)
             var isDirectory: ObjCBool = false
             guard fm.fileExists(atPath: file.path, isDirectory: &isDirectory), !isDirectory.boolValue,
                   fm.isExecutableFile(atPath: file.path) else {
-                throw AppError.message("llama.cpp 运行目录中缺少可执行的 \(name)，请重新选择 bin 目录或自动下载。")
+                throw AppError.message("llama.cpp 运行目录中缺少可执行的 \(name)，请重新选择二进制文件目录或自动下载。")
             }
         }
     }
@@ -63,13 +63,15 @@ public enum LlamaRuntimeDownloader {
         let fm = FileManager.default
         let destination = workspace.runtimes.appendingPathComponent("llama.cpp-\(distribution.version)")
         let result = LlamaRuntimeDownload(version: distribution.version,
-                                          directory: destination.appendingPathComponent("bin").path, sha256: distribution.sha256)
+                                          directory: destination.path, sha256: distribution.sha256)
         if fm.fileExists(atPath: destination.path) {
             if let saved = try? JSONFile.read(LlamaRuntimeDownload.self, from: destination.appendingPathComponent(".lightx2v-llama.json")),
                saved.version == distribution.version, saved.sha256 == distribution.sha256,
-               (try? validateRuntime(result.directory)) != nil {
+               let directory = [destination.path, destination.appendingPathComponent("bin").path].first(where: {
+                   (try? validateRuntime($0)) != nil
+               }) {
                 progress("已就绪 · \(distribution.version)")
-                return result
+                return LlamaRuntimeDownload(version: distribution.version, directory: directory, sha256: distribution.sha256)
             }
             throw AppError.message("同名 llama.cpp 目录已存在但不完整，请移走后重试：\(destination.path)")
         }
@@ -120,8 +122,7 @@ public enum LlamaRuntimeDownloader {
         let source = extracted.appendingPathComponent("llama-\(distribution.version)")
         try validateRuntime(source.path)
         let installation = staging.appendingPathComponent("installation")
-        try fm.createDirectory(at: installation, withIntermediateDirectories: true)
-        try fm.moveItem(at: source, to: installation.appendingPathComponent("bin"))
+        try fm.moveItem(at: source, to: installation)
         try JSONFile.write(result, to: installation.appendingPathComponent(".lightx2v-llama.json"))
         try Task.checkCancellation()
         try fm.createDirectory(at: workspace.runtimes, withIntermediateDirectories: true)

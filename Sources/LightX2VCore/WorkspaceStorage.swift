@@ -108,8 +108,8 @@ public enum WorkspaceStorage {
                         }
                     }
                     let runtime = URL(fileURLWithPath: data.settings.promptEnhancement.runtimeDirectory).standardizedFileURL.resolvingSymlinksInPath()
-                    let installation = runtime.deletingLastPathComponent()
-                    if runtime.lastPathComponent == "bin", installation.deletingLastPathComponent() == old.runtimes {
+                    let installation = runtime.lastPathComponent == "bin" ? runtime.deletingLastPathComponent() : runtime
+                    if installation.deletingLastPathComponent() == old.runtimes {
                         guard !layout.root.path.hasPrefix(installation.path + "/") else {
                             throw AppError.message("工作目录不能放在要迁移的 llama.cpp 目录内部，请另选文件夹。")
                         }
@@ -118,7 +118,7 @@ public enum WorkspaceStorage {
                         try fm.createDirectory(at: layout.runtimes, withIntermediateDirectories: true)
                         created.append(target)
                         try fm.copyItem(at: installation, to: target)
-                        data.settings.promptEnhancement.runtimeDirectory = target.appendingPathComponent("bin").path
+                        data.settings.promptEnhancement.runtimeDirectory = (runtime == installation ? target : target.appendingPathComponent("bin")).path
                     }
                 }
             }

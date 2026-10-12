@@ -26,7 +26,7 @@ public struct PromptEnhancementSettings: Codable, Equatable {
         var directory: ObjCBool = false
         guard binary.hasPrefix("/"), fm.fileExists(atPath: binary, isDirectory: &directory),
               !directory.boolValue, fm.isExecutableFile(atPath: binary) else {
-            throw AppError.message("Prompt 增强需要 \(mode == .t2i ? "llama-completion" : "llama-mtmd-cli")，请在通用设置中配置 llama.cpp 运行目录（bin）。")
+            throw AppError.message("Prompt 增强需要 \(mode == .t2i ? "llama-completion" : "llama-mtmd-cli")，请在通用设置中配置 llama.cpp 二进制文件目录。")
         }
         for (label, path) in files {
             var isDirectory: ObjCBool = false

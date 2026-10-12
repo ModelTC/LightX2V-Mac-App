@@ -144,11 +144,11 @@ struct SettingsView: View {
     }
 
     private var runtimeCard: some View {
-        SettingsSection(step: .llama, current: setupProgress.current, title: "llama.cpp 运行目录（bin）",
+        SettingsSection(step: .llama, current: setupProgress.current, title: "llama.cpp 二进制文件目录",
                         status: pathStatus(.llama),
                         details: "Prompt 增强共用的本地运行程序，支持文字和参考图增强。\n自动下载 b11564 Apple Silicon 版本到工作目录 / runtimes。\n\n" + downloads.runtimeMessage) {
-            pathRow("llama.cpp 运行目录（bin）", value: $settings.promptEnhancement.runtimeDirectory, directory: true,
-                    placeholder: "选择已有 bin 目录，或自动下载")
+            pathRow("llama.cpp 二进制文件目录", value: $settings.promptEnhancement.runtimeDirectory, directory: true,
+                    placeholder: "选择二进制文件所在目录，或自动下载")
         } actions: {
             downloadButton("自动下载 llama.cpp", action: downloadRuntime)
             SettingsStatusLine(message: downloads.runtimeMessage,
@@ -210,7 +210,7 @@ struct SettingsView: View {
         case .workspace: return "工作目录"
         case .source: return "LightX2V 源码"
         case .python: return "PyTorch 环境"
-        case .llama: return "llama.cpp 运行目录"
+        case .llama: return "llama.cpp 二进制文件目录"
         }
     }
 
@@ -219,7 +219,7 @@ struct SettingsView: View {
         case .workspace: return "LightX2V 工作目录"
         case .source: return "LightX2V 源码目录"
         case .python: return "PyTorch 环境"
-        case .llama: return "llama.cpp 运行目录（bin）"
+        case .llama: return "llama.cpp 二进制文件目录"
         }
     }
 

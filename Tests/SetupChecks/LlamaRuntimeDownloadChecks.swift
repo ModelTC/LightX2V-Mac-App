@@ -61,8 +61,9 @@ server.serve_forever()
         let updates = RuntimeUpdates()
         let result = try await LlamaRuntimeDownloader.download(distribution("runtime"), workspace: workspace) { updates.append($0) }
         try LlamaRuntimeDownloader.validateRuntime(result.directory)
-        try expect(result.directory == workspace.runtimes.appendingPathComponent("llama.cpp-b11564/bin").path,
-                   "runtime escaped the selected workspace")
+        try expect(result.directory == workspace.runtimes.appendingPathComponent("llama.cpp-b11564").path,
+                   "runtime should install binaries directly in the version directory")
+        try expect(!fm.fileExists(atPath: result.directory + "/bin"), "download added an unnecessary bin directory")
         try expect(updates.hasBytes, "llama download did not report byte progress")
         let library = URL(fileURLWithPath: result.directory).appendingPathComponent("libtest.dylib")
         let linkedLibrary = try fm.destinationOfSymbolicLink(atPath: library.path)
@@ -71,6 +72,17 @@ server.serve_forever()
         let reused = try await LlamaRuntimeDownloader.download(distribution("missing"), workspace: workspace) { _ in }
         let after = try fm.attributesOfItem(atPath: URL(fileURLWithPath: reused.directory).appendingPathComponent("llama-completion").path)[.modificationDate] as! Date
         try expect(reused.directory == result.directory && before == after, "complete runtime was not reused without downloading")
+        // Existing downloads remain usable without moving a user's saved runtime.
+        let legacy = WorkspaceLayout(root.appendingPathComponent("existing nested runtime").path)
+        try legacy.prepare()
+        let legacyRoot = legacy.runtimes.appendingPathComponent("llama.cpp-b11564")
+        try fm.createDirectory(at: legacyRoot, withIntermediateDirectories: true)
+        let legacyBin = legacyRoot.appendingPathComponent("bin")
+        try fm.copyItem(at: URL(fileURLWithPath: result.directory), to: legacyBin)
+        let legacyRecord = try JSONSerialization.data(withJSONObject: ["version": result.version, "directory": legacyBin.path, "sha256": result.sha256])
+        try legacyRecord.write(to: legacyRoot.appendingPathComponent(".lightx2v-llama.json"))
+        let reusedLegacy = try await LlamaRuntimeDownloader.download(distribution("missing"), workspace: legacy) { _ in }
+        try expect(reusedLegacy.directory == legacyBin.path, "existing saved runtime was rejected or moved")
         for name in ["checksum", "missing", "unsafe", "incomplete"] {
             let failed = WorkspaceLayout(root.appendingPathComponent("llama-failed-" + name).path)
             var rejected = false

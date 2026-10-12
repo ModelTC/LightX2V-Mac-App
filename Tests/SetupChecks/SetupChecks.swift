@@ -185,7 +185,7 @@ func rejects(_ body: () throws -> Void) throws {
         try fm.createDirectory(at: managed, withIntermediateDirectories: true)
         try Data("{}".utf8).write(to: managed.appendingPathComponent("config.json"))
         var next = same; next.settings.repository = managed.path; next.settings.config = managed.appendingPathComponent("config.json").path
-        let runtime = WorkspaceLayout(saved.settings.workingDirectory).runtimes.appendingPathComponent("llama.cpp-b11564/bin")
+        let runtime = WorkspaceLayout(saved.settings.workingDirectory).runtimes.appendingPathComponent("llama.cpp-b11564")
         try fm.createDirectory(at: runtime, withIntermediateDirectories: true)
         try Data("runtime".utf8).write(to: runtime.appendingPathComponent("llama-completion"))
         next.settings.promptEnhancement.runtimeDirectory = runtime.path
