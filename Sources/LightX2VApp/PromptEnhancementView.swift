@@ -179,6 +179,8 @@ private struct EnhancedPromptBody: View {
                     ProgressView().controlSize(.mini)
                     Text(reply.status == .thinking ? "正在思考与完善描述…" : "正在输出增强提示词…")
                         .font(.system(size: text.isEmpty ? 12 : 10)).foregroundStyle(Palette.muted)
+                    Button("查看实时日志") { store.openLog(for: job) }
+                        .font(.system(size: 10)).foregroundStyle(Palette.muted).buttonStyle(HoverButtonStyle())
                 }.padding(.vertical, text.isEmpty ? 6 : 0)
             } else {
                 VStack(alignment: .leading, spacing: 10) {
@@ -188,6 +190,7 @@ private struct EnhancedPromptBody: View {
                         .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 12) {
                         Button("复用输入重试") { store.reuse(job) }.disabled(store.busy)
+                        Button("查看日志") { store.openLog(for: job) }
                         Button("查看任务文件") { store.reveal(job) }
                     }.font(.system(size: 11)).buttonStyle(HoverButtonStyle())
                 }

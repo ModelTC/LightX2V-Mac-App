@@ -29,6 +29,10 @@ struct AppStateChecks {
             try await conversationLayoutChecks()
             return
         }
+        if CommandLine.arguments.dropFirst().first == "--logs-only" {
+            try await generationLogChecks()
+            return
+        }
         if CommandLine.arguments.dropFirst().first == "--real" {
             try await realInferenceChecks(Array(CommandLine.arguments.dropFirst(2)))
             return
@@ -163,6 +167,7 @@ struct AppStateChecks {
         try check(store.generations[0].status == .failed && store.errorMessage != nil, "failed launch has a visible history record")
         store.clearInputImages()
         try await creationChecks()
+        try await generationLogChecks()
         try await turboPreparationChecks()
         try await enhancementStateChecks()
         try await modelEnvironmentChecks()

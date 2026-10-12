@@ -22,7 +22,10 @@ final class AppStore: ObservableObject {
     @Published var modelDirectory: String
     @Published var modelConfig: String
     @Published var generations: [Generation]
-    @Published var selectedID: UUID? { didSet { loadSelectedLog() } }
+    @Published var selectedID: UUID? {
+        didSet { logGenerationID = selectedID; loadSelectedLog() }
+    }
+    @Published private(set) var logGenerationID: UUID?
     @Published var prompt = ""
     @Published private(set) var inputImages: [InputImage] = []
     @Published private(set) var isImportingImages = false
@@ -53,6 +56,7 @@ final class AppStore: ObservableObject {
     private var runner: ProcessRunner?
     private var checker: ProcessRunner?
     private var activeLog = ""
+    private var activeLogFile: GenerationLog?
     private var startedAt: Date?
     private var receivedDone = false
     private var checkToken = UUID()
@@ -122,6 +126,7 @@ final class AppStore: ObservableObject {
     }
 
     var selected: Generation? { generations.first { $0.id == selectedID } }
+    var logGeneration: Generation? { selectedCreation.first { $0.id == logGenerationID } }
     var selectedCreation: [Generation] {
         guard let selected else { return [] }
         return generations.reversed().filter { $0.creationID == selected.creationID }
@@ -484,9 +489,11 @@ final class AppStore: ObservableObject {
             try JSONFile.write(request, to: requestURL)
             let generation = Generation(id: id, creationID: selected?.creationID ?? draftCreationID, request: request)
             try JSONFile.write(generation, to: directory.appendingPathComponent("generation.json"))
+            let logFile = try GenerationLog(directory: directory) { [weak self] message in self?.errorMessage = message }
             generations.insert(generation, at: 0)
-            activeID = id; selectedID = id; activeLog = ""; logs = ""
+            activeLogFile = logFile; activeLog = ""; activeID = id; selectedID = id
             startedAt = Date(); phase = generation.enhancement == nil ? "正在启动推理" : "正在启动 Prompt 增强"; currentStep = 0
+            appendLog("任务：\(id.uuidString)\n开始：\(generation.createdAt.ISO8601Format())\n\(phase)\n")
             isRunning = true; isStopping = false; receivedDone = false
             persist()
             let process = ProcessRunner(); runner = process
@@ -499,6 +506,7 @@ final class AppStore: ObservableObject {
                 clearInputImages()
             } catch {
                 markFinished(id, status: .failed, message: error.localizedDescription)
+                activeLogFile?.close(); activeLogFile = nil
                 isRunning = false; runner = nil; activeID = nil
                 throw error
             }
@@ -526,6 +534,7 @@ final class AppStore: ObservableObject {
                 saveGeneration(generations[index]); persist()
             }
             if !isStopping { phase = rewriting ? "正在整理增强提示词" : "正在增强提示词" }
+            appendLog((rewriting ? "正在整理增强提示词" : "正在增强提示词") + "\n")
         case "enhancement_result":
             guard let index = generations.firstIndex(where: { $0.id == id }),
                   let prompt = event["prompt"] as? String, !prompt.isEmpty else { break }
@@ -536,19 +545,21 @@ final class AppStore: ObservableObject {
             generations[index].enhancement?.ratioFollow = event["ratioFollow"] as? String
             generations[index].enhancement?.duration = event["duration"] as? Double
             generations[index].enhancement?.status = .completed
+            appendLog("Prompt 增强已完成\n")
             saveGeneration(generations[index]); persist()
         case "log":
-            activeLog += (event["message"] as? String ?? "") + "\n"
-            if activeLog.utf8.count > 90000 { activeLog = String(activeLog.suffix(60000)) }
-            if selectedID == id { logs = activeLog }
-        case "status": if !isStopping { phase = event["message"] as? String ?? phase }
+            appendLog((event["message"] as? String ?? "") + "\n")
+        case "status":
+            if let message = event["message"] as? String {
+                if !isStopping { phase = message }
+                appendLog(message + "\n")
+            }
         case "step":
             currentStep = event["step"] as? Int ?? 0
             let totalSteps = event["total"] as? Int ?? QwenImage21Turbo.inferenceSteps
             if !isStopping { phase = "正在生成 · 第 \(currentStep) / \(totalSteps) 步" }
         case "error":
-            activeLog += "\n" + (event["message"] as? String ?? "未知错误") + "\n"
-            if selectedID == id { logs = activeLog }
+            appendLog("\n" + (event["message"] as? String ?? "未知错误") + "\n")
         case "done":
             receivedDone = true
             // The bridge validates PNG decoding and dimensions before completion.
@@ -557,6 +568,12 @@ final class AppStore: ObservableObject {
             markFinished(id, status: status, message: message, duration: event["duration"] as? Double)
         default: break
         }
+    }
+
+    private func appendLog(_ text: String) {
+        activeLogFile?.append(text)
+        activeLog = GenerationLog.preview(activeLog + text)
+        if logGenerationID == activeID { logs = activeLog }
     }
 
     private func markFinished(_ id: UUID, status: GenerationStatus, message: String?, duration: Double? = nil) {
@@ -572,6 +589,7 @@ final class AppStore: ObservableObject {
             generations[index].enhancement?.status = status == .cancelled ? .cancelled : .failed
         }
         phase = status.label
+        appendLog("\n\(status.label)" + (message.map { "：\($0)" } ?? "") + "\n")
         saveGeneration(generations[index])
         persist()
     }
@@ -587,6 +605,7 @@ final class AppStore: ObservableObject {
             markFinished(id, status: isStopping ? .cancelled : .failed,
                          message: isStopping ? "生成已停止" : "推理进程意外退出（\(code)）。请查看运行日志。")
         }
+        activeLogFile?.close(); activeLogFile = nil
         isRunning = false; isStopping = false; runner = nil; activeID = nil
         finishTerminationIfNeeded()
     }
@@ -615,22 +634,33 @@ final class AppStore: ObservableObject {
     }
 
     private func loadSelectedLog() {
-        guard let job = selected else { logs = ""; return }
+        guard let job = logGeneration else { logs = ""; return }
         if job.id == activeID { logs = activeLog; return }
         logs = "正在读取日志…"
         let id = job.id
-        let url = URL(fileURLWithPath: job.directory).appendingPathComponent("inference.log")
+        let directory = job.directory
+        let error = job.error
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            var value = "没有可用日志。"
-            if let handle = try? FileHandle(forReadingFrom: url) {
-                defer { try? handle.close() }
-                let count = (try? handle.seekToEnd()) ?? 0
-                try? handle.seek(toOffset: count > 90000 ? count - 90000 : 0)
-                if let data = try? handle.readToEnd() { value = String(decoding: data, as: UTF8.self) }
-            }
-            let text = value
-            DispatchQueue.main.async { if self?.selectedID == id { self?.logs = text } }
+            let text = GenerationLog.readPreview(directory: directory, error: error)
+            DispatchQueue.main.async { if self?.logGenerationID == id { self?.logs = text } }
         }
+    }
+
+    func selectLog(_ id: UUID) {
+        guard selectedCreation.contains(where: { $0.id == id }) else { return }
+        logGenerationID = id
+        loadSelectedLog()
+    }
+
+    func openLog(for job: Generation) {
+        guard generations.contains(where: { $0.id == job.id }) else { return }
+        if selected?.creationID != job.creationID { selectedID = job.id }
+        selectLog(job.id)
+        showLogs = true
+    }
+
+    func revealLog(_ job: Generation) {
+        NSWorkspace.shared.activateFileViewerSelecting([GenerationLog.existingURL(for: job) ?? URL(fileURLWithPath: job.directory)])
     }
 
     func reveal(_ job: Generation) { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: job.status == .completed ? job.request.output : job.directory)]) }

@@ -440,6 +440,7 @@ struct GenerationTurnView: View {
                                 Button("复制") { store.copyImage(job) }
                                 Button("在 Finder 中显示") { store.reveal(job) }
                                 Button("引用") { store.reference(job) }.disabled(!store.canReferenceImages)
+                                Button("查看日志") { store.openLog(for: job) }
                             }
                         imageActions
                     } else if loadingImage {
@@ -457,7 +458,7 @@ struct GenerationTurnView: View {
                                     .frame(width: 25, height: 4)
                             }
                         }
-                        Button("查看实时日志") { store.showLogs = true }.buttonStyle(HoverButtonStyle()).font(.system(size: 11)).foregroundStyle(Palette.muted)
+                        Button("查看实时日志") { store.openLog(for: job) }.buttonStyle(HoverButtonStyle()).font(.system(size: 11)).foregroundStyle(Palette.muted)
                     }.frame(maxWidth: .infinity).frame(height: 260)
                         .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 12))
                         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line, style: StrokeStyle(lineWidth: 1, dash: [5])))
@@ -512,6 +513,8 @@ struct GenerationTurnView: View {
             copyButton
             revealButton
             referenceButton
+            Button { store.openLog(for: job) } label: { Image(systemName: "terminal").frame(width: 30, height: 30) }
+                .help("查看本次生成日志").accessibilityLabel("查看本次生成日志")
         }
         .font(.system(size: 13)).foregroundStyle(Palette.muted)
         .buttonStyle(HoverButtonStyle(radius: 6))
@@ -546,7 +549,7 @@ struct GenerationTurnView: View {
             Text(message).font(.system(size: 11)).foregroundStyle(Palette.muted).lineLimit(7).textSelection(.enabled)
             HStack(spacing: 18) {
                 Button("复用参数重试") { store.reuse(job) }.disabled(store.isImportingImages)
-                Button("查看日志") { store.showLogs = true }
+                Button("查看日志") { store.openLog(for: job) }
                 Button("打开任务文件夹") { store.reveal(job) }
             }.buttonStyle(HoverButtonStyle()).font(.system(size: 11))
         }.padding(20).frame(maxWidth: .infinity, alignment: .leading).background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 12))
@@ -557,22 +560,38 @@ struct LogPanel: View {
     @EnvironmentObject var store: AppStore
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Image(systemName: "terminal"); Text("运行日志").fontWeight(.medium)
-                Text("最近 90 KB · 完整日志保存在任务目录").font(.system(size: 9)).foregroundStyle(Palette.muted)
-                Spacer()
-                if let job = store.selected { IconButton(symbol: "folder", label: "打开完整日志所在文件夹") { store.reveal(job) } }
-                IconButton(symbol: "xmark", label: "关闭日志") { store.showLogs = false }
-            }.font(.system(size: 11)).padding(.horizontal, 18).frame(height: 36)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    Image(systemName: "terminal"); Text("运行日志").fontWeight(.medium)
+                    if !store.selectedCreation.isEmpty {
+                        Picker("生成任务", selection: Binding(get: { store.logGenerationID }, set: { id in
+                            if let id { store.selectLog(id) }
+                        })) {
+                            ForEach(Array(store.selectedCreation.enumerated()), id: \.element.id) { index, job in
+                                Text("第 \(index + 1) 次 · \(job.createdAt.formatted(date: .omitted, time: .standard)) · \(job.status.label)")
+                                    .tag(Optional(job.id))
+                            }
+                        }.labelsHidden().pickerStyle(.menu).controlSize(.small).frame(maxWidth: 250)
+                            .accessibilityLabel("选择生成任务日志")
+                    }
+                    Spacer()
+                    if let job = store.logGeneration { IconButton(symbol: "folder", label: "在 Finder 中显示完整日志") { store.revealLog(job) } }
+                    IconButton(symbol: "xmark", label: "关闭日志") { store.showLogs = false }
+                }.font(.system(size: 11))
+                Text("最近 90 KB · 每轮完整日志保存在各自任务目录").font(.system(size: 9)).foregroundStyle(Palette.muted)
+            }.padding(.horizontal, 18).padding(.vertical, 6)
             Divider()
             ScrollViewReader { proxy in
-                ScrollView([.vertical, .horizontal]) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(store.logs.isEmpty ? "开始生成后，这里会显示真实的 LightX2V 运行日志。" : store.logs)
-                            .font(.system(size: 10, design: .monospaced)).textSelection(.enabled).padding(12)
-                        Color.clear.frame(height: 1).id("log-end")
-                    }.subtleScrollbars()
-                }.onChange(of: store.logs) { _, _ in if store.isRunning, store.selectedID == store.activeID { proxy.scrollTo("log-end", anchor: .bottom) } }
+                GeometryReader { viewport in
+                    ScrollView([.vertical, .horizontal]) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(store.logs.isEmpty ? "开始生成后，这里会显示真实的 LightX2V 运行日志。" : store.logs)
+                                .font(.system(size: 10, design: .monospaced)).textSelection(.enabled).padding(12)
+                            Color.clear.frame(height: 1).id("log-end")
+                        }.frame(minWidth: viewport.size.width, minHeight: viewport.size.height, alignment: .topLeading)
+                            .subtleScrollbars()
+                    }.onChange(of: store.logs) { _, _ in if store.isRunning, store.logGenerationID == store.activeID { proxy.scrollTo("log-end", anchor: .bottom) } }
+                }
             }
         }.background(Palette.surfaceSubtle).overlay(alignment: .top) { Rectangle().fill(Palette.line).frame(height: 1) }
     }
