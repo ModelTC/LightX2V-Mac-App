@@ -4,35 +4,12 @@ import LightX2VCore
 
 struct InspectorView: View {
     @EnvironmentObject var store: AppStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        sectionHeader("模型准备", symbol: "cube.transparent", expanded: $store.modelPreparationExpanded)
-                            .id("model-preparation")
-                        separator
-                        ClippedReveal(progress: store.selectedModel != nil && store.modelPreparationExpanded ? 1 : 0) {
-                            VStack(spacing: 0) {
-                                ModelPreparationView().padding(.vertical, 12)
-                                separator
-                            }
-                        }
-                        .animation(disclosureAnimation, value: store.modelPreparationExpanded)
-                        sectionHeader("生成参数", symbol: "slider.horizontal.3", expanded: $store.generationParametersExpanded)
-                        separator
-                        ClippedReveal(progress: store.selectedModel != nil && store.generationParametersExpanded ? 1 : 0) {
-                            GenerationParametersView().padding(.top, 16).padding(.bottom, 23)
-                        }
-                        .animation(disclosureAnimation, value: store.generationParametersExpanded)
-                    }.subtleScrollbars()
-                }.clipped().onChange(of: store.modelPreparationFocus) { _, _ in
-                    withAnimation(disclosureAnimation) {
-                        proxy.scrollTo("model-preparation", anchor: .top)
-                    }
-                }
+            InspectorScrollView(focus: store.modelPreparationFocus) {
+                InspectorSectionsView().environmentObject(store).preferredColorScheme(.light)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
             if store.selectedModel != nil && store.modelPreparationExpanded {
                 separator
                 ModelPreparationFooter()
@@ -40,13 +17,35 @@ struct InspectorView: View {
         }.padding(.top, 28).padding(.horizontal, 20).background(Palette.inspector)
     }
 
-    private var disclosureAnimation: Animation? {
-        reduceMotion ? nil : .easeInOut(duration: 0.24)
-    }
-
     private var separator: some View {
         Rectangle().fill(Palette.line).frame(height: 1).padding(.horizontal, -20)
     }
+}
+
+private struct InspectorSectionsView: View {
+    @EnvironmentObject var store: AppStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            sectionHeader("模型准备", symbol: "cube.transparent", expanded: $store.modelPreparationExpanded)
+            separator
+            ClippedReveal(progress: store.selectedModel != nil && store.modelPreparationExpanded ? 1 : 0) {
+                VStack(spacing: 0) {
+                    ModelPreparationView().padding(.vertical, 12)
+                    separator
+                }
+            }.animation(disclosureAnimation, value: store.modelPreparationExpanded)
+            sectionHeader("生成参数", symbol: "slider.horizontal.3", expanded: $store.generationParametersExpanded)
+            separator
+            ClippedReveal(progress: store.selectedModel != nil && store.generationParametersExpanded ? 1 : 0) {
+                GenerationParametersView().padding(.top, 16).padding(.bottom, 23)
+            }.animation(disclosureAnimation, value: store.generationParametersExpanded)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var disclosureAnimation: Animation? { reduceMotion ? nil : .easeInOut(duration: 0.24) }
+    private var separator: some View { Rectangle().fill(Palette.line).frame(height: 1).padding(.horizontal, -20) }
 
     private func sectionHeader(_ title: String, symbol: String, expanded: Binding<Bool>) -> some View {
         Button {

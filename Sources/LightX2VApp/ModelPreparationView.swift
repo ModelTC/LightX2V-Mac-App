@@ -72,27 +72,31 @@ private struct ModelDownloadCard: View {
     @Binding var path: String
     @State private var showsGuide = false
     @State private var copied = false
+    @State private var showsStatus = false
     private var optionalDisabled: Bool { resource != .turbo && !store.settings.promptEnhancement.enabled }
     private var downloading: Bool { store.activeModelDownload == resource }
     private var destination: String { resource.destination(in: WorkspaceLayout(store.settings.workingDirectory)).path }
+    private var ready: Bool { store.readyModelResources.contains(resource) && !store.modelDownloadErrors.contains(resource) && !downloading }
     private var status: String {
-        if optionalDisabled { return "已关闭 · 此项无需配置" }
-        if let message = store.modelDownloadMessages[resource] { return message }
-        if store.readyModelResources.contains(resource) { return "模型文件已就绪" }
-        return path.isEmpty ? "选择已有文件夹，或自动下载" : store.modelResourceMessages[resource] ?? "正在确认模型文件…"
+        if optionalDisabled { return "Prompt 增强已关闭，无需配置" }
+        if downloading { return "正在下载 · " + concise(store.modelDownloadMessages[resource] ?? "正在启动 hf…") }
+        if store.modelDownloadErrors.contains(resource) { return "下载失败 · " + concise(store.modelDownloadMessages[resource] ?? "请重试") }
+        if ready { return "模型文件已就绪" }
+        if let message = store.modelDownloadMessages[resource] { return concise(message) }
+        return path.isEmpty ? "尚未选择模型文件夹" : concise(store.modelResourceMessages[resource] ?? "正在确认模型文件…")
     }
     private var statusColor: Color {
-        if store.modelDownloadErrors.contains(resource) { return Palette.accent }
-        return !optionalDisabled && store.readyModelResources.contains(resource) && !downloading ? Palette.green : Palette.muted
+        optionalDisabled ? Palette.muted : ready ? Palette.green : Palette.accent
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text(resource == .turbo ? QwenImage21Turbo.title : resource == .t2i ? "文字增强 · PE-T2I" : "参考图增强 · PE-I2I").font(.system(size: 12, weight: .semibold)).help(resource.modelName)
+                Text(resource == .turbo ? QwenImage21Turbo.title : resource.title).font(.system(size: 12, weight: .semibold)).lineLimit(1).help(resource.modelName)
                 Spacer(minLength: 0)
-                Text(resource == .turbo ? "必需" : "Q8_0").font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(Palette.muted).padding(.horizontal, 6).padding(.vertical, 3)
-                    .background(Palette.surfaceSubtle, in: Capsule())
+                Button { showsGuide = true; copied = false } label: { Text("下载指南") }
+                    .font(.system(size: 10)).buttonStyle(HoverButtonStyle(radius: 6))
+                    .accessibilityLabel(resource.title + "下载指南")
+                    .popover(isPresented: $showsGuide, arrowEdge: .leading) { guide }
             }.frame(height: 20)
             HStack(spacing: 0) {
                 PathInputField(title: resource.title + "目录", placeholder: "本地模型文件夹", symbol: nil, text: $path, minimumHeight: 36)
@@ -111,27 +115,36 @@ private struct ModelDownloadCard: View {
                 }.disabled(optionalDisabled || (store.busy && !downloading))
                     .accessibilityLabel((downloading ? "停止下载" : "自动下载") + resource.title)
                 Spacer(minLength: 0)
-                Button { showsGuide = true; copied = false } label: { Label("下载指南", systemImage: "arrow.up.right.square") }
-                    .accessibilityLabel(resource.title + "下载指南")
-                    .popover(isPresented: $showsGuide, arrowEdge: .leading) { guide }
+                Button { showsStatus.toggle() } label: {
+                    Group {
+                        if downloading { ProgressView().controlSize(.mini).tint(statusColor) }
+                        else { Image(systemName: optionalDisabled ? "minus.circle" : ready ? "checkmark.circle.fill" : "xmark.circle.fill").font(.system(size: 13)) }
+                    }.foregroundStyle(statusColor).frame(width: 20, height: 22).contentShape(Rectangle())
+                }.buttonStyle(.plain)
+                    .accessibilityLabel(resource.title + "文件状态").accessibilityValue(status)
+                    .onHover { showsStatus = $0 }
+                    .overlay(alignment: .bottomTrailing) {
+                        if showsStatus {
+                            Text(status).font(.system(size: 11)).foregroundStyle(Palette.ink)
+                                .fixedSize(horizontal: false, vertical: true).padding(10)
+                                .frame(width: 240, alignment: .leading)
+                                .background(Palette.surface, in: RoundedRectangle(cornerRadius: 8))
+                                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line, lineWidth: 1))
+                                .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
+                                .offset(y: -28).allowsHitTesting(false).accessibilityHidden(true)
+                        }
+                    }
             }.font(.system(size: 10)).buttonStyle(HoverButtonStyle(radius: 6)).frame(height: 22)
-            HStack(alignment: .top, spacing: 6) {
-                Group {
-                    if downloading { ProgressView().controlSize(.mini) }
-                    else { Image(systemName: optionalDisabled ? "minus.circle" : store.readyModelResources.contains(resource) ? "checkmark.circle" : "info.circle") }
-                }.frame(width: 12, height: 12).padding(.top, 1)
-                Text(status).font(.system(size: 9)).lineLimit(1).truncationMode(.middle).frame(maxWidth: .infinity, alignment: .leading)
-            }.foregroundStyle(statusColor).frame(height: 18, alignment: .top).help(status)
         }.padding(10).opacity(optionalDisabled ? 0.58 : 1)
             .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Palette.line, lineWidth: 1))
+            .zIndex(showsStatus ? 1 : 0)
     }
 
     private var guide: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(resource.title + "下载").font(.system(size: 15, weight: .semibold))
-            Link(resource.repository, destination: resource.url).font(.system(size: 11)).textSelection(.enabled)
-            Text("选择完整仓库文件夹。自动下载使用通用设置中的 Python 环境，将文件保存到工作目录的 models 下。")
+            Text(resource.repository).font(.system(size: 13, weight: .semibold)).textSelection(.enabled)
+            Text("模型下载命令。可保存到任意位置，若点击自动下载，则会统一保存到工作目录下的models文件夹中。")
                 .font(.system(size: 11)).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
             Text(resource.command(destination: destination)).font(.system(size: 11, design: .monospaced))
                 .textSelection(.enabled).fixedSize(horizontal: false, vertical: true).padding(12)
@@ -146,6 +159,11 @@ private struct ModelDownloadCard: View {
             Text("找不到 hf 时，在所选环境中运行：python -m pip install -U huggingface_hub。停止后重试会继续下载已有文件。")
                 .font(.system(size: 10)).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
         }.padding(20).frame(width: 430).foregroundStyle(Palette.ink)
+    }
+
+    private func concise(_ message: String) -> String {
+        let firstLine = message.split(whereSeparator: \.isNewline).first.map(String.init) ?? message
+        return firstLine.count > 120 ? String(firstLine.prefix(120)) + "…" : firstLine
     }
 
     private func choose() {

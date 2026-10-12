@@ -63,3 +63,52 @@ func check(_ condition: @autoclosure () -> Bool, _ message: String) {
 }
 MainActor.assumeIsolated { runChecks() }
 print("Inspector disclosure checks passed")
+
+struct InspectorWidthFixture: View {
+    let progress: CGFloat
+    var body: some View {
+        VStack(spacing: 0) {
+            Text("模型准备").frame(maxWidth: .infinity, alignment: .leading).frame(height: 58)
+            ClippedReveal(progress: progress) {
+                VStack(spacing: 12) {
+                    ForEach(0..<3) { _ in
+                        TextField("模型文件夹", text: .constant("/workspace/models/model"))
+                            .frame(height: 110).frame(maxWidth: .infinity)
+                    }
+                }
+            }
+            Text("生成参数").frame(maxWidth: .infinity, alignment: .leading).frame(height: 58)
+        }.frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+}
+
+MainActor.assumeIsolated {
+    let scroll = NativeInspectorScrollView(content: InspectorWidthFixture(progress: 0))
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 280, height: 300),
+                          styleMask: .borderless, backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false; window.contentView = scroll
+    defer { window.contentView = nil }
+    for width: CGFloat in [280, 240, 280] {
+        window.setContentSize(NSSize(width: width, height: 300))
+        for progress: CGFloat in [0, 0.2, 0.6, 1, 0.3, 0.7, 0] {
+            // Simulate AppKit applying the Always preference during a disclosure.
+            scroll.scrollerStyle = .legacy
+            scroll.host.rootView = InspectorWidthFixture(progress: progress)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.04))
+            scroll.layoutSubtreeIfNeeded()
+            check(scroll.scrollerStyle == .overlay && scroll.verticalScroller is SubtleScroller,
+                  "inspector keeps its overlay scroller at progress \(progress)")
+            check(abs(scroll.contentView.bounds.width - width) < 0.5 && abs(scroll.host.frame.width - width) < 0.5,
+                  "inspector viewport and document retain width \(Int(width)) through disclosure")
+            check(progress == 0 ? scroll.host.frame.height < 300 : progress == 1 ? scroll.host.frame.height > 300 : true,
+                  "inspector document resizes naturally across the overflow threshold")
+        }
+    }
+    scroll.host.rootView = InspectorWidthFixture(progress: 1)
+    RunLoop.current.run(until: Date().addingTimeInterval(0.04))
+    scroll.contentView.scroll(to: NSPoint(x: 0, y: 100)); scroll.reflectScrolledClipView(scroll.contentView)
+    check(scroll.contentView.bounds.origin.y > 90, "inspector scrolls without a reserved gutter")
+    scroll.scrollToTop()
+    check(abs(scroll.contentView.bounds.origin.y) < 0.5, "model preparation focus returns to the top")
+}
+print("Inspector stable-width scrolling checks passed")

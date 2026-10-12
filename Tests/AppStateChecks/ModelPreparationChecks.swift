@@ -71,6 +71,7 @@ func unifiedModelPreparationChecks() async throws {
     defer { window.contentView = nil }
     func settle() async throws -> CGFloat { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(80)); host.layoutSubtreeIfNeeded(); return host.fittingSize.height }
     let height = try await settle()
+    try check(height <= 410, "three model cards no longer reserve separate status rows")
     for scenario in ["ready", "download", "failed", "off"] {
         if scenario == "download" { store.activeModelDownload = .t2i; store.isPreparingResources = true; store.modelDownloadMessages[.t2i] = "Fetching 12 files: 25% · 1.2 / 7.8 GB" }
         if scenario == "failed" { store.activeModelDownload = nil; store.isPreparingResources = false; store.modelDownloadErrors.insert(.t2i); store.modelDownloadMessages[.t2i] = String(repeating: "下载失败请重试 ", count: 60) }
