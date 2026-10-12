@@ -183,7 +183,7 @@
 "Installation complete" = "설치 완료";
 "Installation log" = "설치 로그";
 "Installed environment failed verification: %@\nReview the logs and retry: %@" = "설치 환경 검증 실패: %@\n로그를 확인하세요: %@";
-"Installs Miniconda, Python 3.11 and inference dependencies." = "Miniconda, Python 3.11 및 추론 의존성을 설치합니다.";
+"Install Miniconda, Python 3.11 and inference dependencies." = "Miniconda, Python 3.11 및 추론 의존성을 설치합니다.";
 "Interrupted" = "중단됨";
 "Invalid llama.cpp archive paths. Download it again." = "llama.cpp 압축 경로 오류. 다시 다운로드하세요.";
 "Invalid llama.cpp shared-library link." = "llama.cpp 공유 라이브러리 링크 오류.";

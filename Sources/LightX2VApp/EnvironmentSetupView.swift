@@ -41,7 +41,7 @@ struct EnvironmentSearchView: View {
                     HStack(alignment: .top, spacing: 12) {
                         installationChoice(L10n.text("Manual installation"), symbol: "doc.text", detail: L10n.text("Follow the instructions, then search again."),
                                            button: L10n.text("View installation instructions"), action: onInstructions)
-                        installationChoice(L10n.text("Install automatically in workspace"), symbol: "arrow.down.circle", detail: L10n.text("Installs Miniconda, Python 3.11 and inference dependencies."),
+                        installationChoice(L10n.text("Install automatically in workspace"), symbol: "arrow.down.circle", detail: L10n.text("Install Miniconda, Python 3.11 and inference dependencies."),
                                            button: L10n.text("Start automatic installation"), issue: managedInstallIssue, action: onInstall)
                     }
                     if environments.isEmpty && searching {

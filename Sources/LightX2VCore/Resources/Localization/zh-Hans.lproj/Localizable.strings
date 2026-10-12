@@ -183,7 +183,7 @@
 "Installation complete" = "安装完成";
 "Installation log" = "安装日志";
 "Installed environment failed verification: %@\nReview the logs and retry: %@" = "安装后的环境未通过检查：%@\n请查看日志后重试：%@";
-"Installs Miniconda, Python 3.11 and inference dependencies." = "自动安装 Miniconda、Python 3.11 和推理依赖。";
+"Install Miniconda, Python 3.11 and inference dependencies." = "自动安装 Miniconda、Python 3.11 和推理依赖。";
 "Interrupted" = "已中断";
 "Invalid llama.cpp archive paths. Download it again." = "llama.cpp 压缩包目录异常，请重新下载。";
 "Invalid llama.cpp shared-library link." = "llama.cpp 动态库链接异常。";

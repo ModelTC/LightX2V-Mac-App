@@ -183,7 +183,7 @@
 "Installation complete" = "Instalação concluída";
 "Installation log" = "Registo da instalação";
 "Installed environment failed verification: %@\nReview the logs and retry: %@" = "Ambiente instalado inválido: %@\nConsulte os registos: %@";
-"Installs Miniconda, Python 3.11 and inference dependencies." = "Instala Miniconda, Python 3.11 e dependências.";
+"Install Miniconda, Python 3.11 and inference dependencies." = "Instala Miniconda, Python 3.11 e dependências.";
 "Interrupted" = "Interrompido";
 "Invalid llama.cpp archive paths. Download it again." = "Caminhos llama.cpp inválidos. Transfira novamente.";
 "Invalid llama.cpp shared-library link." = "Ligação de biblioteca llama.cpp inválida.";

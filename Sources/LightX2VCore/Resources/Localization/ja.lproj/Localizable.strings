@@ -183,7 +183,7 @@
 "Installation complete" = "インストール完了";
 "Installation log" = "インストールログ";
 "Installed environment failed verification: %@\nReview the logs and retry: %@" = "インストールした環境の検証失敗：%@\nログを確認してください：%@";
-"Installs Miniconda, Python 3.11 and inference dependencies." = "Miniconda、Python 3.11、推論依存関係をインストールします。";
+"Install Miniconda, Python 3.11 and inference dependencies." = "Miniconda、Python 3.11、推論依存関係をインストールします。";
 "Interrupted" = "中断済み";
 "Invalid llama.cpp archive paths. Download it again." = "llama.cppアーカイブのパスが無効です。再ダウンロードしてください。";
 "Invalid llama.cpp shared-library link." = "llama.cpp共有ライブラリのリンクが無効です。";

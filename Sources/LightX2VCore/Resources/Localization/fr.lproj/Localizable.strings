@@ -183,7 +183,7 @@
 "Installation complete" = "Installation terminée";
 "Installation log" = "Journal d’installation";
 "Installed environment failed verification: %@\nReview the logs and retry: %@" = "Environnement installé non conforme : %@\nConsultez les journaux : %@";
-"Installs Miniconda, Python 3.11 and inference dependencies." = "Installe Miniconda, Python 3.11 et les dépendances.";
+"Install Miniconda, Python 3.11 and inference dependencies." = "Installe Miniconda, Python 3.11 et les dépendances.";
 "Interrupted" = "Interrompu";
 "Invalid llama.cpp archive paths. Download it again." = "Chemins d’archive llama.cpp invalides. Téléchargez à nouveau.";
 "Invalid llama.cpp shared-library link." = "Lien de bibliothèque llama.cpp invalide.";
