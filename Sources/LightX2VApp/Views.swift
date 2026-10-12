@@ -77,7 +77,6 @@ struct WorkspaceView: View {
                 Text(store.selected == nil ? "新建创作" : "图像生成").fontWeight(.medium)
                 Spacer()
             }.frame(maxHeight: .infinity).background(WindowDragArea())
-            IconButton(symbol: "terminal", label: "显示运行日志", active: store.showLogs) { store.showLogs.toggle() }
             IconButton(symbol: "sidebar.right", label: "显示模型准备与生成参数", active: store.showInspector) { store.showInspector.toggle() }
         }.font(.system(size: 12)).padding(.horizontal, 24).frame(height: 58).padding(.top, 28)
     }
@@ -512,9 +511,9 @@ struct GenerationTurnView: View {
         HStack(spacing: 4) {
             copyButton
             revealButton
-            referenceButton
             Button { store.openLog(for: job) } label: { Image(systemName: "terminal").frame(width: 30, height: 30) }
                 .help("查看本次生成日志").accessibilityLabel("查看本次生成日志")
+            referenceButton
         }
         .font(.system(size: 13)).foregroundStyle(Palette.muted)
         .buttonStyle(HoverButtonStyle(radius: 6))
