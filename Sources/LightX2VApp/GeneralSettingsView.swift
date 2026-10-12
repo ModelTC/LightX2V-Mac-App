@@ -149,7 +149,7 @@ struct SettingsView: View {
         SettingsSection(step: .llama, current: setupProgress.current, title: "llama.cpp 二进制文件目录",
                         status: pathStatus(.llama),
                         details: "点击自动下载，或选择手动下载",
-                        linkTitle: "打开llama.cpp二进制文件发布页面", linkURL: URL(string: "https://github.com/ggml-org/llama.cpp/releases")) {
+                        linkTitle: "打开llama.cpp发布页面", linkURL: URL(string: "https://github.com/ggml-org/llama.cpp/releases")) {
             pathRow("llama.cpp 二进制文件目录", value: $settings.promptEnhancement.runtimeDirectory, directory: true,
                     placeholder: "选择二进制文件所在目录，或自动下载")
         } actions: {
@@ -499,7 +499,7 @@ private struct SettingsDetails: View {
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }.frame(maxHeight: 220)
             if let linkTitle, let linkURL {
-                Link(destination: linkURL) { Text(linkTitle).underline().padding(.horizontal, 6).padding(.vertical, 5) }
+                Link(destination: linkURL) { Text(linkTitle).underline().padding(.trailing, 6).padding(.vertical, 5) }
                     .font(.system(size: 11)).buttonStyle(HoverButtonStyle(radius: 6))
             }
         }.padding(18).frame(width: 360).foregroundStyle(Palette.ink)
