@@ -586,10 +586,11 @@ struct LogPanel: View {
                         VStack(alignment: .leading, spacing: 0) {
                             Text(store.logs.isEmpty ? "开始生成后，这里会显示真实的 LightX2V 运行日志。" : store.logs)
                                 .font(.system(size: 10, design: .monospaced)).textSelection(.enabled).padding(12)
-                            Color.clear.frame(height: 1).id("log-end")
+                            Color.clear.frame(width: 1, height: 1).id("log-end")
                         }.frame(minWidth: viewport.size.width, minHeight: viewport.size.height, alignment: .topLeading)
                             .subtleScrollbars()
-                    }.onChange(of: store.logs) { _, _ in if store.isRunning, store.logGenerationID == store.activeID { proxy.scrollTo("log-end", anchor: .bottom) } }
+                    }.onAppear { proxy.scrollTo("log-end", anchor: .bottomLeading) }
+                        .onChange(of: store.logs) { _, _ in proxy.scrollTo("log-end", anchor: .bottomLeading) }
                 }
             }
         }.background(Palette.surfaceSubtle).overlay(alignment: .top) { Rectangle().fill(Palette.line).frame(height: 1) }

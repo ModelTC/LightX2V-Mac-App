@@ -174,7 +174,7 @@ struct EnvironmentInstallView: View {
     let onRetry: () -> Void
     let onSearch: () -> Void
     let onClose: () -> Void
-    @State private var showLogs = false
+    @State private var showLogs = true
     private var completed: Bool { progress.stage == .completed && !installing }
 
     var body: some View {
@@ -223,7 +223,9 @@ struct EnvironmentInstallView: View {
                             .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                         Color.clear.frame(height: 1).id("log-bottom")
                     }.padding(10).frame(height: 115).background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8))
-                        .subtleScrollbars().onChange(of: lines.last) { _, _ in scroll.scrollTo("log-bottom", anchor: .bottom) }
+                        .subtleScrollbars()
+                        .onAppear { scroll.scrollTo("log-bottom", anchor: .bottom) }
+                        .onChange(of: lines) { _, _ in scroll.scrollTo("log-bottom", anchor: .bottom) }
                 }
             }
             HStack {
