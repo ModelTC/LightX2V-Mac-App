@@ -13,6 +13,8 @@ Each channel keeps one APP package. Updating Stable replaces its previous packag
 
 [Promote Latest to Stable](https://github.com/ModelTC/LightX2V-Mac-App/actions/workflows/promote-stable.yml)
 
+**First launch on macOS:** macOS may block the APP because the developer cannot be verified. After attempting to open it, go to **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** for LightX2V APP. Authenticate if prompted, then confirm **Open**. Only do this for an APP downloaded from this repository's releases.
+
 ## Build from source
 
 Install Apple's Command Line Tools, then run:
