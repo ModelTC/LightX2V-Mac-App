@@ -94,7 +94,7 @@ struct SettingsView: View {
             Image(systemName: "globe").font(.system(size: 13)).foregroundStyle(Palette.muted)
             Picker(L10n.text("Language"), selection: $language.selection) {
                 ForEach(LanguagePreferences.options, id: \.code) { option in
-                    Text(option.code == "system" ? L10n.text("Follow system") : option.name).tag(option.code)
+                    Text(option.name).tag(option.code)
                 }
             }.labelsHidden().pickerStyle(.menu).frame(width: 180)
                 .environment(\.layoutDirection, .leftToRight)
@@ -145,7 +145,7 @@ struct SettingsView: View {
                 .disabled(store.busy || !hasWorkDirectory)
             Button(L10n.text("Check environment")) { store.checkEnvironment() }.fixedSize()
                 .disabled(store.busy || !pythonMatchesSaved)
-            SettingsStatusLine(message: pythonMatchesSaved && store.environmentMessage != "Environment has not been checked" ? pythonMessage : "",
+            SettingsStatusLine(message: pythonMatchesSaved && !store.environmentReady && store.environmentMessage != "Environment has not been checked" ? pythonMessage : "",
                                running: pythonMatchesSaved && store.isChecking,
                                color: pythonMatchesSaved && store.environmentReady ? Palette.green : Palette.muted)
         }

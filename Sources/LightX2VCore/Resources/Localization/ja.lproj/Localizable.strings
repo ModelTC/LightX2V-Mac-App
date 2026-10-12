@@ -89,7 +89,6 @@
 "Copy installation commands" = "インストールコマンドをコピー";
 "Create Python 3.11 environment" = "Python 3.11環境を作成";
 "Decoding image" = "画像をデコード中";
-"Dependencies meet requirements · MPS available" = "依存関係は適合 · MPS利用可能";
 "Describe the image you want to create…" = "作成したい画像を説明してください…";
 "Describe your inspiration and let your Mac create it." = "ひらめきを言葉に。Macが形にします。";
 "Detected environments" = "検出した環境";
@@ -146,7 +145,6 @@
 "Extracting and verifying source…" = "ソースを展開して検証中…";
 "Fetching model information…" = "モデル情報を取得中…";
 "File status" = "ファイル状態";
-"Follow system" = "システムに従う";
 "Follow the instructions, then search again." = "手順に従って準備し、再検索してください。";
 "Found %@ compatible environments" = "適切な環境が%@個見つかりました";
 "GGUF model" = "GGUFモデル";

@@ -89,7 +89,6 @@
 "Copy installation commands" = "설치 명령 복사";
 "Create Python 3.11 environment" = "Python 3.11 환경 생성";
 "Decoding image" = "이미지 디코딩 중";
-"Dependencies meet requirements · MPS available" = "의존성 적합 · MPS 사용 가능";
 "Describe the image you want to create…" = "만들고 싶은 이미지를 설명하세요…";
 "Describe your inspiration and let your Mac create it." = "영감을 설명하면 Mac이 만들어 줍니다.";
 "Detected environments" = "발견된 환경";
@@ -146,7 +145,6 @@
 "Extracting and verifying source…" = "소스 압축 해제 및 검증 중…";
 "Fetching model information…" = "모델 정보 가져오는 중…";
 "File status" = "파일 상태";
-"Follow system" = "시스템 설정 따르기";
 "Follow the instructions, then search again." = "안내에 따라 설치한 후 다시 검색하세요.";
 "Found %@ compatible environments" = "호환 환경 %@개 발견";
 "GGUF model" = "GGUF 모델";

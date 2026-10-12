@@ -6,7 +6,7 @@
 
 **Tech Stack:** SwiftUI, Foundation localization resources, UserDefaults, existing SwiftPM/macOS packaging.
 
-1. Add localized resources and language preference management with system matching, English fallback and an isolated preference suite for checks.
+1. Add localized resources and language preference management with English default and fallback and an isolated preference suite for checks.
 2. Localize UI labels, menus, accessibility, dialogs and dynamic status rendering; add compact language row as item 1 and renumber path cards 2–5.
 3. Normalize core, Swift and Python APP-authored log messages to English. Preserve model output and subprocess output.
 4. Include all translation resources in native APP packaging without adding GitHub test jobs.

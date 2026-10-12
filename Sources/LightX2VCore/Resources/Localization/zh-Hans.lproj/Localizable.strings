@@ -89,7 +89,6 @@
 "Copy installation commands" = "复制安装命令";
 "Create Python 3.11 environment" = "创建 Python 3.11 环境";
 "Decoding image" = "正在解码图片";
-"Dependencies meet requirements · MPS available" = "依赖符合要求 · MPS 可用";
 "Describe the image you want to create…" = "描述你想生成的画面…";
 "Describe your inspiration and let your Mac create it." = "用文字描绘灵感，交给你的 Mac 来实现。";
 "Detected environments" = "已检测环境";
@@ -146,7 +145,6 @@
 "Extracting and verifying source…" = "正在解压并校验源码…";
 "Fetching model information…" = "获取模型信息…";
 "File status" = "文件状态";
-"Follow system" = "跟随系统";
 "Follow the instructions, then search again." = "按简短说明准备环境，安装后重新搜索。";
 "Found %@ compatible environments" = "找到 %@ 个符合要求的环境";
 "GGUF model" = "GGUF 模型";
