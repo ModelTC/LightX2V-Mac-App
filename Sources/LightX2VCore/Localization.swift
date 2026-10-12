@@ -2,7 +2,7 @@ import Foundation
 
 /// Operational messages use English templates. Translation happens only at the UI boundary.
 public enum L10n {
-    public static let languageCodes = ["en", "zh-Hans", "fr", "ja", "ko", "de", "ru", "es", "pt", "ar"]
+    public static let languageCodes = ["en", "zh-Hans", "fr", "ja", "ko", "de", "ru", "es", "pt"]
     private static let lock = NSLock()
     private static var selected = "en"
     public static var languageCode: String {
@@ -43,10 +43,7 @@ public enum L10n {
         let code = languageCode
         let template = tables[code]?[key] ?? key
         // Formatting arguments are user data unless the caller explicitly renders a message.
-        let arguments = values
-        // Keep paths and Latin identifiers readable within an Arabic sentence.
-        let isolated = code == "ar" ? arguments.map { "\u{2068}" + $0 + "\u{2069}" } : arguments
-        return substitute(template, isolated)
+        return substitute(template, values)
     }
     private struct Pattern {
         let key: String
@@ -77,7 +74,7 @@ public enum L10n {
                 return render(String(value[range]), code: code, depth: depth + 1)
             }
             let template = tables[code]?[pattern.key] ?? pattern.key
-            return substitute(template, code == "ar" ? arguments.map { "\u{2068}" + $0 + "\u{2069}" } : arguments)
+            return substitute(template, arguments)
         }
         if let newline = value.firstIndex(of: "\n") {
             let boundary = value.index(after: newline)

@@ -190,8 +190,8 @@ private struct ModelStatusBubble: View {
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 16)
             .frame(width: width, alignment: .leading)
-            .background(ModelStatusBubbleShape().fill(Palette.surface).scaleEffect(x: language.direction == .rightToLeft ? -1 : 1, y: 1))
-            .overlay(ModelStatusBubbleShape().stroke(Palette.line, lineWidth: 1).scaleEffect(x: language.direction == .rightToLeft ? -1 : 1, y: 1))
+            .background(ModelStatusBubbleShape().fill(Palette.surface))
+            .overlay(ModelStatusBubbleShape().stroke(Palette.line, lineWidth: 1))
             .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
     }
 }

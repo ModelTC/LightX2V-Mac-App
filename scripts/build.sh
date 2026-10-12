@@ -26,7 +26,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleDevelopmentRegion</key><string>en</string>
-<key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string><string>fr</string><string>ja</string><string>ko</string><string>de</string><string>ru</string><string>es</string><string>pt</string><string>ar</string></array>
+<key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string><string>fr</string><string>ja</string><string>ko</string><string>de</string><string>ru</string><string>es</string><string>pt</string></array>
 <key>CFBundleDisplayName</key><string>LightX2V APP</string>
 <key>CFBundleName</key><string>LightX2V APP</string>
 <key>CFBundleIdentifier</key><string>app.lightx2v.desktop</string>

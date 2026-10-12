@@ -29,5 +29,5 @@ func languageTaskChecks() async throws {
     store.setupTask = probe
     store.closeGeneralSettings()
     guard probe.isCancelled else { throw AppError.message("Closing settings no longer cancels its dependency probe") }
-    print("PASS all ten language switches and settings dismissal preserve workspace transfers and raw inputs; owned dependency probes still cancel")
+    print("PASS all nine language switches and settings dismissal preserve workspace transfers and raw inputs; owned dependency probes still cancel")
 }

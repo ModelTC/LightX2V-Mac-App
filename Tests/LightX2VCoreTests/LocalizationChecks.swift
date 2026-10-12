@@ -28,5 +28,5 @@ func localizationChecks() throws {
     try expect(L10n.resolve(["it-IT"]) == "en", "unsupported system language did not fall back")
     L10n.languageCode = "unsupported"
     try expect(L10n.languageCode == "en", "invalid stored language did not fall back")
-    print("PASS ten language catalogs, placeholders, live status translation, system matching and English diagnostics")
+    print("PASS nine language catalogs, placeholders, live status translation, system matching and English diagnostics")
 }

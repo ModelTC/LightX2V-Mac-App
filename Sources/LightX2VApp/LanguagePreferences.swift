@@ -8,7 +8,7 @@ final class LanguagePreferences: ObservableObject {
     static let options: [(code: String, name: String)] = [
         ("en", "English"), ("zh-Hans", "简体中文"), ("fr", "Français"),
         ("ja", "日本語"), ("ko", "한국어"), ("de", "Deutsch"), ("ru", "Русский"),
-        ("es", "Español"), ("pt", "Português"), ("ar", "العربية")
+        ("es", "Español"), ("pt", "Português")
     ]
     private let defaults: UserDefaults
     @Published var selection: String {
@@ -19,7 +19,7 @@ final class LanguagePreferences: ObservableObject {
     }
     var resolvedCode: String { selection }
     var locale: Locale { Locale(identifier: resolvedCode) }
-    var direction: LayoutDirection { resolvedCode == "ar" ? .rightToLeft : .leftToRight }
+    var direction: LayoutDirection { .leftToRight }
     init(defaults: UserDefaults? = nil) {
         self.defaults = defaults ?? ProcessInfo.processInfo.environment["LIGHTX2V_APP_PREFERENCES_SUITE"]
             .flatMap(UserDefaults.init(suiteName:)) ?? .standard
