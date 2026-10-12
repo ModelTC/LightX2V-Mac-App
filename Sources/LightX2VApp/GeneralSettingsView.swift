@@ -99,7 +99,9 @@ struct SettingsView: View {
     private var sourceCard: some View {
         SettingsSection(step: .source, current: setupProgress.current, title: "LightX2V 源码目录",
                         status: pathStatus(.source),
-                        details: "选择已有源码，或自动下载 GitHub main 的最新版本。\n存入工作目录 / code，不含 Git 历史。\n\n" + downloads.sourceMessage) {
+                        details: "点击自动下载源码，或选择手动下载",
+                        command: SourceDownloader.manualCommand,
+                        linkTitle: "打开LightX2V GitHub", linkURL: URL(string: "https://github.com/ModelTC/LightX2V")) {
             pathRow("LightX2V 源码目录", value: $settings.repository, directory: true,
                     placeholder: "选择已有源码文件夹，或自动下载")
         } actions: {
@@ -112,7 +114,7 @@ struct SettingsView: View {
     private var pythonCard: some View {
         SettingsSection(step: .python, current: setupProgress.current, title: "PyTorch 环境",
                         status: pythonStatus, statusColor: pythonMatchesSaved && store.environmentReady ? Palette.green : Palette.muted,
-                        details: "搜索依赖齐全且符合版本要求的本机环境，或在工作目录中安装。\n保存设置后自动检查环境依赖与 MPS。\n\n" + pythonMessage) {
+                        details: "先搜索本机环境，若没有符合要求的环境，可以根据提示手动安装或选择自动安装") {
             pathRow("PyTorch 环境", value: $settings.python, directory: false)
         } actions: {
             Button { startSearch() } label: { Label("搜索本机环境", systemImage: "magnifyingglass") }
@@ -146,7 +148,8 @@ struct SettingsView: View {
     private var runtimeCard: some View {
         SettingsSection(step: .llama, current: setupProgress.current, title: "llama.cpp 二进制文件目录",
                         status: pathStatus(.llama),
-                        details: "Prompt 增强共用的本地运行程序，支持文字和参考图增强。\n自动下载 b11564 Apple Silicon 版本到工作目录 / runtimes。\n\n" + downloads.runtimeMessage) {
+                        details: "点击自动下载，或选择手动下载",
+                        linkTitle: "打开llama.cpp二进制文件发布页面", linkURL: URL(string: "https://github.com/ggml-org/llama.cpp/releases")) {
             pathRow("llama.cpp 二进制文件目录", value: $settings.promptEnhancement.runtimeDirectory, directory: true,
                     placeholder: "选择二进制文件所在目录，或自动下载")
         } actions: {
@@ -304,7 +307,7 @@ struct SettingsView: View {
                 }
                 settings.repository = result.directory
                 updateGuide()
-                downloads.sourceMessage = "已就绪 · main · \(result.commit.prefix(8))"
+                downloads.sourceMessage = "已就绪 · LightX2V \(SourceDownloader.version)"
             } catch {
                 if Task.isCancelled { downloads.sourceMessage = "下载已取消，可随时重试。" }
                 else { downloads.sourceMessage = "下载失败：\(error.localizedDescription)" }
@@ -413,6 +416,9 @@ private struct SettingsSection<Content: View, Actions: View>: View {
     let status: String
     var statusColor: Color = Palette.muted
     let details: String
+    var command: String?
+    var linkTitle: String?
+    var linkURL: URL?
     var hasActions = true
     @ViewBuilder let content: Content
     @ViewBuilder let actions: Actions
@@ -429,7 +435,7 @@ private struct SettingsSection<Content: View, Actions: View>: View {
                     .buttonStyle(HoverButtonStyle(radius: 4)).foregroundStyle(Palette.muted)
                     .accessibilityLabel("查看\(title)详情")
                     .help("查看说明和完整状态")
-                    .popover(isPresented: $showsDetails) { SettingsDetails(title: title, message: details) }
+                    .popover(isPresented: $showsDetails) { SettingsDetails(title: title, message: details, command: command, linkTitle: linkTitle, linkURL: linkURL) }
                 Spacer(minLength: 4)
                 Text(status).font(.system(size: 11, weight: .medium)).foregroundStyle(statusColor)
                     .frame(width: 80, alignment: .trailing).lineLimit(1)
@@ -472,13 +478,28 @@ private struct SettingsStatusLine: View {
 private struct SettingsDetails: View {
     let title: String
     let message: String
+    var command: String?
+    var linkTitle: String?
+    var linkURL: URL?
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title).font(.system(size: 13, weight: .semibold))
             ScrollView {
-                Text(message).font(.system(size: 11)).textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(message).font(.system(size: 11)).textSelection(.enabled)
+                    if let command {
+                        Text("手动下载 LightX2V " + SourceDownloader.version).font(.system(size: 11, weight: .medium))
+                        Text(command).font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true).padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8))
+                    }
+                }.frame(maxWidth: .infinity, alignment: .leading)
             }.frame(maxHeight: 220)
+            if let linkTitle, let linkURL {
+                Link(destination: linkURL) { Text(linkTitle).underline().padding(.horizontal, 6).padding(.vertical, 5) }
+                    .font(.system(size: 11)).buttonStyle(HoverButtonStyle(radius: 6))
+            }
         }.padding(18).frame(width: 360).foregroundStyle(Palette.ink)
     }
 }
