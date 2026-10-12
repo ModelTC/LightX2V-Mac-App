@@ -5,13 +5,10 @@ import LightX2VCore
 struct SettingsView: View {
     @EnvironmentObject var store: AppStore
     @FocusState private var headerFocused: Bool
-    @State private var focusStep: GeneralSetupStep?
-    @State private var focusRequest = 0
     @State var settings: AppSettings
     @State private var setupProgress = GeneralSetupProgress()
     @State private var saveError: String?
     @StateObject var downloads = GeneralSettingsDownloads()
-    @State private var showsSaveDetails = false
     @State private var showEnvironments = false
     @State private var searching = false
     @State private var environments: [PythonEnvironment] = []
@@ -42,7 +39,7 @@ struct SettingsView: View {
             }.padding(.horizontal, 24).padding(.bottom, 12)
             Rectangle().fill(Palette.line).frame(height: 1)
             HStack(spacing: 10) {
-                footerSummary.frame(maxWidth: .infinity, alignment: .leading)
+                Spacer()
                 Button("关闭") { store.closeGeneralSettings() }.keyboardShortcut(.cancelAction)
                     .disabled(store.isPreparingWorkspace)
                 Button("保存设置") { save() }
@@ -56,6 +53,11 @@ struct SettingsView: View {
             .defaultFocus($headerFocused, true, priority: .userInitiated)
             .onAppear { updateGuide() }
             .onChange(of: settings) { _, _ in saveError = nil }
+            .alert("设置操作失败", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
+                Button("关闭", role: .cancel) { saveError = nil }
+            } message: {
+                Text(saveError ?? "")
+            }
             // Resource transfers belong to this page. The post-save dependency
             // check belongs to the workspace and must survive its dismissal.
             .onDisappear { if store.isPreparingResources { store.setupTask?.cancel() } }
@@ -176,64 +178,13 @@ struct SettingsView: View {
         return normalized(value).isEmpty ? "未配置" : "路径无效"
     }
 
-    private var footerError: String? { saveError ?? (store.needsGeneralSetup ? store.errorMessage : nil) }
-
-    private var footerSummary: some View {
-        Group {
-            if let error = footerError {
-                Button { showsSaveDetails = true } label: {
-                    Label(error, systemImage: "exclamationmark.circle").lineLimit(1).truncationMode(.tail)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }.buttonStyle(HoverButtonStyle(radius: 4)).foregroundStyle(Palette.accent).help(error)
-                    .accessibilityLabel("查看设置错误详情")
-                    .popover(isPresented: $showsSaveDetails) { SettingsDetails(title: "设置错误", message: error) }
-            } else if store.isPreparingWorkspace {
-                Label("正在保存设置…", systemImage: "arrow.triangle.2.circlepath").foregroundStyle(Palette.muted)
-            } else if let step = setupProgress.current {
-                Button { focusStep = step; focusRequest += 1 } label: {
-                    Label(remainingMessage, systemImage: "circle.dashed").lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }.buttonStyle(HoverButtonStyle(radius: 4)).foregroundStyle(Palette.muted)
-                    .accessibilityLabel("配置下一项：\(stepTitle(step))")
-                    .disabled(store.busy)
-            } else {
-                Text("四项配置已填写完整").foregroundStyle(Palette.muted)
-            }
-        }.font(.system(size: 11)).frame(height: 24, alignment: .leading)
-    }
-
-    private var remainingMessage: String {
-        let missing = GeneralSetupStep.allCases.filter { !setupProgress.completed.contains($0) }
-        guard let first = missing.first else { return "" }
-        return missing.count == 1 ? "还需配置：\(stepTitle(first))" : "还需配置 \(missing.count) 项 · 从\(stepTitle(first))开始"
-    }
-
-    private func stepTitle(_ step: GeneralSetupStep) -> String {
-        switch step {
-        case .workspace: return "工作目录"
-        case .source: return "LightX2V 源码"
-        case .python: return "PyTorch 环境"
-        case .llama: return "llama.cpp 二进制文件目录"
-        }
-    }
-
-    private func inputTitle(_ step: GeneralSetupStep) -> String {
-        switch step {
-        case .workspace: return "LightX2V 工作目录"
-        case .source: return "LightX2V 源码目录"
-        case .python: return "PyTorch 环境"
-        case .llama: return "llama.cpp 二进制文件目录"
-        }
-    }
-
     private func pathRow(_ title: String, value: Binding<String>, directory: Bool, create: Bool = false,
                          placeholder: String? = nil) -> some View {
         HStack(spacing: 0) {
             PathInputField(title: title,
                            placeholder: placeholder ?? (directory ? "选择文件夹，或粘贴完整路径" : "选择环境中的 bin/python，或搜索本机环境"),
                            symbol: nil, text: value,
-                           onCommit: { updateGuide() },
-                           focusRequest: focusStep.map { inputTitle($0) == title } == true ? focusRequest : 0)
+                           onCommit: { updateGuide() })
             chooseButton(title, value: value, directory: directory, create: create)
                 .padding(.trailing, 6)
         }
