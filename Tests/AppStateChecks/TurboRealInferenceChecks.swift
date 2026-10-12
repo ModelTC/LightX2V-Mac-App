@@ -112,9 +112,10 @@ func turboRealInferenceChecks(_ arguments: [String]) async throws {
         return job
     }
     try require(store.selectedModel == nil && store.generations.isEmpty, "fresh workspace starts without model or history")
-    store.selectModel(.qwenImage21Turbo)
+    store.start()
     try await wait({ store.isChecking }, seconds: 110)
-    try require(store.environmentReady, "real Turbo dependency and MPS model check")
+    try require(store.environmentReady, "real startup dependency and MPS check without model selection")
+    store.selectModel(.qwenImage21Turbo)
     let boat = URL(fileURLWithPath: arguments[4]), cat = URL(fileURLWithPath: arguments[5])
     let capybara = "A capybara wearing a wizard hat sits at a desk, reading a book by candlelight. Oil painting style, delicate brushwork, warm tones."
     let yacht = "Create a photorealistic photograph of the motor yacht from the input sketch, sailing on open sea, captured in full side profile with the camera at water level. Preserve the hull, mast, wheelhouse, windows, portholes, lifeboats, and railings from the sketch. Paint the hull black, the superstructures and mast white, and the funnel yellow. Place the entire yacht on a calm deep-blue sea under a clear sky with soft clouds, lit by sunlight from the front left."

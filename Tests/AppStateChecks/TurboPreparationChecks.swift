@@ -32,11 +32,12 @@ func turboPreparationChecks() async throws {
     let settings = AppSettings(repository: source.path, model: "", config: "", python: "/usr/bin/false",
                                workingDirectory: root.appendingPathComponent("workspace").path)
     try await store.applyGeneralSettings(settings)
+    while store.isChecking { try await Task.sleep(for: .milliseconds(10)) }
     try check(!store.needsGeneralSetup && store.selectedModel == nil && store.settings.config == config.path,
               "saving first setup discovers the Turbo config and still requires model selection")
     store.selectModel(.qwenImage21Turbo)
     try check(store.modelDirectory == weights.path && store.modelConfig == config.path && store.hasUnsavedModelSettings,
-              "selecting Turbo prepares nearby weights for explicit save and check")
+              "selecting Turbo prepares nearby weights for explicit save")
     store.applyModelSettings()
     while store.isChecking { try await Task.sleep(for: .milliseconds(10)) }
     try check(store.settings.model == weights.path && !store.hasUnsavedModelSettings && !store.environmentReady,

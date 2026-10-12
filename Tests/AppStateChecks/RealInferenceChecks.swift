@@ -31,9 +31,10 @@ func realInferenceChecks(_ arguments: [String]) async throws {
             try await Task.sleep(for: .milliseconds(100))
         }
     }
-    store.selectModel(.qwenImage21Turbo)
+    store.start()
     try await wait({ store.isChecking }, seconds: 110)
     try require(store.environmentReady, "real MPS environment check")
+    store.selectModel(.qwenImage21Turbo)
     let files = arguments[4...5].map { URL(fileURLWithPath: $0) }
     store.addInputImages(files)
     try await wait({ store.isImportingImages })

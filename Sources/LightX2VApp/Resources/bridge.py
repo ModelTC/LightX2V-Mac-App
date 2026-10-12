@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """LightX2V APP process supervisor; all stdout is NDJSON."""
 import argparse
-import contextlib
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -120,27 +118,6 @@ def arguments(request, config_path):
     if paths:
         cmd += ["--image_path", ",".join(paths)]
     return cmd
-
-
-def check(request):
-    os.environ.update(environment(request))
-    sys.path.insert(0, request["repository"])
-    import torch
-    if not torch.backends.mps.is_available():
-        raise RuntimeError("当前 Python 的 PyTorch 无法使用 MPS，请选择支持 Apple Silicon 的环境")
-    for name in ("transformers", "diffusers", "safetensors", "loguru", "cv2"):
-        if importlib.util.find_spec(name) is None:
-            raise RuntimeError(f"Python 环境缺少依赖：{name}")
-    # No weights are loaded during this check; perform a tiny real MPS operation.
-    value = (torch.ones(2, device="mps") + 1).sum().item()
-    if value != 4:
-        raise RuntimeError("MPS 运算自检失败")
-    # Redirect third-party startup prints away from the NDJSON channel. The native
-    # app bounds this entire check to 100 seconds and owns its cancellation.
-    with contextlib.redirect_stdout(sys.stderr):
-        import lightx2v.infer
-    emit("check", ok=True, message=f"MPS 可用 · PyTorch {torch.__version__} · Python {sys.version.split()[0]}",
-         python=sys.executable, torch=torch.__version__)
 
 
 def validate_image(path, expected_width=None, expected_height=None):
@@ -278,19 +255,15 @@ def run(request, cfg):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=["check", "run"])
+    parser.add_argument("mode", choices=["run"])
     parser.add_argument("request")
     args = parser.parse_args()
     try:
         request, cfg = load_request(args.request)
-        if args.mode == "check":
-            check(request)
-            return 0
         return run(request, cfg)
     except BaseException as exc:
         emit("error", message=str(exc))
-        if args.mode == "run":
-            emit("done", status="failed", message=str(exc))
+        emit("done", status="failed", message=str(exc))
         return 1
 
 

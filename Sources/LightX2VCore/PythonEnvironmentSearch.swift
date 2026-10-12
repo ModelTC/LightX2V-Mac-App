@@ -2,15 +2,21 @@ import Foundation
 
 public struct PythonDependency: Sendable {
     public let name: String
-    public let minimum: String
-    public init(_ name: String, _ minimum: String) { self.name = name; self.minimum = minimum }
+    public let minimum: String?
+    public init(_ name: String, _ minimum: String? = nil) { self.name = name; self.minimum = minimum }
 }
 
 public enum PyTorchRequirements {
     public static let dependencies = [PythonDependency("torch", "2.14.1"), PythonDependency("torchvision", "0.29.1"),
                                       PythonDependency("torchaudio", "2.11.0"), PythonDependency("transformers", "5.19.0"),
-                                      PythonDependency("diffusers", "0.41.0")]
-    public static var summary: String { dependencies.map { "\($0.name) ≥ \($0.minimum)" }.joined(separator: " · ") }
+                                      PythonDependency("diffusers", "0.41.0"),
+                                      PythonDependency("loguru"), PythonDependency("imageio"), PythonDependency("imageio_ffmpeg"),
+                                      PythonDependency("safetensors"), PythonDependency("einops"), PythonDependency("gguf"),
+                                      PythonDependency("opencv-python"), PythonDependency("prometheus_client"), PythonDependency("pydantic")]
+    public static var versionSummary: String {
+        dependencies.compactMap { dependency in dependency.minimum.map { "\(dependency.name) ≥ \($0)" } }.joined(separator: " · ")
+    }
+    public static var presenceSummary: String { dependencies.filter { $0.minimum == nil }.map(\.name).joined(separator: " · ") }
 
     /// Compare release components numerically, including common PEP 440 suffixes.
     /// A prerelease of the minimum itself is lower; local build tags do not affect the minimum.
@@ -44,6 +50,7 @@ public struct PythonEnvironment: Identifiable, Codable, Equatable {
     public var torchaudioVersion: String = ""
     public var transformersVersion: String = ""
     public var diffusersVersion: String = ""
+    public var packageVersions: [String: String] = [:]
     public var architecture: String = ""
     public var mpsAvailable = false
     public var detail: String = ""
@@ -54,19 +61,20 @@ public struct PythonEnvironment: Identifiable, Codable, Equatable {
         case "torchaudio": return torchaudioVersion
         case "transformers": return transformersVersion
         case "diffusers": return diffusersVersion
-        default: return ""
+        default: return packageVersions[package] ?? ""
         }
     }
     public var versionIssues: [String] {
         PyTorchRequirements.dependencies.compactMap { dependency in
             let current = version(of: dependency.name)
             if current.isEmpty { return "缺少 \(dependency.name)" }
-            return PyTorchRequirements.meetsMinimum(current, dependency.minimum) ? nil : "\(dependency.name) \(current)，需要 ≥ \(dependency.minimum)"
+            guard let minimum = dependency.minimum else { return nil }
+            return PyTorchRequirements.meetsMinimum(current, minimum) ? nil : "\(dependency.name) \(current)，需要 ≥ \(minimum)"
         }
     }
     public var isCompatible: Bool { mpsAvailable && architecture == "arm64" && versionIssues.isEmpty }
     public var compatibilityDetail: String {
-        if isCompatible { return "版本符合要求 · MPS 可用" }
+        if isCompatible { return "依赖符合要求 · MPS 可用" }
         var issues = versionIssues
         if !architecture.isEmpty && architecture != "arm64" { issues.append("需要 Apple Silicon arm64 环境") }
         if !mpsAvailable { issues.append(detail.isEmpty ? "MPS 不可用" : detail) }
@@ -158,10 +166,11 @@ public enum PythonEnvironmentSearch {
 
     public static func probe(_ executable: String, workspace: WorkspaceLayout) async throws -> PythonEnvironment {
         var result = PythonEnvironment(executable: executable)
+        let packages = String(decoding: try JSONEncoder().encode(PyTorchRequirements.dependencies.map(\.name)), as: UTF8.self)
         let script = #"""
 import json, platform, importlib.metadata
 result = {"python": platform.python_version(), "architecture": platform.machine(), "mps": False, "detail": ""}
-for name in ("torch", "torchvision", "torchaudio", "transformers", "diffusers"):
+for name in \#(packages):
     try: result[name] = importlib.metadata.version(name)
     except importlib.metadata.PackageNotFoundError: result[name] = ""
 try:
@@ -186,6 +195,7 @@ print("LIGHTX2V_ENV:" + json.dumps(result, ensure_ascii=False))
             result.torchaudioVersion = info["torchaudio"] as? String ?? ""
             result.transformersVersion = info["transformers"] as? String ?? ""
             result.diffusersVersion = info["diffusers"] as? String ?? ""
+            result.packageVersions = Dictionary(uniqueKeysWithValues: PyTorchRequirements.dependencies.map { ($0.name, info[$0.name] as? String ?? "") })
             result.architecture = info["architecture"] as? String ?? ""
             result.mpsAvailable = info["mps"] as? Bool ?? false
             result.detail = info["detail"] as? String ?? "检测失败"

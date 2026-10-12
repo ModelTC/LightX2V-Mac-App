@@ -4,7 +4,6 @@ import LightX2VCore
 
 struct SettingsView: View {
     @EnvironmentObject var store: AppStore
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var headerFocused: Bool
     @Namespace private var guideAnimation
@@ -89,15 +88,25 @@ struct SettingsView: View {
                             }
                         }.id(GeneralSetupStep.source)
                         SettingsSection(step: .python, progress: setupProgress, animation: guideAnimation,
-                                        title: "PyTorch 环境", subtitle: "搜索符合版本要求的本机环境，或在工作目录中安装。") {
+                                        title: "PyTorch 环境", subtitle: "搜索依赖齐全且符合版本要求的本机环境，或在工作目录中安装。") {
                             pathRow("PyTorch 环境", value: $settings.python, directory: false)
                             HStack(spacing: 10) {
                                 Button { startSearch() } label: { Label("搜索本机环境", systemImage: "magnifyingglass") }
                                     .disabled(store.busy || !hasWorkDirectory)
-                                Text("检查依赖版本与 MPS")
-                                    .font(.system(size: 10)).foregroundStyle(Palette.muted)
+                                Button("检查环境") { store.checkEnvironment() }
+                                    .disabled(store.busy || store.needsGeneralSetup || normalized(settings.python) != store.settings.python)
                                 Spacer(minLength: 0)
                             }.font(.system(size: 11))
+                            if normalized(settings.python) == store.settings.python && !store.needsGeneralSetup {
+                                HStack(alignment: .top, spacing: 7) {
+                                    if store.isChecking { ProgressView().controlSize(.mini) }
+                                    else { Image(systemName: store.environmentReady ? "checkmark.circle.fill" : "xmark.circle") }
+                                    Text(store.environmentMessage).lineLimit(3).help(store.environmentMessage).textSelection(.enabled)
+                                }.font(.system(size: 10)).foregroundStyle(store.environmentReady ? Palette.green : Palette.muted)
+                            } else {
+                                Text("保存设置后自动检查环境依赖与 MPS。")
+                                    .font(.system(size: 10)).foregroundStyle(Palette.muted)
+                            }
                         }.id(GeneralSetupStep.python)
                     }.padding(.horizontal, 26).padding(.bottom, 22).subtleScrollbars()
                 }.frame(maxHeight: 490)
@@ -122,12 +131,8 @@ struct SettingsView: View {
                     Text("正在保存工作区…").font(.system(size: 11)).foregroundStyle(Palette.muted)
                 }
                 Spacer()
-                if store.needsGeneralSetup {
-                    Button("退出") { NSApp.terminate(nil) }
-                } else {
-                    Button("取消") { store.setupTask?.cancel(); dismiss() }.keyboardShortcut(.cancelAction)
-                        .disabled(store.isPreparingWorkspace)
-                }
+                Button("关闭") { store.closeGeneralSettings() }.keyboardShortcut(.cancelAction)
+                    .disabled(store.isPreparingWorkspace)
                 Button(store.needsGeneralSetup ? "保存并开始" : "保存设置") { save() }
                     .buttonStyle(SettingsActionStyle(prominent: true))
                     .keyboardShortcut(.defaultAction).disabled(store.busy || !settings.hasGeneralPaths)
@@ -284,9 +289,7 @@ struct SettingsView: View {
         updateGuide()
         Task {
             do {
-                let wasSetup = store.needsGeneralSetup
                 try await store.applyGeneralSettings(settings)
-                if !wasSetup { dismiss() }
             } catch { saveError = error.localizedDescription }
         }
     }

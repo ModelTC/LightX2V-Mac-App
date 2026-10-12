@@ -8,8 +8,8 @@ struct AppStateChecks {
     @MainActor static func main() async throws {
         setbuf(stdout, nil)
         _ = NSApplication.shared
-        if CommandLine.arguments.dropFirst().first == "--model-check-only" {
-            try await modelEnvironmentChecks()
+        if CommandLine.arguments.dropFirst().first == "--startup-only" {
+            try await startupEnvironmentChecks()
             return
         }
         if CommandLine.arguments.dropFirst().first == "--settings-only" {
@@ -82,7 +82,6 @@ struct AppStateChecks {
         store.addInputImages([original])
         try check(!store.isImportingImages && store.inputImages.isEmpty, "no model rejects attachment import")
         store.selectModel(.qwenImage21Turbo)
-        // Invalid fixture source deliberately prevents starting a real environment check.
         store.errorMessage = nil
         try check(store.modelPreparationExpanded && store.generationParametersExpanded, "model selection opens preparation and parameters")
         try check(store.generationSize.automaticResolution == 1024 && store.width == nil && store.height == nil,
@@ -170,7 +169,7 @@ struct AppStateChecks {
         try await generationLogChecks()
         try await turboPreparationChecks()
         try await enhancementStateChecks()
-        try await modelEnvironmentChecks()
+        try await startupEnvironmentChecks()
         try await generalSettingsFocusChecks()
         try await environmentPresentationChecks()
         try await conversationLayoutChecks()

@@ -68,19 +68,15 @@ struct InspectorView: View {
 struct ModelPreparationView: View {
     @EnvironmentObject var store: AppStore
     @State private var showsDetails = false
-    private var needsModelSelection: Bool { store.modelDirectory.isEmpty || store.modelConfig.isEmpty }
 
     private var statusTitle: String {
         if store.isChecking { return "正在检查环境" }
-        if store.hasUnsavedModelSettings { return "有未保存的修改" }
-        if needsModelSelection { return "待准备模型" }
-        if store.environmentReady { return "环境就绪" }
-        return store.environmentMessage == "尚未检查运行环境" ? "尚未检查" : "检查未通过"
+        return store.environmentReady ? "环境就绪" : "环境未就绪"
     }
 
     private var statusColor: Color {
-        if store.isChecking || needsModelSelection { return Palette.muted }
-        return store.environmentReady && !store.hasUnsavedModelSettings ? Palette.green : Palette.accent
+        if store.isChecking { return Palette.muted }
+        return store.environmentReady ? Palette.green : Palette.accent
     }
 
     var body: some View {
@@ -98,44 +94,43 @@ struct ModelPreparationView: View {
                 Group {
                     if store.isChecking { ProgressView().controlSize(.mini) }
                     else {
-                        Image(systemName: store.hasUnsavedModelSettings ? "pencil.circle" : needsModelSelection ? "cube.transparent" : store.environmentReady ? "checkmark.circle.fill" : "exclamationmark.circle")
+                        Image(systemName: store.environmentReady ? "checkmark.circle.fill" : "xmark.circle")
                             .foregroundStyle(statusColor)
                     }
                 }.frame(width: 14, height: 14)
                 Text(statusTitle).font(.system(size: 10, weight: .medium))
                 Spacer(minLength: 4)
-                if store.hasUnsavedModelSettings {
-                    Button("撤销") { store.discardModelSettings() }
-                        .disabled(store.configurationBusy).allowsHitTesting(!store.isImportingImages).accessibilityLabel("撤销模型设置修改")
-                } else {
-                    Button("详情") { showsDetails = true }
-                        .accessibilityLabel("查看环境检查详情")
-                        .popover(isPresented: $showsDetails, arrowEdge: .leading) {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("环境检查").font(.system(size: 13, weight: .semibold))
-                                ScrollView {
-                                    Text(store.environmentMessage).font(.system(size: 11))
-                                        .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).subtleScrollbars()
-                                }.frame(maxHeight: 180)
-                                Text("检查路径、配置与 MPS 可用性，不加载模型权重。")
-                                    .font(.system(size: 10)).foregroundStyle(Palette.muted)
-                            }.padding(18).frame(width: 320)
-                        }
-                }
+                Button("详情") { showsDetails = true }
+                    .accessibilityLabel("查看环境检查详情")
+                    .popover(isPresented: $showsDetails, arrowEdge: .leading) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("环境检查").font(.system(size: 13, weight: .semibold))
+                            ScrollView {
+                                Text(store.environmentMessage).font(.system(size: 11))
+                                    .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).subtleScrollbars()
+                            }.frame(maxHeight: 180)
+                            Text("启动时自动检查 Python 环境依赖与 MPS，可在通用设置中重新检查。")
+                                .font(.system(size: 10)).foregroundStyle(Palette.muted)
+                        }.padding(18).frame(width: 320)
+                    }
             }.font(.system(size: 10)).buttonStyle(HoverButtonStyle(radius: 6)).foregroundStyle(Palette.muted)
 
-            if !store.isChecking && !store.environmentReady && !store.hasUnsavedModelSettings && store.environmentMessage != "尚未检查运行环境" {
-                Text(store.environmentMessage).font(.system(size: 10)).foregroundStyle(needsModelSelection ? Palette.muted : Palette.accent)
+            if !store.isChecking && !store.environmentReady && store.environmentMessage != "尚未检查运行环境" {
+                Text(store.environmentMessage).font(.system(size: 10)).foregroundStyle(Palette.accent)
                     .lineLimit(2).fixedSize(horizontal: false, vertical: true).help(store.environmentMessage)
             }
 
-            Button { store.applyModelSettings() } label: {
-                HStack(spacing: 7) {
-                    if !store.isChecking { Image(systemName: "arrow.clockwise").font(.system(size: 10, weight: .medium)) }
-                    Text(store.isChecking ? "正在检查…" : store.hasUnsavedModelSettings ? "保存并检查" : "检查模型")
+            if store.hasUnsavedModelSettings {
+                HStack {
+                    Text("有未保存的修改").font(.system(size: 10)).foregroundStyle(Palette.muted)
+                    Spacer()
+                    Button("撤销") { store.discardModelSettings() }
+                        .disabled(store.configurationBusy).allowsHitTesting(!store.isImportingImages).accessibilityLabel("撤销模型设置修改")
                 }
-                .font(.system(size: 11, weight: .medium)).frame(maxWidth: .infinity).frame(height: 26)
-            }.buttonStyle(SettingsActionStyle(prominent: true)).disabled(store.configurationBusy).allowsHitTesting(!store.isImportingImages)
+                Button("保存模型设置") { store.applyModelSettings() }
+                    .font(.system(size: 11, weight: .medium)).frame(maxWidth: .infinity).frame(height: 26)
+                    .buttonStyle(SettingsActionStyle(prominent: true)).disabled(store.configurationBusy).allowsHitTesting(!store.isImportingImages)
+            }
         }
     }
 }

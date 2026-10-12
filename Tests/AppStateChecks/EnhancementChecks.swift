@@ -30,8 +30,6 @@ func enhancementStateChecks() async throws {
     import json, shutil, sys, time
     from pathlib import Path
     def emit(kind, **fields): print(json.dumps(dict(type=kind,**fields)),flush=True)
-    if sys.argv[-2]=='check':
-        emit('check',ok=True,message='fixture ready'); sys.exit(0)
     request=json.load(open(sys.argv[-1])); source=request['prompt']
     if request.get('promptEnhancement'):
         emit('enhancement_phase',phase='thinking',mode='i2i' if request.get('inputImages') else 't2i')

@@ -13,6 +13,7 @@ func environmentPresentationChecks() async throws {
     old.pythonVersion = "3.11.14"; old.architecture = "arm64"; old.mpsAvailable = true
     old.torchVersion = "2.14.1"; old.torchvisionVersion = "0.29.1"; old.torchaudioVersion = "2.11.0"; old.transformersVersion = "4.57.3"
     old.diffusersVersion = "0.41.0"
+    old.packageVersions = Dictionary(uniqueKeysWithValues: PyTorchRequirements.dependencies.filter { $0.minimum == nil }.map { ($0.name, "0.1.0") })
     var ready = old; ready.transformersVersion = "5.19.0"
     let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 650, height: 720),
                           styleMask: [.titled, .closable], backing: .buffered, defer: false)
@@ -48,6 +49,8 @@ func environmentPresentationChecks() async throws {
     try await render("missing-diffusers", search([missingDiffusers]))
     var oldDiffusers = ready; oldDiffusers.diffusersVersion = "0.40.0"
     try await render("old-diffusers", search([oldDiffusers]))
+    var missingPackage = ready; missingPackage.packageVersions["imageio_ffmpeg"] = ""
+    try await render("missing-imageio-ffmpeg", search([missingPackage]))
     try await render("manual-instructions", EnvironmentInstallInstructions(onClose: {}))
     for (name, progress, installing, cancelled, error) in [
         ("installing", EnvironmentInstallProgress(.dependencies), true, false, Optional<String>.none),

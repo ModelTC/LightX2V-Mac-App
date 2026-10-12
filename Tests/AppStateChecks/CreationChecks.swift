@@ -45,7 +45,7 @@ func creationChecks() async throws {
     try JSONFile.write(WorkspaceData(settings: settings, hasCompletedGeneralSetup: true), to: layout.state)
     try JSONFile.write(WorkspaceLocation(workingDirectory: workspace.path), to: support.appendingPathComponent("workspace_location.json"))
     let store = AppStore()
-    store.selectModel(.qwenImage21Turbo) // Incomplete source prevents a real environment check.
+    store.selectModel(.qwenImage21Turbo)
     try fm.createDirectory(at: source.appendingPathComponent("lightx2v"), withIntermediateDirectories: true)
     try fm.createDirectory(at: model, withIntermediateDirectories: true)
     try Data().write(to: source.appendingPathComponent("lightx2v/infer.py"))
@@ -55,9 +55,6 @@ func creationChecks() async throws {
     #!/usr/bin/env python3
     import json, shutil, sys
     from pathlib import Path
-    if sys.argv[-2] == "check":
-        print(json.dumps({"type":"check", "ok":True, "message":"Fixture ready"}), flush=True)
-        sys.exit(0)
     request = json.load(open(sys.argv[-1]))
     fixture = "fixture-second.png" if request["prompt"] == "Independent second scene" else "fixture.png"
     shutil.copyfile(Path(__file__).with_name(fixture), request["output"])

@@ -48,18 +48,18 @@ final class AppStore: ObservableObject {
     @Published var logs = ""
     @Published var errorMessage: String?
     @Published var showSettings = false
+    @Published var showStartupSettings = true
     @Published var showEnhancementSettings = false
     @Published private(set) var hasCompletedGeneralSetup = false
     @Published var showLogs = false
     @Published var showInspector = true
     @Published var modelPreparationFocus = 0
     private var runner: ProcessRunner?
-    private var checker: ProcessRunner?
     private var activeLog = ""
     private var activeLogFile: GenerationLog?
     private var startedAt: Date?
     private var receivedDone = false
-    private var checkToken = UUID()
+    private var didStart = false
     private var terminationCompletion: (() -> Void)?
     private var stateURL: URL
     private let locatorRoot: URL
@@ -146,7 +146,7 @@ final class AppStore: ObservableObject {
     var hasUnsavedModelSettings: Bool { modelDirectory != settings.model || modelConfig != settings.config }
     var width: Int? { generationSize.dimensions?.width }
     var height: Int? { generationSize.dimensions?.height }
-    var canGenerate: Bool { selectedModel != nil && !needsGeneralSetup && !busy && !isComposingPrompt && !hasUnsavedModelSettings && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var canGenerate: Bool { selectedModel != nil && !needsGeneralSetup && environmentReady && !settings.model.isEmpty && !settings.config.isEmpty && !busy && !isComposingPrompt && !hasUnsavedModelSettings && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var bridgePath: String {
         (Bundle.main.url(forResource: "bridge", withExtension: "py")
          ?? Bundle.module.url(forResource: "bridge", withExtension: "py")!).path
@@ -281,7 +281,6 @@ final class AppStore: ObservableObject {
 
     func selectModel(_ model: GenerationModel) {
         guard !busy else { return }
-        let changed = selectedModel != model
         selectedModel = model
         showInspector = true
         modelPreparationExpanded = true
@@ -290,7 +289,6 @@ final class AppStore: ObservableObject {
             modelDirectory = QwenImage21Turbo.suggestedModel(near: [settings.repository, settings.workingDirectory]) ?? ""
         }
         if modelConfig.isEmpty { modelConfig = QwenImage21Turbo.suggestedConfig(repository: settings.repository) ?? "" }
-        if changed { environmentReady = false; checkEnvironment() }
     }
 
     func reuse(_ generation: Generation) {
@@ -354,16 +352,20 @@ final class AppStore: ObservableObject {
         if !preserveModelDraft { modelDirectory = settings.model; modelConfig = settings.config }
         stateURL = WorkspaceLayout(settings.workingDirectory).state
         canPersist = true; hasCompletedGeneralSetup = true; environmentReady = false
-        errorMessage = nil; showSettings = false
-        environmentMessage = "通用设置已保存，请在右侧准备并检查模型。"
+        errorMessage = nil
+        isPreparingWorkspace = false
+        checkEnvironment()
     }
 
     func applyModelSettings() {
-        guard selectedModel != nil else { return }
+        guard selectedModel != nil, !busy else { return }
         var updated = settings
         updated.model = modelDirectory
         updated.config = modelConfig
-        applySettings(updated)
+        do {
+            try updated.validatePaths()
+            settings = updated; persist()
+        } catch { errorMessage = error.localizedDescription }
     }
 
     func discardModelSettings() {
@@ -378,84 +380,49 @@ final class AppStore: ObservableObject {
         modelPreparationFocus += 1
     }
 
-    private func applySettings(_ value: AppSettings) {
-        guard !busy else { return }
-        guard !needsGeneralSetup else { showSettings = true; return }
-        settings = value; environmentReady = false; persist(); checkEnvironment()
+    func start() {
+        guard !didStart else { return }
+        didStart = true
+        if needsGeneralSetup { environmentMessage = "请先完成通用设置。"; return }
+        checkEnvironment()
+    }
+
+    func closeGeneralSettings() {
+        setupTask?.cancel()
+        showStartupSettings = false; showSettings = false
     }
 
     func checkEnvironment() {
-        guard !busy else { return }
-        guard selectedModel != nil else {
-            environmentReady = false
-            environmentMessage = "请先选择模型。"
-            return
-        }
+        guard !busy, terminationCompletion == nil else { return }
         guard !needsGeneralSetup else {
+            environmentReady = false
             environmentMessage = "请先完成通用设置。"
             return
         }
-        guard !settings.model.isEmpty, !settings.config.isEmpty else {
-            environmentReady = false
-            environmentMessage = "请在右侧「模型准备」中选择模型目录和 Config 配置。"
-            return
-        }
         do {
-            try settings.validatePaths()
+            try settings.validateGeneralPaths()
             let layout = WorkspaceLayout(settings.workingDirectory)
             try layout.prepare()
-            let requestURL = layout.temporary.appendingPathComponent("environment-check.json")
-            try JSONFile.write(["repository": settings.repository, "model": settings.model, "config": settings.config], to: requestURL)
-            isChecking = true; environmentReady = false; environmentMessage = "正在检查依赖版本与 MPS…"
-            let token = UUID(); checkToken = token
+            isChecking = true; environmentReady = false; environmentMessage = "正在检查环境依赖与 MPS…"
             let python = settings.python
             setupTask = Task {
-                defer { finishSetupTask() }
+                defer { isChecking = false; finishSetupTask() }
                 do {
-                    // The search picker and model check share the same probe and
-                    // eligibility policy; never enable generation from MPS alone.
+                    // Startup and the general-settings picker share one policy.
+                    // Environment readiness is independent of model selection.
                     let environment = try await PythonEnvironmentSearch.probe(python, workspace: layout)
                     try Task.checkCancellation()
-                    guard checkToken == token else { return }
-                    guard environment.isCompatible else { throw AppError.message(environment.compatibilityDetail) }
-                    try startModelCheck(python: python, request: requestURL, token: token)
+                    environmentReady = environment.isCompatible
+                    environmentMessage = environment.compatibilityDetail
+                    if environmentReady { showStartupSettings = false; showSettings = false }
                 } catch {
-                    guard checkToken == token else { return }
-                    isChecking = false; checker = nil; environmentReady = false
+                    environmentReady = false
                     environmentMessage = Task.isCancelled ? "环境检查已取消。" : error.localizedDescription
                 }
             }
         } catch {
-            isChecking = false; checker = nil; environmentReady = false
+            isChecking = false; environmentReady = false
             environmentMessage = error.localizedDescription
-        }
-    }
-
-    private func startModelCheck(python: String, request: URL, token: UUID) throws {
-        environmentMessage = "正在检查 MPS 运算和模型…"
-        let process = ProcessRunner(); checker = process
-        try process.start(python: python, bridge: bridgePath, mode: "check", request: request.path, workspace: settings.workingDirectory,
-                          onEvent: { [weak self] event in
-            guard let self, self.checkToken == token else { return }
-            if event["type"] as? String == "check" {
-                self.environmentReady = event["ok"] as? Bool ?? false
-                self.environmentMessage = event["message"] as? String ?? "检查完成"
-            } else if event["type"] as? String == "error" {
-                self.environmentMessage = event["message"] as? String ?? "环境检查失败"
-            }
-        }, onExit: { [weak self] code in
-            guard let self, self.checkToken == token else { return }
-            self.isChecking = false; self.checker = nil
-            if code != 0 || !self.environmentReady {
-                self.environmentReady = false
-                if self.environmentMessage.hasPrefix("正在") { self.environmentMessage = "环境检查未完成（退出码 \(code)），请检查 Python 路径。" }
-            }
-            self.finishTerminationIfNeeded()
-        })
-        DispatchQueue.main.asyncAfter(deadline: .now() + 100) { [weak self] in
-            guard let self, self.isChecking, self.checkToken == token else { return }
-            self.environmentMessage = "环境检查超时。若 macOS 正在请求文件访问权限，请允许后重试；否则请检查 Python 环境。"
-            self.checker?.stop()
         }
     }
 
@@ -463,14 +430,14 @@ final class AppStore: ObservableObject {
         guard !busy, !isComposingPrompt else { return }
         guard selectedModel != nil else { errorMessage = "请先选择模型。"; return }
         guard !needsGeneralSetup else { showSettings = true; return }
+        guard environmentReady else { showSettings = true; return }
         guard !hasUnsavedModelSettings else {
             showModelPreparation()
-            errorMessage = "请先在右侧「模型准备」中保存并检查模型设置。"
+            errorMessage = "请先在右侧「模型准备」中保存模型设置。"
             return
         }
         do {
             try settings.validatePaths()
-            guard environmentReady else { showModelPreparation(); checkEnvironment(); return }
             if settings.promptEnhancement.enabled && (try? settings.promptEnhancement.validate(for: enhancementMode)) == nil {
                 showEnhancementSettings = true
                 return
@@ -617,7 +584,7 @@ final class AppStore: ObservableObject {
 
     func prepareToTerminate(_ completion: @escaping () -> Void) {
         terminationCompletion = completion
-        stop(); checker?.stop(); setupTask?.cancel(); finishTerminationIfNeeded()
+        stop(); setupTask?.cancel(); finishTerminationIfNeeded()
     }
 
     func finishSetupTask() {

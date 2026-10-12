@@ -30,8 +30,6 @@ func generationLogChecks() async throws {
     import json, shutil, sys, time
     from pathlib import Path
     def emit(kind, **fields): print(json.dumps(dict(type=kind, **fields)), flush=True)
-    if sys.argv[-2] == 'check':
-        emit('check', ok=True, message='fixture ready'); sys.exit(0)
     request = json.load(open(sys.argv[-1])); name = request['prompt']
     emit('log', message='LOG_START_' + name)
     if name == 'EARLY_FAILURE':

@@ -30,8 +30,10 @@ struct EnvironmentSearchView: View {
                 if searching { ProgressView().controlSize(.small) }
             }
             VStack(alignment: .leading, spacing: 7) {
-                Text("版本要求 · Apple Silicon MPS").font(.system(size: 10, weight: .medium))
-                Text(PyTorchRequirements.summary).font(.system(size: 10, design: .monospaced))
+                Text("依赖要求 · Apple Silicon MPS").font(.system(size: 10, weight: .medium))
+                Text(PyTorchRequirements.versionSummary).font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true).lineSpacing(3)
+                Text("仅需安装：\(PyTorchRequirements.presenceSummary)").font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true).lineSpacing(3)
             }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
                 .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10))
@@ -70,7 +72,7 @@ struct EnvironmentSearchView: View {
                 if searching { Button("停止搜索", action: onStop) }
                 else { Button { onSearch() } label: { Label("搜索本机环境", systemImage: "magnifyingglass") } }
                 Spacer()
-                Button("返回", action: onClose).keyboardShortcut(.cancelAction)
+                Button("关闭", action: onClose).keyboardShortcut(.cancelAction)
             }
         }.padding(24).frame(width: 630).background(Palette.canvas).foregroundStyle(Palette.ink)
             .buttonStyle(SettingsActionStyle()).tint(Palette.ink)
@@ -157,7 +159,7 @@ struct EnvironmentInstallInstructions: View {
                     Label("复制安装命令", systemImage: "doc.on.doc")
                 }
                 Spacer()
-                Button("返回", action: onClose).keyboardShortcut(.cancelAction)
+                Button("关闭", action: onClose).keyboardShortcut(.cancelAction)
             }
         }.padding(24).frame(width: 610).background(Palette.canvas).foregroundStyle(Palette.ink).buttonStyle(SettingsActionStyle())
     }
@@ -223,9 +225,9 @@ struct EnvironmentInstallView: View {
                 else if !completed { Button("继续安装", action: onRetry) }
                 Spacer()
                 if completed {
-                    Button("返回", action: onClose)
+                    Button("关闭", action: onClose)
                     Button("搜索本机环境", action: onSearch).buttonStyle(SettingsActionStyle(prominent: true)).keyboardShortcut(.defaultAction)
-                } else if !installing { Button("返回", action: onClose).keyboardShortcut(.cancelAction) }
+                } else if !installing { Button("关闭", action: onClose).keyboardShortcut(.cancelAction) }
             }
         }.padding(24).frame(width: 610).background(Palette.canvas).foregroundStyle(Palette.ink).buttonStyle(SettingsActionStyle())
     }
