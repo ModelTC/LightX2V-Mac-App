@@ -139,6 +139,7 @@ struct EnvironmentInstallInstructions: View {
         pip install opencv-python
         pip install prometheus_client
         pip install pydantic
+        pip install huggingface_hub
         """
     }
     var body: some View {
