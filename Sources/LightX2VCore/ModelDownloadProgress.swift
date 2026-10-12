@@ -5,6 +5,8 @@ public struct ModelDownloadProgress: Equatable, Sendable {
     public var stage: Stage = .preparing
     public var sequence = 0
     public var completedBytes: Double = 0
+    public var completedFiles: Int = 0
+    public var totalFiles: Int?
     public var totalBytes: Double?
     public var bytesPerSecond: Double?
     public var speedUpdatedAt: Date?
@@ -12,9 +14,10 @@ public struct ModelDownloadProgress: Equatable, Sendable {
 
     public init() {}
     public var fraction: Double? {
-        guard let totalBytes, totalBytes > 0 else { return nil }
-        return min(1, max(0, completedBytes / totalBytes))
+        guard let totalFiles, totalFiles > 0 else { return nil }
+        return min(1, max(0, Double(completedFiles) / Double(totalFiles)))
     }
+    public var fileCountText: String { totalFiles.map { "\(completedFiles)/\($0)" } ?? "—/—" }
     public var percentage: String {
         if stage == .preparing { return "准备" }
         if stage == .checking { return "检查" }
@@ -33,7 +36,7 @@ public struct ModelDownloadProgress: Equatable, Sendable {
         case .checking: return "下载结束，正在检查模型文件…"
         case .downloading:
             let amount = Self.bytes(completedBytes) + (totalBytes.map { " / " + Self.bytes($0) } ?? " · 总大小待确认")
-            var text = "本次下载 " + amount + "\n网络速度 " + speedText(at: date)
+            var text = "已完成文件 " + fileCountText + "\n文件重建 " + amount + "\n网络速度 " + speedText(at: date)
             if let remainingSeconds, remainingSeconds.isFinite, remainingSeconds > 0, speed(at: date) != 0 {
                 let minutes = max(1, Int(ceil(remainingSeconds / 60)))
                 text += "\n预计剩余 " + (minutes < 60 ? "约 \(minutes) 分钟" : "约 \(minutes / 60) 小时 \(minutes % 60) 分钟")
@@ -49,8 +52,8 @@ public struct ModelDownloadProgress: Equatable, Sendable {
     }
 }
 
-/// HF's file-count bar is not byte progress. Xet also separates network bytes
-/// from reconstructed file bytes: only the former may supply download speed.
+/// Repository progress follows HF's completed-file count. Xet separates network
+/// bytes from reconstructed file bytes: only network bytes supply download speed.
 public struct ModelDownloadProgressParser: Sendable {
     public private(set) var progress = ModelDownloadProgress()
     private var expectedBytes: Double?
@@ -79,6 +82,14 @@ public struct ModelDownloadProgressParser: Sendable {
         guard let separator = text.firstIndex(of: ":") else { return nil }
         let title = String(text[..<separator]).lowercased()
         let payload = String(text[(text.lastIndex(of: "|") ?? separator)...].dropFirst())
+        if title.hasPrefix("fetching ") {
+            guard let counts = Self.captures(#"^\s*([0-9]+)\s*/\s*([0-9]+)(?:\s|\[|$)"#, in: payload),
+                  let completed = Int(counts[0]), let total = Int(counts[1]), completed <= total else { return nil }
+            progress.stage = .downloading
+            progress.completedFiles = completed; progress.totalFiles = total
+            progress.sequence += 1
+            return progress
+        }
         let pair = Self.captures(Self.quantity + #"\s*/\s*"# + Self.quantity, in: payload)
         let reconstructing = title.hasPrefix("reconstructing") || title.hasPrefix("reconstruction complete")
         let network = title.hasPrefix("downloading bytes") || (title.hasPrefix("download complete") && pair == nil)

@@ -81,32 +81,28 @@ private struct ModelDownloadCard: View {
                     .accessibilityLabel((downloading ? "停止下载" : "自动下载") + resource.title)
                 if downloading {
                     ModelDownloadFeedback(resource: resource, progress: store.modelDownloadProgress[resource] ?? ModelDownloadProgress())
-                        .onHover { statusHovered = $0 }
                 } else { Spacer(minLength: 0) }
                 Button { statusPinned.toggle() } label: {
                     Group {
                         if downloading { ProgressView().controlSize(.mini).tint(statusColor) }
                         else { Image(systemName: optionalDisabled ? "minus.circle" : ready ? "checkmark.circle.fill" : "xmark.circle.fill").font(.system(size: 13)) }
                     }.foregroundStyle(statusColor).frame(width: 20, height: 22).contentShape(Rectangle())
-                }.buttonStyle(HoverButtonStyle(radius: 6))
+                }.buttonStyle(HoverButtonStyle(radius: 6)).disabled(downloading)
                     .accessibilityLabel(resource.title + "文件状态").accessibilityValue(status)
                     .onHover { statusHovered = $0 }
                     .overlay(alignment: .bottomTrailing) {
-                        if showsStatus {
-                            Group {
-                                if downloading {
-                                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                                        ModelStatusBubble(message: (store.modelDownloadProgress[resource] ?? ModelDownloadProgress()).detail(at: context.date))
-                                    }
-                                } else { ModelStatusBubble(message: status) }
-                            }.offset(y: -24).allowsHitTesting(false).accessibilityHidden(true)
+                        if showsStatus && !downloading {
+                            ModelStatusBubble(message: status).offset(y: -24).allowsHitTesting(false).accessibilityHidden(true)
                         }
                     }
             }.font(.system(size: 10)).buttonStyle(HoverButtonStyle(radius: 6)).frame(height: 22)
         }.padding(10).opacity(optionalDisabled ? 0.58 : 1)
             .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Palette.line, lineWidth: 1))
-            .zIndex(showsStatus ? 1 : 0)
+            .zIndex(showsStatus && !downloading ? 1 : 0)
+            .onChange(of: downloading) { _, active in
+                if active { statusPinned = false; statusHovered = false }
+            }
     }
 
     private var guide: some View {
@@ -147,7 +143,9 @@ private struct ModelDownloadFeedback: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
-            HStack(spacing: 6) {
+            HStack(spacing: 4) {
+                Text(progress.percentage).font(.system(size: 9)).monospacedDigit()
+                    .frame(width: 28, alignment: .trailing)
                 Group {
                     if let fraction = progress.fraction, progress.stage == .downloading {
                         GeometryReader { geometry in
@@ -160,8 +158,8 @@ private struct ModelDownloadFeedback: View {
                         ProgressView().progressViewStyle(.linear).tint(Palette.button).frame(height: 4)
                     }
                 }.frame(maxWidth: .infinity)
-                Text(progress.percentage).font(.system(size: 10)).monospacedDigit()
-                    .frame(width: 28, alignment: .trailing)
+                Text(progress.fileCountText).font(.system(size: 9)).monospacedDigit()
+                    .frame(width: 38, alignment: .trailing)
                 Text(progress.speedText(at: context.date)).font(.system(size: 9)).monospacedDigit()
                     .foregroundStyle(Palette.muted).frame(width: 62, alignment: .trailing)
             }.lineLimit(1)

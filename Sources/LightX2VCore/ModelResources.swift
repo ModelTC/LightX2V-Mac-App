@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 public enum ModelResource: String, CaseIterable, Identifiable, Sendable {
     case turbo, t2i, i2i
@@ -79,32 +80,19 @@ public enum HuggingFaceModelDownloader {
         try workspace.prepare()
         let destination = resource.destination(in: workspace)
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
-        // Resolve the byte total before concurrent workers start. Reading only
-        // metadata never downloads weights and reuses the same HF local cache.
-        var metadata: DownloadMetadata?
-        do {
-            let result = try await SetupCommand.run(python, arguments: ["-u", "-c", metadataScript, resource.repository, destination.path],
-                workspace: workspace, timeout: 60,
-                environment: ["HF_HUB_DISABLE_PROGRESS_BARS": "1", "HF_HUB_DISABLE_UPDATE_CHECK": "1"],
-                logFile: workspace.root.appendingPathComponent("logs/hf-" + resource.rawValue + "-metadata.log"))
-            if result.status == 0, let marker = result.output.range(of: "LIGHTX2V_DOWNLOAD_METADATA:"),
-               let json = result.output[marker.upperBound...].split(whereSeparator: \.isNewline).first,
-               let data = String(json).data(using: .utf8) {
-                metadata = try? JSONDecoder().decode(DownloadMetadata.self, from: data)
-            }
-        } catch { try Task.checkCancellation() }
-        try Task.checkCancellation()
         let updates = DownloadUpdates()
-        onProgress(updates.begin(totalBytes: metadata?.totalBytes))
-        var arguments = ["download", resource.repository, "--local-dir", destination.path]
-        if let revision = metadata?.revision, revision.range(of: "^[0-9a-f]{40}$", options: .regularExpression) != nil {
-            arguments += ["--revision", revision]
-        }
-        let result = try await SetupCommand.run(cli, arguments: arguments,
+        onProgress(updates.begin(totalBytes: nil))
+        // Load the same login/interactive shell configuration as Terminal, then
+        // exec the absolute hf selected beside the configured Python. Positional
+        // arguments preserve paths literally, including quotes and shell syntax.
+        let shell = loginShell
+        let arguments = ["-lic", "export HF_HUB_DISABLE_PROGRESS_BARS=0 TQDM_POSITION=-1 TQDM_MININTERVAL=0.5; exec \"$@\"",
+                         "lightx2v-hf", cli, "download", resource.repository, "--local-dir", destination.path]
+        let result = try await SetupCommand.run(shell, arguments: arguments,
             workspace: workspace, timeout: 86400,
-            environment: ["HF_HUB_DOWNLOAD_TIMEOUT": "60", "HF_HUB_DISABLE_UPDATE_CHECK": "1",
-                          "HF_HUB_DISABLE_PROGRESS_BARS": "0", "TQDM_POSITION": "-1", "TQDM_MININTERVAL": "0.5", "COLUMNS": "200"],
-            logFile: workspace.root.appendingPathComponent("logs/hf-" + resource.rawValue + ".log")) { line in
+            environment: ["COLUMNS": "200"],
+            logFile: workspace.root.appendingPathComponent("logs/hf-" + resource.rawValue + ".log"),
+            useWorkspaceEnvironment: false) { line in
                 onOutput(line)
                 if let progress = updates.consume(line) { onProgress(progress) }
             }
@@ -115,20 +103,10 @@ public enum HuggingFaceModelDownloader {
         return destination.path
     }
 
-    private struct DownloadMetadata: Decodable {
-        let totalBytes: Double?
-        let revision: String?
+    private static var loginShell: String {
+        let configured = getpwuid(getuid()).flatMap { $0.pointee.pw_shell }.map { String(cString: $0) }
+        return ["/bin/zsh", "/bin/bash", "/bin/sh"].contains(configured ?? "") ? configured! : "/bin/zsh"
     }
-
-    private static let metadataScript = #"""
-import json, sys
-from huggingface_hub import snapshot_download
-files = snapshot_download(sys.argv[1], local_dir=sys.argv[2], dry_run=True)
-pending = [item for item in files if item.will_download]
-total = None if any(item.file_size is None for item in pending) else sum(item.file_size for item in pending)
-revisions = {item.commit_hash for item in files}
-print("LIGHTX2V_DOWNLOAD_METADATA:" + json.dumps({"totalBytes": total, "revision": next(iter(revisions)) if len(revisions) == 1 else None}), flush=True)
-"""#
 
     private final class DownloadUpdates: @unchecked Sendable {
         private let lock = NSLock()

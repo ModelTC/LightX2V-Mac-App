@@ -140,7 +140,7 @@ func unifiedModelPreparationChecks() async throws {
         if scenario == "preparing" { store.activeModelDownload = .t2i; store.isPreparingResources = true; store.modelDownloadProgress[.t2i] = ModelDownloadProgress() }
         if scenario == "download" || scenario == "large-rate" || scenario == "checking" {
             var parser = ModelDownloadProgressParser(); _ = parser.begin(totalBytes: 1_000_000_000)
-            _ = parser.consume("Reconstructing (incomplete total...): 50%|█| 250MB / 500MB 999GB/s")
+            _ = parser.consume("Fetching 32 files: 81%|█| 26/32 [00:01]")
             _ = parser.consume(scenario == "large-rate" ? "Downloading bytes: | 10.0MB 999.9GB/s" : "Downloading bytes: | 10.0MB 2.5MB/s")
             store.modelDownloadProgress[.t2i] = scenario == "checking" ? parser.checking() : parser.progress
         }

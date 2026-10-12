@@ -26,7 +26,7 @@ p = pathlib.Path(sys.argv[4]); p.mkdir(parents=True, exist_ok=True)
 (p / 'partial').write_text('retained')
 control = p.parents[2] / 'behavior'
 behavior = control.read_text() if control.exists() else 'normal'
-print('Fetching files: 75%', end='\r', flush=True)
+if behavior != 'unknown': print('Fetching 32 files: 25%|██| 8/32 [00:01]', end='\r', flush=True)
 print('Downloading bytes: | 10.0MB 2.50MB/s', end='\r', flush=True)
 print('Reconstructing (incomplete total...): 50%|██| 250MB / 500MB 99MB/s', end='\r', flush=True)
 time.sleep(0.7 if behavior == 'normal' else 20 if behavior in ['cancel','unknown'] else 0.2)
@@ -39,7 +39,7 @@ else:
     (p / ('Qwen-Image-2.1-PE-' + mode + '-Q8_0.gguf')).write_text('weight')
     (p / 'system_prompt.txt').write_text('system')
     if mode == 'I2I': (p / 'mmproj-Qwen-Image-2.1-PE-I2I-BF16.gguf').write_text('projector')
-print('Reconstruction complete: 100%|██| 1.00GB / 1.00GB 99MB/s', flush=True)
+print('Fetching 32 files: 100%|██| 32/32 [00:02]', flush=True)
 """#.utf8).write(to: hf)
     for executable in [python, hf] { try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path) }
     var settings = AppSettings.defaults
@@ -66,7 +66,7 @@ print('Reconstruction complete: 100%|██| 1.00GB / 1.00GB 99MB/s', flush=True
         try check(store.modelDownloadProgress[resource]?.stage == .preparing, resource.title + " immediately presents preparation state")
         try await wait { store.modelDownloadProgress[resource]?.percentage == "25%" }
         try check(store.modelDownloadProgress[resource]?.bytesPerSecond == 2_500_000 && store.activeModelDownload == resource,
-                  resource.title + " publishes real bytes and network speed independently of file count and disk speed")
+                  resource.title + " publishes completed-file counts and actual network speed independently of disk speed")
         try await wait { !store.isPreparingResources }
         try check(store.modelDownloadProgress[resource] == nil && store.activeModelDownload == nil && !store.modelDownloadErrors.contains(resource)
                   && store.resourceDirectory(resource) == resource.destination(in: layout).path,
@@ -92,6 +92,6 @@ print('Reconstruction complete: 100%|██| 1.00GB / 1.00GB 99MB/s', flush=True
     store.downloadModel(.turbo)
     try await wait { store.modelDownloadProgress[.turbo]?.bytesPerSecond != nil }
     try check(store.modelDownloadProgress[.turbo]?.fraction == nil && store.modelDownloadProgress[.turbo]?.completedBytes == 250_000_000,
-              "metadata failure preserves actual byte count and speed with an indeterminate bar")
+              "missing HF file counter preserves actual speed with an indeterminate bar")
     store.setupTask?.cancel(); try await wait { !store.isPreparingResources }
 }

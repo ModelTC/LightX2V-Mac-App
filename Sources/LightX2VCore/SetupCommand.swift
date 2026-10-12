@@ -17,6 +17,7 @@ public enum SetupCommand {
     }
     public static func run(_ executable: String, arguments: [String], workspace: WorkspaceLayout,
                            timeout: TimeInterval = 15, environment: [String: String] = [:], logFile: URL? = nil,
+                           useWorkspaceEnvironment: Bool = true,
                            onOutput: @escaping @Sendable (String) -> Void = { _ in }) async throws -> SetupCommandResult {
         let cancellation = Cancellation()
         return try await withTaskCancellationHandler(operation: {
@@ -38,7 +39,7 @@ public enum SetupCommand {
                         posix_spawn_file_actions_addchdir_np(&actions, workspace.root.path)
                         posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP))
                         posix_spawnattr_setpgroup(&attributes, 0)
-                        let variables = ProcessInfo.processInfo.environment.merging(workspace.environment) { _, new in new }
+                        let variables = ProcessInfo.processInfo.environment.merging(useWorkspaceEnvironment ? workspace.environment : [:]) { _, new in new }
                             .merging(environment) { _, new in new }
                         let argv = ([executable] + arguments).map { strdup($0) }
                         let envp = variables.map { strdup("\($0.key)=\($0.value)") }
