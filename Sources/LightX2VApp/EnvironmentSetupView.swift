@@ -39,10 +39,10 @@ struct EnvironmentSearchView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     if !searching && compatibleCount == 0 {
                         HStack(alignment: .top, spacing: 12) {
-                            installationChoice("自行安装", symbol: "doc.text", detail: "按简短说明准备环境，安装后重新搜索。",
+                            installationChoice("手动安装", symbol: "doc.text", detail: "按简短说明准备环境，安装后重新搜索。",
                                                button: "查看安装说明", action: onInstructions)
-                            installationChoice("在工作目录安装", symbol: "arrow.down.circle", detail: "自动安装 Miniconda、Python 3.11 和推理依赖。",
-                                               button: "安装 TorchLightX2V", issue: managedInstallIssue, action: onInstall)
+                            installationChoice("在工作目录中自动安装", symbol: "arrow.down.circle", detail: "自动安装 Miniconda、Python 3.11 和推理依赖。",
+                                               button: "开始自动安装", issue: managedInstallIssue, action: onInstall)
                         }
                     }
                     if environments.isEmpty && searching {
@@ -143,7 +143,7 @@ struct EnvironmentInstallInstructions: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("自行安装依赖").font(.system(size: 18, weight: .semibold))
+            Text("手动安装依赖").font(.system(size: 18, weight: .semibold))
             Text("准备好 Python 3.11 环境，在该环境中执行以下命令。")
                 .font(.system(size: 12)).foregroundStyle(Palette.muted)
             ScrollView([.vertical, .horizontal]) {
