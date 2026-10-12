@@ -1,13 +1,15 @@
+import LightX2VCore
 import AppKit
 import SwiftUI
 
 /// A compact editor whose placeholder, marked text and sizing share one text layout.
 struct PromptEditor: NSViewRepresentable {
+    @ObservedObject private var language = LanguagePreferences.shared
     @Binding var text: String
     @Binding var height: CGFloat
     @Binding var focused: Bool
     @Binding var composing: Bool
-    var placeholder = "描述你想生成的画面…"
+    var placeholder = L10n.text("Describe the image you want to create…")
     var onDropFiles: (([URL]) -> Void)?
     var onDropHover: ((Bool) -> Void)?
     var onPasteImages: ((NSPasteboard) -> Bool)?
@@ -42,6 +44,7 @@ struct PromptEditor: NSViewRepresentable {
     func updateNSView(_ view: PromptScrollView, context: Context) {
         context.coordinator.parent = self
         view.editor.placeholder = placeholder
+        view.editor.setAccessibilityLabel(L10n.text("Image prompt"))
         view.editor.onDropFiles = onDropFiles
         view.editor.onDropHover = onDropHover
         view.editor.onPasteImages = onPasteImages
@@ -113,7 +116,7 @@ final class PromptScrollView: NSScrollView {
         editor.autoresizingMask = [.width]
         editor.isAutomaticQuoteSubstitutionEnabled = false
         editor.isAutomaticDashSubstitutionEnabled = false
-        editor.setAccessibilityLabel("图像提示词")
+        editor.setAccessibilityLabel(L10n.text("Image prompt"))
         documentView = editor
     }
 
@@ -153,7 +156,7 @@ final class PromptTextView: NSTextView {
     var onInputChange: (() -> Void)?
     var onFocusChange: ((Bool) -> Void)?
     var onSubmit: (() -> Void)?
-    var placeholder = "描述你想生成的画面…" { didSet { if oldValue != placeholder { needsDisplay = true } } }
+    var placeholder = L10n.text("Describe the image you want to create…") { didSet { if oldValue != placeholder { needsDisplay = true } } }
     var onDropFiles: (([URL]) -> Void)?
     var onDropHover: ((Bool) -> Void)?
     var onPasteImages: ((NSPasteboard) -> Bool)?

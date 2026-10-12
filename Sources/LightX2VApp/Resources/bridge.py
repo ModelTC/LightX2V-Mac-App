@@ -28,27 +28,27 @@ def load_request(path):
     for key in ("repository", "model", "config"):
         value = request.get(key)
         if not isinstance(value, str) or not Path(value).is_absolute():
-            raise ValueError(f"{key} 必须是绝对路径")
+            raise ValueError(f"{key} must be an absolute path")
     repo, model, config = (Path(request[k]) for k in ("repository", "model", "config"))
     if not (repo / "lightx2v/infer.py").is_file():
-        raise ValueError("LightX2V 路径无效：找不到 lightx2v/infer.py")
+        raise ValueError("Invalid LightX2V path: lightx2v/infer.py not found")
     for folder in ("transformer", "text_encoder", "vae", "scheduler", "processor"):
         if not (model / folder).is_dir():
-            raise ValueError(f"模型缺少目录或符号链接失效：{folder}")
+            raise ValueError(f"Model directory missing or symlink broken: {folder}")
     with (model / "model_index.json").open(encoding="utf-8") as f:
         metadata = json.load(f)
     if metadata.get("sample_sigmas") != TURBO_SIGMAS:
-        raise ValueError("请选择 Qwen-Image-2.1-Turbo 权重目录，模型的 8 步采样配置不匹配")
+        raise ValueError("Choose Qwen-Image-2.1-Turbo weights; the 8-step sampling configuration does not match")
     with config.open(encoding="utf-8") as f:
         cfg = json.load(f)
     if cfg.get("infer_steps") != TURBO_STEPS or cfg.get("sigmas") != TURBO_SIGMAS:
-        raise ValueError("请选择 qwen_image_21_turbo.json：Turbo 需要固定的 8 步采样配置")
+        raise ValueError("Choose qwen_image_21_turbo.json: Turbo requires fixed 8-step sampling")
     if cfg.get("attn_type") != "torch_sdpa_mps":
-        raise ValueError("请选择使用 torch_sdpa_mps 的 MPS 配置")
+        raise ValueError("Choose an MPS configuration using torch_sdpa_mps")
     if cfg.get("do_time_shift") is not False:
-        raise ValueError("Turbo 配置必须设置 do_time_shift=false")
+        raise ValueError("Turbo configuration requires do_time_shift=false")
     if cfg.get("enable_cfg") is not False or cfg.get("sample_guide_scale") != 1.0:
-        raise ValueError("Turbo 配置必须关闭 CFG 并设置 sample_guide_scale=1.0")
+        raise ValueError("Turbo configuration requires CFG disabled and sample_guide_scale=1.0")
     return request, cfg
 
 
@@ -71,11 +71,11 @@ def environment(request):
 def arguments(request, config_path):
     prompt = request.get("prompt", "")
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 20000:
-        raise ValueError("请输入 1–20000 字的提示词")
+        raise ValueError("Enter a prompt between 1 and 20000 characters.")
     resolution = request.get("resolution")
     if resolution is not None:
         if type(resolution) is not int or resolution not in (1024, 2048) or any(request.get(k) is not None for k in ("width", "height")):
-            raise ValueError("自适应模式请选择 1K 或 2K，无需指定宽高")
+            raise ValueError("Choose 1K or 2K for adaptive mode; width and height are not required.")
         size_args = ["--resolution", str(resolution)]
         if request.get("aspectRatio"):
             from prompt_enhancement import ratio_value
@@ -85,26 +85,26 @@ def arguments(request, config_path):
         for key in ("width", "height"):
             n = request.get(key)
             if type(n) is not int or not 256 <= n <= 2752 or n % 32:
-                raise ValueError("尺寸必须是 256–2752 之间的 32 的倍数")
+                raise ValueError("Width and height must be multiples of 32 between 256 and 2752.")
         size_args = ["--size", str(request["height"]), str(request["width"])]
     seed = request.get("seed")
     if type(seed) is not int or not 0 <= seed <= 4294967295:
-        raise ValueError("种子必须介于 0 和 4294967295 之间")
+        raise ValueError("Seed must be between 0 and 4294967295.")
     output = request.get("output", "")
     if not Path(output).is_absolute() or Path(output).suffix.lower() != ".png":
-        raise ValueError("输出必须为 PNG 绝对路径")
+        raise ValueError("Output must be an absolute PNG path")
     images = request.get("inputImages", [])
     if not isinstance(images, list) or len(images) > 8:
-        raise ValueError("最多可添加 8 张输入图片")
+        raise ValueError("You can add up to 8 images.")
     paths = []
     for image in images:
         if not isinstance(image, dict) or not isinstance(image.get("path"), str):
-            raise ValueError("输入图片记录无效")
+            raise ValueError("Invalid input image record")
         path = Path(image["path"])
         # Relative safe snapshot names avoid CLI comma splitting even when the
         # user's workspace itself contains commas, Unicode or spaces.
         if not path.is_absolute() or path.parent != Path(output).parent / "inputs" or "," in path.name:
-            raise ValueError("输入图片必须保存在当前任务的 inputs 目录")
+            raise ValueError("Input images must be stored in the current task inputs directory")
         from PIL import Image
         with Image.open(path) as reference:
             reference.verify()
@@ -126,9 +126,9 @@ def validate_image(path, expected_width=None, expected_height=None):
     with Image.open(path) as im:
         im.load()
         if im.format != "PNG" or any(n < 32 or n % 32 for n in im.size):
-            raise RuntimeError("生成结果不是有效的 PNG 图片或尺寸未对齐 32 像素")
+            raise RuntimeError("Generated image is not a valid PNG or its dimensions are not aligned to 32 pixels")
         if expected_width is not None and im.size != (expected_width, expected_height):
-            raise RuntimeError(f"输出尺寸不匹配：{im.size}，预期 {expected_width} × {expected_height}")
+            raise RuntimeError(f"Output dimensions do not match: {im.size}, expected {expected_width} × {expected_height}")
         return im.size
 
 
@@ -207,7 +207,7 @@ def run(request, cfg):
     # Validate original inputs before launching either model or modifying output.
     arguments(request, config_path)
     if Path(request["output"]).exists():
-        raise ValueError("输出文件已存在，请创建新的生成任务")
+        raise ValueError("Output file already exists; create a new generation task")
     started = time.monotonic()
     supervisor = ChildSupervisor()
     try:
@@ -218,7 +218,7 @@ def run(request, cfg):
         cmd = arguments(request, config_path)
         config_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
         (destination / "invocation.json").write_text(json.dumps({"argv": cmd, "cwd": str(destination)}, ensure_ascii=False, indent=2), encoding="utf-8")
-        emit("status", message="正在加载模型", phase="loading")
+        emit("status", message="Loading model", phase="loading")
         tail = []
         with (destination / "inference.log").open("w", encoding="utf-8") as log:
             child = supervisor.spawn(cmd, cwd=str(destination), env=environment(request), stdout=subprocess.PIPE,
@@ -233,20 +233,20 @@ def run(request, cfg):
                 if step:
                     emit("step", step=int(step[1]), total=int(step[2]))
                 elif "Run VAE Decoder" in line:
-                    emit("status", message="正在解码图片", phase="decoding")
+                    emit("status", message="Decoding image", phase="decoding")
                 elif "Run Encoders" in line:
-                    emit("status", message="正在编码提示词", phase="encoding")
+                    emit("status", message="Encoding prompt", phase="encoding")
             code = child.wait()
             supervisor.release(child)
         supervisor.check_cancelled()
         if code != 0:
-            raise RuntimeError(f"推理进程退出（{code}）\n" + "\n".join(tail[-12:]))
+            raise RuntimeError(f"Inference process exited ({code})\n" + "\n".join(tail[-12:]))
         width, height = validate_image(request["output"], request.get("width"), request.get("height"))
         emit("done", status="completed", image=request["output"], width=width, height=height, duration=time.monotonic() - started)
         return 0
     except BaseException:
         if supervisor.cancelled:
-            emit("done", status="cancelled", message="生成已停止", duration=time.monotonic() - started)
+            emit("done", status="cancelled", message="Generation stopped", duration=time.monotonic() - started)
             return 130
         raise
     finally:

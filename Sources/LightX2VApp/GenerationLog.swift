@@ -33,7 +33,7 @@ final class GenerationLog {
     private func report(_ error: Error) {
         guard !reportedError else { return }
         reportedError = true
-        let message = "无法保存任务日志：\(error.localizedDescription)"
+        let message = L10n.english("Unable to save task log: %@", [String(describing: error.localizedDescription)])
         DispatchQueue.main.async { [onError] in onError(message) }
     }
 
@@ -68,11 +68,11 @@ final class GenerationLog {
                 let count = try reader.seekToEnd()
                 try reader.seek(toOffset: count > UInt64(previewBytes) ? count - UInt64(previewBytes) : 0)
                 text = decodeTail(try reader.read(upToCount: previewBytes) ?? Data())
-            } catch { text = "无法读取日志：\(error.localizedDescription)" }
+            } catch { text = L10n.english("Unable to read log: %@", [String(describing: error.localizedDescription)]) }
         }
         if let error, !error.isEmpty, !text.contains(error) {
             text += (text.isEmpty ? "" : "\n\n") + error
         }
-        return text.isEmpty ? "没有可用日志。" : preview(text)
+        return text.isEmpty ? L10n.english("No log available.") : preview(text)
     }
 }

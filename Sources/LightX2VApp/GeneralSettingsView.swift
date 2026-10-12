@@ -3,6 +3,7 @@ import AppKit
 import LightX2VCore
 
 struct SettingsView: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     @EnvironmentObject var store: AppStore
     @FocusState private var headerFocused: Bool
     @State var settings: AppSettings
@@ -32,6 +33,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             VStack(spacing: 8) {
+                languageCard
                 workspaceCard
                 sourceCard
                 pythonCard
@@ -40,9 +42,9 @@ struct SettingsView: View {
             Rectangle().fill(Palette.line).frame(height: 1)
             HStack(spacing: 10) {
                 Spacer()
-                Button("关闭") { store.closeGeneralSettings() }.keyboardShortcut(.cancelAction)
+                Button(L10n.text("Close")) { store.closeGeneralSettings() }.keyboardShortcut(.cancelAction)
                     .disabled(store.isPreparingWorkspace)
-                Button("保存设置") { save() }
+                Button(L10n.text("Save settings")) { save() }
                     .buttonStyle(SettingsActionStyle(prominent: true))
                     .keyboardShortcut(.defaultAction).disabled(store.busy || !settings.hasGeneralPaths)
             }.padding(.horizontal, 24).frame(height: 60)
@@ -53,14 +55,16 @@ struct SettingsView: View {
             .defaultFocus($headerFocused, true, priority: .userInitiated)
             .onAppear { updateGuide() }
             .onChange(of: settings) { _, _ in saveError = nil }
-            .alert("设置操作失败", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
-                Button("关闭", role: .cancel) { saveError = nil }
+            .alert(L10n.text("Settings operation failed"), isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
+                Button(L10n.text("Close"), role: .cancel) { saveError = nil }
             } message: {
-                Text(saveError ?? "")
+                Text(L10n.render(saveError ?? ""))
             }
             // Resource transfers belong to this page. The post-save dependency
             // check belongs to the workspace and must survive its dismissal.
-            .onDisappear { if store.isPreparingResources { store.setupTask?.cancel() } }
+            .onDisappear {
+                if downloads.sourceRunning || downloads.runtimeRunning || installing || searching { store.setupTask?.cancel() }
+            }
             .sheet(isPresented: $showEnvironments, onDismiss: { if searching { store.setupTask?.cancel() } }) {
                 environmentPicker
             }
@@ -70,22 +74,40 @@ struct SettingsView: View {
         HStack(spacing: 12) {
             BrandMark(size: 30)
             VStack(alignment: .leading, spacing: 4) {
-                Text(store.needsGeneralSetup ? "欢迎使用 LightX2V" : "通用设置")
+                Text(store.needsGeneralSetup ? L10n.text("Welcome to LightX2V") : L10n.text("General settings"))
                     .font(.system(size: 18, weight: .semibold))
-                Text("共 4 项配置，填写一次即可。").font(.system(size: 11)).foregroundStyle(Palette.muted)
+                Text(L10n.text("5 settings · Change the language anytime")).font(.system(size: 11)).foregroundStyle(Palette.muted)
             }
             Spacer()
-            Text("已配置 \(setupProgress.completed.count) / 4")
+            Text(L10n.text("Configured %@ / 5", [String(describing: setupProgress.completed.count + 1)]))
                 .font(.system(size: 11, weight: .medium)).monospacedDigit().foregroundStyle(Palette.muted)
-                .accessibilityLabel("通用设置已配置 \(setupProgress.completed.count) 项，共 4 项")
+                .accessibilityLabel(L10n.text("General settings: %@ of 5 settings configured", [String(describing: setupProgress.completed.count + 1)]))
         }.padding(.horizontal, 24).frame(height: 64)
             .focusable().focusEffectDisabled().focused($headerFocused)
     }
 
+    private var languageCard: some View {
+        HStack(spacing: 8) {
+            SettingsStepBadge(number: 1)
+            SettingsCardTitle(title: L10n.text("Language"))
+            Spacer()
+            Image(systemName: "globe").font(.system(size: 13)).foregroundStyle(Palette.muted)
+            Picker(L10n.text("Language"), selection: $language.selection) {
+                ForEach(LanguagePreferences.options, id: \.code) { option in
+                    Text(option.code == "system" ? L10n.text("Follow system") : option.name).tag(option.code)
+                }
+            }.labelsHidden().pickerStyle(.menu).frame(width: 180)
+                .environment(\.layoutDirection, .leftToRight)
+                .accessibilityLabel(L10n.text("Language"))
+        }.padding(.horizontal, 12).frame(height: 48)
+            .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Palette.line, lineWidth: 1))
+    }
+
     private var workspaceCard: some View {
-        SettingsSection(step: .workspace, current: setupProgress.current, title: "LightX2V 工作目录",
+        SettingsSection(step: .workspace, current: setupProgress.current, title: L10n.text("LightX2V workspace"),
                         status: pathStatus(.workspace), details: workspaceMessage, hasActions: false) {
-            pathRow("LightX2V 工作目录", value: $settings.workingDirectory, directory: true, create: true)
+            pathRow(L10n.text("LightX2V workspace"), value: $settings.workingDirectory, directory: true, create: true)
         } actions: {
             EmptyView()
         }
@@ -93,37 +115,37 @@ struct SettingsView: View {
 
     private var workspaceMessage: String {
         if !store.generations.isEmpty && normalized(settings.workingDirectory) != store.settings.workingDirectory {
-            return "更换后从空历史开始，原有记录与作品留在旧目录。"
+            return L10n.text("Switching starts an empty history. Existing records and images stay in the previous workspace.")
         }
-        return "配置、历史、图片、日志和缓存都保存在这里。"
+        return L10n.text("Settings, history, images, logs and caches are stored here.")
     }
 
     private var sourceCard: some View {
-        SettingsSection(step: .source, current: setupProgress.current, title: "LightX2V 源码目录",
+        SettingsSection(step: .source, current: setupProgress.current, title: L10n.text("LightX2V source directory"),
                         status: pathStatus(.source),
-                        details: "点击自动下载源码，或选择手动下载",
+                        details: L10n.text("Download the source automatically or choose a manual download"),
                         command: SourceDownloader.manualCommand,
-                        linkTitle: "打开LightX2V GitHub", linkURL: URL(string: "https://github.com/ModelTC/LightX2V")) {
-            pathRow("LightX2V 源码目录", value: $settings.repository, directory: true,
-                    placeholder: "选择已有源码文件夹，或自动下载")
+                        linkTitle: L10n.text("Open LightX2V GitHub"), linkURL: URL(string: "https://github.com/ModelTC/LightX2V")) {
+            pathRow(L10n.text("LightX2V source directory"), value: $settings.repository, directory: true,
+                    placeholder: L10n.text("Choose an existing source directory or download it"))
         } actions: {
-            downloadButton("自动下载 LightX2V 源码", action: downloadSource)
+            downloadButton(L10n.text("Download LightX2V source automatically"), action: downloadSource)
             SettingsStatusLine(message: downloads.sourceMessage,
                                running: downloads.sourceRunning, cancel: { store.setupTask?.cancel() })
         }
     }
 
     private var pythonCard: some View {
-        SettingsSection(step: .python, current: setupProgress.current, title: "PyTorch 环境",
+        SettingsSection(step: .python, current: setupProgress.current, title: L10n.text("PyTorch environment"),
                         status: pythonStatus, statusColor: pythonMatchesSaved && store.environmentReady ? Palette.green : Palette.muted,
-                        details: "先搜索本机环境，若没有符合要求的环境，可以根据提示手动安装或选择自动安装") {
-            pathRow("PyTorch 环境", value: $settings.python, directory: false)
+                        details: L10n.text("Search local environments first. If none qualify, follow the manual instructions or install automatically.")) {
+            pathRow(L10n.text("PyTorch environment"), value: $settings.python, directory: false)
         } actions: {
-            Button { startSearch() } label: { Label("搜索本机环境", systemImage: "magnifyingglass") }
+            Button { startSearch() } label: { Label(L10n.text("Search local environments"), systemImage: "magnifyingglass").fixedSize() }
                 .disabled(store.busy || !hasWorkDirectory)
-            Button("检查环境") { store.checkEnvironment() }
+            Button(L10n.text("Check environment")) { store.checkEnvironment() }.fixedSize()
                 .disabled(store.busy || !pythonMatchesSaved)
-            SettingsStatusLine(message: pythonMatchesSaved && store.environmentMessage != "尚未检查运行环境" ? pythonMessage : "",
+            SettingsStatusLine(message: pythonMatchesSaved && store.environmentMessage != "Environment has not been checked" ? pythonMessage : "",
                                running: pythonMatchesSaved && store.isChecking,
                                color: pythonMatchesSaved && store.environmentReady ? Palette.green : Palette.muted)
         }
@@ -137,37 +159,37 @@ struct SettingsView: View {
 
     private var pythonStatus: String {
         guard setupProgress.completed.contains(.python) else { return pathStatus(.python) }
-        guard pythonMatchesSaved else { return "待检查" }
-        if store.isChecking { return "检查中" }
-        if store.environmentReady { return "检查通过" }
-        return store.environmentMessage == "尚未检查运行环境" ? "待检查" : "检查未通过"
+        guard pythonMatchesSaved else { return L10n.text("Not checked") }
+        if store.isChecking { return L10n.text("Checking") }
+        if store.environmentReady { return L10n.text("Check passed") }
+        return store.environmentMessage == "Environment has not been checked" ? L10n.text("Not checked") : L10n.text("Check failed")
     }
 
     private var pythonMessage: String {
-        pythonMatchesSaved ? store.environmentMessage : "保存设置后自动检查环境依赖与 MPS。"
+        pythonMatchesSaved ? store.environmentMessage : L10n.text("Saving settings checks dependencies and MPS automatically.")
     }
 
     private var runtimeCard: some View {
-        SettingsSection(step: .llama, current: setupProgress.current, title: "llama.cpp 二进制文件目录",
+        SettingsSection(step: .llama, current: setupProgress.current, title: L10n.text("llama.cpp binaries directory"),
                         status: pathStatus(.llama),
-                        details: "点击自动下载，或选择手动下载",
-                        linkTitle: "打开llama.cpp发布页面", linkURL: URL(string: "https://github.com/ggml-org/llama.cpp/releases")) {
-            pathRow("llama.cpp 二进制文件目录", value: $settings.promptEnhancement.runtimeDirectory, directory: true,
-                    placeholder: "选择二进制文件所在目录，或自动下载")
+                        details: L10n.text("Download automatically or choose a manual download"),
+                        linkTitle: L10n.text("Open llama.cpp releases"), linkURL: URL(string: "https://github.com/ggml-org/llama.cpp/releases")) {
+            pathRow(L10n.text("llama.cpp binaries directory"), value: $settings.promptEnhancement.runtimeDirectory, directory: true,
+                    placeholder: L10n.text("Choose the binaries directory or download it"))
         } actions: {
-            downloadButton("自动下载 llama.cpp", action: downloadRuntime)
+            downloadButton(L10n.text("Download llama.cpp automatically"), action: downloadRuntime)
             SettingsStatusLine(message: downloads.runtimeMessage,
                                running: downloads.runtimeRunning, cancel: { store.setupTask?.cancel() })
         }
     }
 
     private func downloadButton(_ label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Label("自动下载", systemImage: "arrow.down.to.line") }
+        Button(action: action) { Label(L10n.text("Download automatically"), systemImage: "arrow.down.to.line") }
             .disabled(store.busy || !hasWorkDirectory).accessibilityLabel(label)
     }
 
     private func pathStatus(_ step: GeneralSetupStep) -> String {
-        if setupProgress.completed.contains(step) { return "已配置" }
+        if setupProgress.completed.contains(step) { return L10n.text("Configured") }
         let value: String
         switch step {
         case .workspace: value = settings.workingDirectory
@@ -175,14 +197,14 @@ struct SettingsView: View {
         case .python: value = settings.python
         case .llama: value = settings.promptEnhancement.runtimeDirectory
         }
-        return normalized(value).isEmpty ? "未配置" : "路径无效"
+        return normalized(value).isEmpty ? L10n.text("Not configured") : L10n.text("Invalid path")
     }
 
     private func pathRow(_ title: String, value: Binding<String>, directory: Bool, create: Bool = false,
                          placeholder: String? = nil) -> some View {
         HStack(spacing: 0) {
             PathInputField(title: title,
-                           placeholder: placeholder ?? (directory ? "选择文件夹，或粘贴完整路径" : "选择环境中的 bin/python，或搜索本机环境"),
+                           placeholder: placeholder ?? (directory ? L10n.text("Choose a directory or paste its full path") : L10n.text("Choose bin/python or search local environments")),
                            symbol: nil, text: value,
                            onCommit: { updateGuide() })
             chooseButton(title, value: value, directory: directory, create: create)
@@ -190,7 +212,7 @@ struct SettingsView: View {
         }
         .background(Palette.surface, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line, lineWidth: 1).allowsHitTesting(false))
-        .disabled(store.busy)
+        .disabled(store.busy).environment(\.layoutDirection, .leftToRight)
     }
 
     private func chooseButton(_ title: String, value: Binding<String>, directory: Bool, create: Bool = false) -> some View {
@@ -198,7 +220,7 @@ struct SettingsView: View {
             let panel = NSOpenPanel()
             panel.canChooseDirectories = directory; panel.canChooseFiles = !directory
             panel.canCreateDirectories = create; panel.allowsMultipleSelection = false
-            panel.title = directory ? "选择\(title)" : "选择 PyTorch 环境中的 Python 可执行文件"
+            panel.title = directory ? L10n.text("Choose %@", [String(describing: title)]) : L10n.text("Choose the Python executable in your PyTorch environment")
             panel.directoryURL = value.wrappedValue.isEmpty ? FileManager.default.homeDirectoryForCurrentUser : URL(fileURLWithPath: normalized(value.wrappedValue)).deletingLastPathComponent()
             if panel.runModal() == .OK, let url = panel.url {
                 value.wrappedValue = url.path
@@ -209,7 +231,7 @@ struct SettingsView: View {
                 .foregroundStyle(Palette.muted).frame(width: 32, height: 32)
         }
             .buttonStyle(HoverButtonStyle(radius: 6))
-            .accessibilityLabel("浏览\(title)").help("浏览\(title)")
+            .accessibilityLabel(L10n.text("Browse %@", [String(describing: title)])).help(L10n.text("Browse %@", [String(describing: title)]))
             .disabled(store.busy)
     }
 
@@ -248,7 +270,7 @@ struct SettingsView: View {
 
     private func downloadSource() {
         guard !store.busy else { return }
-        saveError = nil; downloads.sourceMessage = "正在连接 GitHub…"; downloads.sourceRunning = true; store.isPreparingResources = true
+        saveError = nil; downloads.sourceMessage = L10n.english("Connecting to GitHub…"); downloads.sourceRunning = true; store.isPreparingResources = true
         let workspace = layout; let token = UUID(); operationID = token
         store.setupTask = Task {
             defer { downloads.sourceRunning = false; operationID = nil; store.finishSetupTask() }
@@ -258,10 +280,10 @@ struct SettingsView: View {
                 }
                 settings.repository = result.directory
                 updateGuide()
-                downloads.sourceMessage = "已就绪 · LightX2V \(SourceDownloader.version)"
+                downloads.sourceMessage = L10n.english("Ready · LightX2V %@", [String(describing: SourceDownloader.version)])
             } catch {
-                if Task.isCancelled { downloads.sourceMessage = "下载已取消，可随时重试。" }
-                else { downloads.sourceMessage = "下载失败：\(error.localizedDescription)" }
+                if Task.isCancelled { downloads.sourceMessage = L10n.english("Download cancelled. You can retry anytime.") }
+                else { downloads.sourceMessage = L10n.english("Download failed: %@", [String(describing: error.localizedDescription)]) }
             }
         }
     }
@@ -287,7 +309,7 @@ struct SettingsView: View {
 
     private func downloadRuntime() {
         guard !store.busy, hasWorkDirectory else { return }
-        saveError = nil; downloads.runtimeMessage = "正在连接 GitHub · b11564…"; downloads.runtimeRunning = true; store.isPreparingResources = true
+        saveError = nil; downloads.runtimeMessage = L10n.english("Connecting to GitHub · b11564…"); downloads.runtimeRunning = true; store.isPreparingResources = true
         let workspace = layout; let token = UUID(); operationID = token
         store.setupTask = Task {
             defer { downloads.runtimeRunning = false; operationID = nil; store.finishSetupTask() }
@@ -297,10 +319,10 @@ struct SettingsView: View {
                 }
                 settings.promptEnhancement.runtimeDirectory = result.directory
                 updateGuide()
-                downloads.runtimeMessage = "已就绪 · \(result.version)"
+                downloads.runtimeMessage = L10n.english("Ready · %@", [String(describing: result.version)])
             } catch {
-                if Task.isCancelled { downloads.runtimeMessage = "下载已取消，可随时重试。" }
-                else { downloads.runtimeMessage = "llama.cpp 下载失败：\(error.localizedDescription)" }
+                if Task.isCancelled { downloads.runtimeMessage = L10n.english("Download cancelled. You can retry anytime.") }
+                else { downloads.runtimeMessage = L10n.english("llama.cpp download failed: %@", [String(describing: error.localizedDescription)]) }
             }
         }
     }
@@ -312,7 +334,7 @@ struct SettingsView: View {
 
     private func startInstall() {
         guard !store.busy else { return }
-        guard let bundledRequirements else { searchError = "APP 中的依赖文件缺失，请重新下载 APP。"; return }
+        guard let bundledRequirements else { searchError = L10n.english("The APP dependency file is missing. Download the APP again."); return }
         showInstaller = true; installing = true; installError = nil; installCancelled = false
         installLines = []; installProgress = .init(.download); store.isPreparingResources = true
         let workspace = layout; let token = UUID(); operationID = token
@@ -333,7 +355,7 @@ struct SettingsView: View {
                         }
                     }
                 }
-                installProgress = .init(.completed, detail: "TorchLightX2V 已就绪，请重新点击“搜索本机环境”。")
+                installProgress = .init(.completed, detail: L10n.english("TorchLightX2V is ready. Search local environments again."))
             } catch {
                 if Task.isCancelled { installCancelled = true }
                 else { installError = error.localizedDescription }
@@ -360,6 +382,7 @@ final class GeneralSettingsDownloads: ObservableObject {
 }
 
 private struct SettingsSection<Content: View, Actions: View>: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     let step: GeneralSetupStep
     let current: GeneralSetupStep?
     let title: String
@@ -376,19 +399,16 @@ private struct SettingsSection<Content: View, Actions: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                Text(String(step.rawValue)).font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(current == step ? Palette.onButton : Palette.muted)
-                    .frame(width: 22, height: 22)
-                    .background(current == step ? Palette.ink : Palette.selection, in: Circle())
-                Text(title).font(.system(size: 15, weight: .semibold)).lineLimit(1)
+                SettingsStepBadge(number: step.rawValue + 1, active: current == step)
+                SettingsCardTitle(title: title)
                 Button { showsDetails = true } label: { Image(systemName: "info.circle").frame(width: 20, height: 20) }
                     .buttonStyle(HoverButtonStyle(radius: 4)).foregroundStyle(Palette.muted)
-                    .accessibilityLabel("查看\(title)详情")
-                    .help("查看说明和完整状态")
+                    .accessibilityLabel(L10n.text("View %@ details", [String(describing: title)]))
+                    .help(L10n.text("View instructions and full status"))
                     .popover(isPresented: $showsDetails) { SettingsDetails(title: title, message: details, command: command, linkTitle: linkTitle, linkURL: linkURL) }
                 Spacer(minLength: 4)
-                Text(status).font(.system(size: 11, weight: .medium)).foregroundStyle(statusColor)
-                    .frame(width: 80, alignment: .trailing).lineLimit(1)
+                Text(L10n.render(status)).font(.system(size: 11, weight: .medium)).foregroundStyle(statusColor)
+                    .frame(width: 112, alignment: .trailing).lineLimit(1)
             }.frame(height: 24)
             content.padding(.top, 4).frame(height: 48)
             if hasActions {
@@ -404,6 +424,7 @@ private struct SettingsSection<Content: View, Actions: View>: View {
 }
 
 private struct SettingsStatusLine: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     let message: String
     var running = false
     var color: Color = Palette.muted
@@ -414,9 +435,9 @@ private struct SettingsStatusLine: View {
                 if running { ProgressView().controlSize(.mini) }
                 else { Color.clear.accessibilityHidden(true) }
             }.frame(width: 14, height: 14)
-            Text(message).lineLimit(1).truncationMode(.middle).help(message)
+            Text(L10n.render(message)).lineLimit(1).truncationMode(.middle).help(L10n.render(message))
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Button("取消下载") { cancel?() }
+            Button(L10n.text("Cancel download")) { cancel?() }
                 .buttonStyle(HoverButtonStyle(radius: 4)).frame(width: 60)
                 .opacity(running && cancel != nil ? 1 : 0)
                 .disabled(!running || cancel == nil).accessibilityHidden(!running || cancel == nil)
@@ -426,6 +447,7 @@ private struct SettingsStatusLine: View {
 }
 
 private struct SettingsDetails: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     let title: String
     let message: String
     var command: String?
@@ -433,14 +455,14 @@ private struct SettingsDetails: View {
     var linkURL: URL?
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title).font(.system(size: 13, weight: .semibold))
+            Text(L10n.render(title)).font(.system(size: 13, weight: .semibold))
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text(message).font(.system(size: 11)).textSelection(.enabled)
+                    Text(L10n.render(message)).font(.system(size: 11)).textSelection(.enabled)
                     if let command {
-                        Text("手动下载 LightX2V " + SourceDownloader.version).font(.system(size: 11, weight: .medium))
+                        Text(L10n.text("Download LightX2V manually ") + SourceDownloader.version).font(.system(size: 11, weight: .medium))
                         ScrollView(.horizontal) {
-                            Text(command).font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
+                            Text(command).environment(\.layoutDirection, .leftToRight).font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
                                 .fixedSize(horizontal: true, vertical: true).padding(10)
                         }.frame(height: CGFloat(command.components(separatedBy: "\n").count) * 13 + 32)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -449,9 +471,30 @@ private struct SettingsDetails: View {
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }.frame(maxHeight: 220)
             if let linkTitle, let linkURL {
-                Link(destination: linkURL) { Text(linkTitle).underline().padding(.trailing, 6).padding(.vertical, 5) }
+                Link(destination: linkURL) { Text(L10n.render(linkTitle)).underline().padding(.trailing, 6).padding(.vertical, 5) }
                     .font(.system(size: 11)).buttonStyle(HoverButtonStyle(radius: 6))
             }
         }.padding(18).frame(width: 360).foregroundStyle(Palette.ink)
+    }
+}
+
+/// All five cards share the same typography and badge geometry.
+private struct SettingsCardTitle: View {
+    @ObservedObject private var language = LanguagePreferences.shared
+    let title: String
+    var body: some View {
+        Text(L10n.render(title)).font(.system(size: 15, weight: .semibold))
+            .lineLimit(1).fixedSize(horizontal: true, vertical: false).layoutPriority(1)
+    }
+}
+
+private struct SettingsStepBadge: View {
+    let number: Int
+    var active = false
+    var body: some View {
+        Text(String(number)).font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(active ? Palette.onButton : Palette.muted)
+            .frame(width: 22, height: 22)
+            .background(active ? Palette.ink : Palette.selection, in: Circle())
     }
 }

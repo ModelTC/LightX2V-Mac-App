@@ -10,16 +10,16 @@ public struct WorkspaceLayout: Sendable {
     public var temporary: URL { root.appendingPathComponent("tmp") }
 
     public static func validate(_ path: String) throws {
-        guard !path.isEmpty else { throw AppError.message("请先选择 LightX2V 工作目录。") }
+        guard !path.isEmpty else { throw AppError.message(L10n.english("Choose a LightX2V workspace first.")) }
         guard path.hasPrefix("/"), URL(fileURLWithPath: path).standardizedFileURL.path != "/" else {
-            throw AppError.message("工作目录须为绝对路径，请选择一个专用文件夹。")
+            throw AppError.message(L10n.english("Workspace must be an absolute path to a dedicated directory."))
         }
         let fm = FileManager.default
         var parent = URL(fileURLWithPath: path).standardizedFileURL
         while !fm.fileExists(atPath: parent.path), parent.path != "/" { parent.deleteLastPathComponent() }
         var directory: ObjCBool = false
         guard fm.fileExists(atPath: parent.path, isDirectory: &directory), directory.boolValue, fm.isWritableFile(atPath: parent.path) else {
-            throw AppError.message("工作目录不可写，请选择有写入权限的文件夹。")
+            throw AppError.message(L10n.english("Workspace is not writable. Choose a directory with write access."))
         }
     }
 
@@ -64,7 +64,7 @@ public enum WorkspaceStorage {
             try WorkspaceLayout.validate(location.workingDirectory)
             let state = WorkspaceLayout(location.workingDirectory).state
             guard FileManager.default.fileExists(atPath: state.path) else {
-                throw AppError.message("工作目录暂不可用：\(location.workingDirectory)。请连接磁盘后重新打开 APP，或选择新目录。")
+                throw AppError.message(L10n.english("Workspace configuration unavailable: %@. Reconnect the disk and reopen the APP, or choose another directory.", [String(describing: location.workingDirectory)]))
             }
             return state
         }
@@ -80,7 +80,7 @@ public enum WorkspaceStorage {
         data.settings.workingDirectory = layout.root.path
         let switching = previousState.standardizedFileURL.resolvingSymlinksInPath() != layout.state
         if switching, fm.fileExists(atPath: layout.state.path) {
-            throw AppError.message("这个目录已包含另一个工作区。请另选一个文件夹，以免覆盖其中的设置和作品。")
+            throw AppError.message(L10n.english("This directory contains another workspace. Choose a different directory to preserve its settings and images."))
         }
         var created: [URL] = []
         let originalState = switching ? nil : try? Data(contentsOf: previousState)
@@ -93,11 +93,11 @@ public enum WorkspaceStorage {
                     let repository = URL(fileURLWithPath: data.settings.repository).standardizedFileURL.resolvingSymlinksInPath()
                     if repository.deletingLastPathComponent() == old.code {
                         guard !layout.root.path.hasPrefix(repository.path + "/") else {
-                            throw AppError.message("工作目录不能放在要迁移的源码内部，请另选文件夹。")
+                            throw AppError.message(L10n.english("Workspace cannot be inside the source directory being moved. Choose another directory."))
                         }
                         let target = layout.code.appendingPathComponent(repository.lastPathComponent)
                         guard !fm.fileExists(atPath: target.path) else {
-                            throw AppError.message("新工作目录已有同名源码，请在设置中选择该源码，或另选工作目录。")
+                            throw AppError.message(L10n.english("New workspace already contains source with the same name. Select that source in settings or choose another workspace."))
                         }
                         // Track the destination before copying, so partial copies are removed on error.
                         created.append(target)
@@ -111,10 +111,10 @@ public enum WorkspaceStorage {
                     let installation = runtime.lastPathComponent == "bin" ? runtime.deletingLastPathComponent() : runtime
                     if installation.deletingLastPathComponent() == old.runtimes {
                         guard !layout.root.path.hasPrefix(installation.path + "/") else {
-                            throw AppError.message("工作目录不能放在要迁移的 llama.cpp 目录内部，请另选文件夹。")
+                            throw AppError.message(L10n.english("Workspace cannot be inside the llama.cpp directory being moved. Choose another directory."))
                         }
                         let target = layout.runtimes.appendingPathComponent(installation.lastPathComponent)
-                        guard !fm.fileExists(atPath: target.path) else { throw AppError.message("新工作目录已有同名 llama.cpp 目录，请另选目录。") }
+                        guard !fm.fileExists(atPath: target.path) else { throw AppError.message(L10n.english("New workspace already contains llama.cpp with the same name. Choose another directory.")) }
                         try fm.createDirectory(at: layout.runtimes, withIntermediateDirectories: true)
                         created.append(target)
                         try fm.copyItem(at: installation, to: target)

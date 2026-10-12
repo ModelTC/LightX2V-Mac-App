@@ -270,7 +270,7 @@ func rejects(_ body: () throws -> Void) throws {
         try Data("#!/bin/sh\nprintf '%s\\n' 'LIGHTX2V_ENV:{\"python\":\"3.11\",\"torch\":\"\",\"mps\":false,\"detail\":\"未安装 PyTorch\"}'\n".utf8).write(to: executable)
         let missing = try await PythonEnvironmentSearch.probe(executable.path, workspace: layout)
         try expect(!missing.mpsAvailable && missing.detail == "未安装 PyTorch", "missing torch result lost")
-        try expect(missing.diffusersVersion.isEmpty && missing.versionIssues.contains("缺少 diffusers"), "missing diffusers result lost")
+        try expect(missing.diffusersVersion.isEmpty && missing.versionIssues.contains("Missing diffusers"), "missing diffusers result lost")
         var timedOut = false
         do { _ = try await SetupCommand.run("/bin/sleep", arguments: ["5"], workspace: layout, timeout: 0.1) } catch { timedOut = true }
         try expect(timedOut, "timeout did not stop process")

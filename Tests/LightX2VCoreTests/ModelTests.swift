@@ -9,6 +9,7 @@ func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {
 @main
 struct CoreChecks {
     static func main() throws {
+        try localizationChecks()
         try invalidRequests()
         print("PASS invalid request validation")
         try requestRoundTrip()
@@ -30,7 +31,7 @@ struct CoreChecks {
         try inputImageChecks()
         try enhancementChecks()
         try turboModelChecks()
-        print("12 core checks passed")
+        print("13 core checks passed")
     }
     static func invalidRequests() throws {
         for (prompt, width, height, seed) in [("", 1024, 1024, Int64(42)), ("test", 720, 1280, 42),

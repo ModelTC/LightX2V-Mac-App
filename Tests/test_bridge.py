@@ -127,7 +127,7 @@ class BridgeTests(unittest.TestCase):
                 with self.assertRaises(ValueError): bridge.load_request(self.request_path)
         self.config.write_text(json.dumps(self.cfg))
         (self.model / 'model_index.json').write_text(json.dumps({'sample_sigmas':[1,.9375,.875,.75,.5,.25]}))
-        with self.assertRaisesRegex(ValueError, 'Turbo 权重目录'):
+        with self.assertRaisesRegex(ValueError, 'Turbo weights'):
             bridge.load_request(self.request_path)
 
     def test_all_1k_and_2k_presets_reach_cli_in_height_width_order(self):

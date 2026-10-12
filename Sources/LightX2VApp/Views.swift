@@ -4,6 +4,7 @@ import LightX2VCore
 import UniformTypeIdentifiers
 
 struct BrandMark: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     var size: CGFloat = 30
     var body: some View {
         ZStack {
@@ -14,6 +15,7 @@ struct BrandMark: View {
 }
 
 struct IconButton: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     let symbol: String
     let label: String
     var active = false
@@ -26,6 +28,7 @@ struct IconButton: View {
 }
 
 struct WorkspaceView: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     @EnvironmentObject var store: AppStore
     @State private var minimumWindowSize = ScreenFittingWindow.minimumContentSize
     var body: some View {
@@ -62,25 +65,26 @@ struct WorkspaceView: View {
         .sheet(isPresented: $store.showSettings) { SettingsView(settings: store.settings).environmentObject(store) }
 
         .alert("LightX2V APP", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
-            Button("好") { store.errorMessage = nil }
-        } message: { Text(store.errorMessage ?? "") }
+            Button(L10n.text("OK")) { store.errorMessage = nil }
+        } message: { Text(L10n.render(store.errorMessage ?? "")) }
     }
 
     private var toolbar: some View {
         HStack(spacing: 10) {
             HStack(spacing: 10) {
                 Image(systemName: "square.stack.3d.up").foregroundStyle(Palette.muted)
-                Text("工作空间").foregroundStyle(Palette.muted)
+                Text(L10n.text("Workspace")).foregroundStyle(Palette.muted)
                 Text("/").foregroundStyle(Palette.muted.opacity(0.5))
-                Text(store.selected == nil ? "新建创作" : "图像生成").fontWeight(.medium)
+                Text(store.selected == nil ? L10n.text("New creation") : L10n.text("Image generation")).fontWeight(.medium)
                 Spacer()
             }.frame(maxHeight: .infinity).background(WindowDragArea())
-            IconButton(symbol: "sidebar.right", label: "显示模型准备与生成参数", active: store.showInspector) { store.showInspector.toggle() }
+            IconButton(symbol: "sidebar.right", label: L10n.text("Show model preparation and generation settings"), active: store.showInspector) { store.showInspector.toggle() }
         }.font(.system(size: 12)).padding(.horizontal, 24).frame(height: 58).padding(.top, 28)
     }
 }
 
 struct SidebarView: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     @EnvironmentObject var store: AppStore
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -90,20 +94,20 @@ struct SidebarView: View {
                 Text("APP").font(.system(size: 9, weight: .semibold)).foregroundStyle(Palette.muted)
             }.padding(.horizontal, 22).padding(.top, 52).padding(.bottom, 27)
             Button { store.newGeneration() } label: {
-                HStack { Image(systemName: "square.and.pencil"); Text("新建创作"); Spacer(); Text("⌘ N").font(.system(size: 11)).foregroundStyle(Palette.muted) }
+                HStack { Image(systemName: "square.and.pencil"); Text(L10n.text("New creation")); Spacer(); Text("⌘ N").font(.system(size: 11)).foregroundStyle(Palette.muted) }
                     .font(.system(size: 13, weight: .medium)).padding(12)
                     .background(Palette.surface, in: RoundedRectangle(cornerRadius: 9))
                     .overlay(RoundedRectangle(cornerRadius: 9).stroke(Palette.line, lineWidth: 1))
             }.buttonStyle(HoverButtonStyle(radius: 9, border: true, dimsWhenDisabled: false)).disabled(store.isImportingImages).padding(.horizontal, 14)
-            Text("最近创作")
+            Text(L10n.text("Recent creations"))
                 .font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.muted)
                 .padding(.horizontal, 24).padding(.top, 24).padding(.bottom, 10)
             ScrollView {
                 LazyVStack(spacing: 5) {
                     if store.generations.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("灵感从这里开始").font(.system(size: 12))
-                            Text("生成的作品会保存在这里").font(.system(size: 11)).foregroundStyle(Palette.muted)
+                            Text(L10n.text("Inspiration starts here")).font(.system(size: 12))
+                            Text(L10n.text("Your generated images will appear here")).font(.system(size: 11)).foregroundStyle(Palette.muted)
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24).padding(.top, 18)
                     }
                     ForEach(store.recentCreations) { job in
@@ -115,7 +119,7 @@ struct SidebarView: View {
                                     Text(store.creationTitle(job)).font(.system(size: 12)).lineLimit(2).multilineTextAlignment(.leading)
                                     HStack(spacing: 5) {
                                         Text(job.createdAt, style: .date)
-                                        Text("· \(job.status.label)")
+                                        Text("· \(L10n.render(job.status.label))")
                                     }.font(.system(size: 9)).foregroundStyle(Palette.muted)
                                 }
                                 Spacer(minLength: 0)
@@ -124,13 +128,13 @@ struct SidebarView: View {
                         }.buttonStyle(HoverButtonStyle()).padding(.horizontal, 10)
                             .contextMenu {
                                 if job.status == .completed {
-                                    Button("复制") { store.copyImage(job) }
+                                    Button(L10n.text("Copy")) { store.copyImage(job) }
                                 }
-                                Button("在 Finder 中显示") { store.reveal(job) }
+                                Button(L10n.text("Show in Finder")) { store.reveal(job) }
                                 if job.status == .completed {
-                                    Button("引用") { store.reference(job) }.disabled(!store.canReferenceImages)
+                                    Button(L10n.text("Reference")) { store.reference(job) }.disabled(!store.canReferenceImages)
                                 }
-                                if job.status != .running { Button("从历史中移除（保留文件）") { store.removeFromHistory(job) } }
+                                if job.status != .running { Button(L10n.text("Remove from history (keep files)")) { store.removeFromHistory(job) } }
                             }
                     }
                 }.subtleScrollbars()
@@ -138,7 +142,7 @@ struct SidebarView: View {
             Spacer(minLength: 12)
             if store.isRunning, store.selectedID != store.activeID {
                 Button { store.selectedID = store.activeID } label: {
-                    HStack { ProgressView().controlSize(.mini); Text("返回正在生成的图片").font(.system(size: 11)); Spacer() }
+                    HStack { ProgressView().controlSize(.mini); Text(L10n.text("Return to the image being generated")).font(.system(size: 11)); Spacer() }
                         .padding(12).background(Palette.surface, in: RoundedRectangle(cornerRadius: 8))
                 }.buttonStyle(HoverButtonStyle()).padding(12)
             }
@@ -146,7 +150,7 @@ struct SidebarView: View {
             HStack(spacing: 10) {
                 ZStack { RoundedRectangle(cornerRadius: 8).fill(Palette.selection); Image(systemName: "desktopcomputer").font(.system(size: 15)) }.frame(width: 34, height: 34)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("本机推理").font(.system(size: 12, weight: .medium))
+                    Text(L10n.text("Local inference")).font(.system(size: 12, weight: .medium))
                     HStack(spacing: 4) {
                         Circle().fill(store.environmentReady ? Palette.readyIndicator : Palette.muted).frame(width: 5, height: 5)
                         Text(MacHardware.sidebarDescription)
@@ -154,19 +158,20 @@ struct SidebarView: View {
                     }
                 }
                 Spacer(minLength: 0)
-                IconButton(symbol: "gearshape", label: "打开设置") { store.showSettings = true }
+                IconButton(symbol: "gearshape", label: L10n.text("Open settings")) { store.showSettings = true }
             }.padding(.horizontal, 16).padding(.vertical, 20)
         }.background(Palette.sidebar)
     }
 }
 
 struct WelcomeView: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     @EnvironmentObject var store: AppStore
-    private let examples: [(String, String, String)] = [
-        ("sparkles", "一点奇想", "A capybara wearing a wizard hat, oil painting"),
-        ("camera.aperture", "一帧光影", "A quiet Japanese cafe on a rainy afternoon, soft window light, cinematic photography, warm tones"),
-        ("leaf", "一处自然", "A tiny glass house in a misty green forest, soft morning sunlight, architectural photography, peaceful atmosphere")
-    ]
+    private var examples: [(String, String, String)] { [
+        ("sparkles", L10n.text("A little wonder"), "A capybara wearing a wizard hat, oil painting"),
+        ("camera.aperture", L10n.text("A frame of light"), "A quiet Japanese cafe on a rainy afternoon, soft window light, cinematic photography, warm tones"),
+        ("leaf", L10n.text("A touch of nature"), "A tiny glass house in a misty green forest, soft morning sunlight, architectural photography, peaceful atmosphere")
+    ] }
     var body: some View {
         GeometryReader { geometry in
             ScrollView {
@@ -180,13 +185,13 @@ struct WelcomeView: View {
                             Image(systemName: "sparkles").font(.system(size: 34, weight: .ultraLight)).foregroundStyle(Palette.ink)
                         }.frame(width: 100, height: 118).shadow(color: .black.opacity(0.04), radius: 14, y: 7)
                     }.frame(height: 145).padding(.bottom, 28)
-                    Text("让想象，在此成像。").font(.system(size: 30, weight: .semibold))
-                    Text("用文字描绘灵感，交给你的 Mac 来实现。").font(.system(size: 13)).foregroundStyle(Palette.muted).padding(.top, 12)
+                    Text(L10n.text("Bring your imagination into view.")).font(.system(size: 30, weight: .semibold))
+                    Text(L10n.text("Describe your inspiration and let your Mac create it.")).font(.system(size: 13)).foregroundStyle(Palette.muted).padding(.top, 12)
                     HStack(spacing: 7) {
                         Image(systemName: "lock.shield").font(.system(size: 10))
-                        Text("本地运行")
+                        Text(L10n.text("Runs locally"))
                         if let model = store.selectedModel {
-                            Text("·"); Text(model.title); Text("·"); Text("\(QwenImage21Turbo.inferenceSteps) 步生成")
+                            Text("·"); Text(model.title); Text("·"); Text(L10n.text("%@-step generation", [String(describing: QwenImage21Turbo.inferenceSteps)]))
                         }
                     }.font(.system(size: 10)).foregroundStyle(Palette.muted).padding(.top, 16)
                     if store.selectedModel == .qwenImage21Turbo {
@@ -210,6 +215,7 @@ struct WelcomeView: View {
 }
 
 struct ComposerView: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     @EnvironmentObject var store: AppStore
     @State private var focused = false
     @State private var editorHeight = PromptScrollView.minimumHeight
@@ -222,7 +228,7 @@ struct ComposerView: View {
                 InputImageStrip(images: store.inputImages, remove: store.removeInputImage)
                     .disabled(store.isImportingImages)
                 if store.inputImages.count > 3 {
-                    Text("参考图较多时画面可能失真，当前模型建议使用 1–3 张。")
+                    Text(L10n.text("Too many references may distort the image. This model works best with 1–3 images."))
                         .font(.system(size: 10)).foregroundStyle(Palette.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -239,7 +245,7 @@ struct ComposerView: View {
     private var promptEditor: some View {
         PromptEditor(text: $store.prompt, height: $editorHeight, focused: $focused,
                      composing: $store.isComposingPrompt,
-                     placeholder: "描述你想生成的画面…",
+                     placeholder: L10n.text("Describe the image you want to create…"),
                      onDropFiles: store.canAddImages ? { store.addInputImages($0) } : nil,
                      onDropHover: { editorDropTargeted = $0 },
                      onPasteImages: store.receiveImagePaste,
@@ -252,7 +258,7 @@ struct ComposerView: View {
             attachmentButton
             ModelSelector()
             if store.selectedModel == nil {
-                Label("请先选择模型", systemImage: "arrow.left")
+                Label(L10n.text("Choose a model first"), systemImage: "arrow.left")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Palette.accent)
                     .lineLimit(1)
@@ -263,7 +269,7 @@ struct ComposerView: View {
                 Button { store.stop() } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "stop.fill").font(.system(size: 9))
-                        Text(store.isStopping ? "停止中" : "停止生成").font(.system(size: 11, weight: .medium))
+                        Text(store.isStopping ? L10n.text("Stopping") : L10n.text("Stop generation")).font(.system(size: 11, weight: .medium))
                     }.foregroundStyle(Palette.onButton).padding(.horizontal, 12).frame(height: 32)
                         .background(Palette.button, in: Capsule())
                 }.buttonStyle(HoverButtonStyle(radius: 16, bright: true)).disabled(store.isStopping)
@@ -274,7 +280,7 @@ struct ComposerView: View {
                         .background(store.canGenerate ? Palette.button : Palette.disabledFill, in: Circle())
                 }.buttonStyle(HoverButtonStyle(radius: 16, bright: true, dimsWhenDisabled: false))
                     .disabled(!store.canGenerate).keyboardShortcut(.return, modifiers: .command)
-                    .help("生成图片").accessibilityLabel("生成图片")
+                    .help(L10n.text("Generate image")).accessibilityLabel(L10n.text("Generate image"))
             }
         }.onHover { inside in if inside { NSCursor.arrow.set() } }
     }
@@ -286,12 +292,13 @@ struct ComposerView: View {
                 else { Image(systemName: "plus").font(.system(size: 16, weight: .regular)) }
             }.frame(width: 30, height: 30)
         }.buttonStyle(HoverButtonStyle(radius: 7)).disabled(!store.canAddImages)
-            .help("添加图片（建议 1–3 张，最多 8 张）").accessibilityLabel("添加图片")
+            .help(L10n.text("Add images (1–3 recommended, up to 8)")).accessibilityLabel(L10n.text("Add images"))
     }
 
 }
 
 struct ModelSelector: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     @EnvironmentObject var store: AppStore
 
     var body: some View {
@@ -308,7 +315,7 @@ struct ModelSelector: View {
                 }
             }
         } label: {
-            Label(store.selectedModel?.title ?? "选择模型", systemImage: "cube.transparent")
+            Label(store.selectedModel?.title ?? L10n.text("Choose model"), systemImage: "cube.transparent")
         }
         .font(.system(size: 11, weight: .medium))
         .menuStyle(.borderlessButton)
@@ -326,14 +333,15 @@ struct ModelSelector: View {
         .hoverSurface(radius: 7, border: false)
         .disabled(store.configurationBusy)
         .allowsHitTesting(!store.isImportingImages)
-        .help("选择生成模型")
-        .accessibilityLabel("选择模型")
-        .accessibilityValue(store.selectedModel?.title ?? "未选择")
+        .help(L10n.text("Choose generation model"))
+        .accessibilityLabel(L10n.text("Choose model"))
+        .accessibilityValue(store.selectedModel?.title ?? L10n.text("Not selected"))
     }
 }
 
 /// A quiet breathing outline draws attention without changing layout or hit areas.
 private struct ModelSelectionRing: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var bright = false
 
@@ -348,6 +356,7 @@ private struct ModelSelectionRing: View {
 }
 
 private struct PromptMessageView: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     let prompt: String
     let createdAt: Date
     let inputImages: [InputImage]
@@ -384,6 +393,7 @@ private struct PromptMessageView: View {
 }
 
 struct GenerationView: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     @EnvironmentObject var store: AppStore
     // Based on the whole window, so attaching a reference never rescales replies.
     var previewHeight: CGFloat = 500
@@ -408,6 +418,7 @@ struct GenerationView: View {
 }
 
 struct GenerationTurnView: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     @EnvironmentObject var store: AppStore
     let job: Generation
     let previewHeight: CGFloat
@@ -436,28 +447,28 @@ struct GenerationTurnView: View {
                             .contentShape(Rectangle())
                             .onDrag { NSItemProvider(object: URL(fileURLWithPath: job.request.output) as NSURL) }
                             .contextMenu {
-                                Button("复制") { store.copyImage(job) }
-                                Button("在 Finder 中显示") { store.reveal(job) }
-                                Button("引用") { store.reference(job) }.disabled(!store.canReferenceImages)
-                                Button("查看日志") { store.openLog(for: job) }
+                                Button(L10n.text("Copy")) { store.copyImage(job) }
+                                Button(L10n.text("Show in Finder")) { store.reveal(job) }
+                                Button(L10n.text("Reference")) { store.reference(job) }.disabled(!store.canReferenceImages)
+                                Button(L10n.text("View log")) { store.openLog(for: job) }
                             }
                         imageActions
                     } else if loadingImage {
-                        ProgressView("正在读取图片…").controlSize(.small).padding(.vertical, 30)
+                        ProgressView(L10n.text("Reading image…")).controlSize(.small).padding(.vertical, 30)
                     } else {
-                        failure("无法读取图片，请检查文件位置和访问权限。", symbol: "photo.badge.exclamationmark")
+                        failure(L10n.text("Unable to read image. Check its location and access permissions."), symbol: "photo.badge.exclamationmark")
                     }
                 } else if job.status == .running {
                     VStack(spacing: 17) {
                         ProgressView().controlSize(.regular).tint(Palette.ink)
-                        Text(store.phase).font(.system(size: 13, weight: .medium))
+                        Text(L10n.render(store.phase)).font(.system(size: 13, weight: .medium))
                         HStack(spacing: 5) {
                             ForEach(1...QwenImage21Turbo.inferenceSteps, id: \.self) { index in
                                 Capsule().fill(index < store.currentStep ? Palette.ink : index == store.currentStep ? Palette.ink.opacity(0.45) : Palette.line)
                                     .frame(width: 25, height: 4)
                             }
                         }
-                        Button("查看实时日志") { store.openLog(for: job) }.buttonStyle(HoverButtonStyle()).font(.system(size: 11)).foregroundStyle(Palette.muted)
+                        Button(L10n.text("View live log")) { store.openLog(for: job) }.buttonStyle(HoverButtonStyle()).font(.system(size: 11)).foregroundStyle(Palette.muted)
                     }.frame(maxWidth: .infinity).frame(height: 260)
                         .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 12))
                         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line, style: StrokeStyle(lineWidth: 1, dash: [5])))
@@ -491,15 +502,15 @@ struct GenerationTurnView: View {
                 }
                 HStack(spacing: 6) {
                     if job.status == .completed {
-                        Label("已生成", systemImage: "checkmark.circle.fill").foregroundStyle(Palette.green)
+                        Label(L10n.text("Generated"), systemImage: "checkmark.circle.fill").foregroundStyle(Palette.green)
                         Text("·").foregroundStyle(Palette.muted)
                     }
                     if job.status == .running {
                         TimelineView(.periodic(from: .now, by: 1)) { context in
-                            Text(store.elapsed(job, now: context.date)).monospacedDigit()
+                            Text(L10n.render(store.elapsed(job, now: context.date))).monospacedDigit()
                         }
                     } else {
-                        Text(store.elapsed(job)).monospacedDigit()
+                        Text(L10n.render(store.elapsed(job))).monospacedDigit()
                     }
                 }.font(.system(size: 10)).foregroundStyle(Palette.muted)
             }
@@ -512,7 +523,7 @@ struct GenerationTurnView: View {
             copyButton
             revealButton
             Button { store.openLog(for: job) } label: { Image(systemName: "terminal").frame(width: 30, height: 30) }
-                .help("查看本次生成日志").accessibilityLabel("查看本次生成日志")
+                .help(L10n.text("View this generation log")).accessibilityLabel(L10n.text("View this generation log"))
             referenceButton
         }
         .font(.system(size: 13)).foregroundStyle(Palette.muted)
@@ -521,70 +532,71 @@ struct GenerationTurnView: View {
 
     private var copyButton: some View {
         Button { store.copyImage(job) } label: {
-            Label("复制", systemImage: "doc.on.doc")
+            Label(L10n.text("Copy"), systemImage: "doc.on.doc")
                 .labelStyle(.iconOnly).frame(width: 30, height: 30)
-        }.help("复制图片").accessibilityLabel("复制")
+        }.help(L10n.text("Copy image")).accessibilityLabel(L10n.text("Copy"))
     }
 
     private var revealButton: some View {
         Button { store.reveal(job) } label: {
-            Label("在 Finder 中显示", systemImage: "folder")
+            Label(L10n.text("Show in Finder"), systemImage: "folder")
                 .labelStyle(.iconOnly).frame(width: 30, height: 30)
-        }.help("在 Finder 中显示图片文件").accessibilityLabel("在 Finder 中显示")
+        }.help(L10n.text("Show image file in Finder")).accessibilityLabel(L10n.text("Show in Finder"))
     }
 
     private var referenceButton: some View {
         Button { store.reference(job) } label: {
-            Label("引用", systemImage: "photo.badge.plus")
+            Label(L10n.text("Reference"), systemImage: "photo.badge.plus")
                 .labelStyle(.iconOnly).frame(width: 30, height: 30)
         }.disabled(!store.canReferenceImages)
-            .help(store.selectedModel == nil ? "请先选择模型" : "将图片加入当前输入框作为参考图")
-            .accessibilityLabel("引用")
+            .help(store.selectedModel == nil ? L10n.text("Choose a model first") : L10n.text("Add this image as a reference to the current prompt"))
+            .accessibilityLabel(L10n.text("Reference"))
     }
 
     private func failure(_ message: String, symbol: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label(job.status.label, systemImage: symbol).font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.accent)
-            Text(message).font(.system(size: 11)).foregroundStyle(Palette.muted).lineLimit(7).textSelection(.enabled)
+            Label(L10n.render(job.status.label), systemImage: symbol).font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.accent)
+            Text(L10n.render(message)).font(.system(size: 11)).foregroundStyle(Palette.muted).lineLimit(7).textSelection(.enabled)
             HStack(spacing: 18) {
-                Button("复用参数重试") { store.reuse(job) }.disabled(store.isImportingImages)
-                Button("查看日志") { store.openLog(for: job) }
-                Button("打开任务文件夹") { store.reveal(job) }
+                Button(L10n.text("Retry with these settings")) { store.reuse(job) }.disabled(store.isImportingImages)
+                Button(L10n.text("View log")) { store.openLog(for: job) }
+                Button(L10n.text("Open task directory")) { store.reveal(job) }
             }.buttonStyle(HoverButtonStyle()).font(.system(size: 11))
         }.padding(20).frame(maxWidth: .infinity, alignment: .leading).background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 12))
     }
 }
 
 struct LogPanel: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     @EnvironmentObject var store: AppStore
     var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
-                    Image(systemName: "terminal"); Text("运行日志").fontWeight(.medium)
+                    Image(systemName: "terminal"); Text(L10n.text("Run log")).fontWeight(.medium)
                     if !store.selectedCreation.isEmpty {
-                        Picker("生成任务", selection: Binding(get: { store.logGenerationID }, set: { id in
+                        Picker(L10n.text("Generation task"), selection: Binding(get: { store.logGenerationID }, set: { id in
                             if let id { store.selectLog(id) }
                         })) {
                             ForEach(Array(store.selectedCreation.enumerated()), id: \.element.id) { index, job in
-                                Text("第 \(index + 1) 次 · \(job.createdAt.formatted(date: .omitted, time: .standard)) · \(job.status.label)")
+                                Text(L10n.text("Run %@ · %@ · %@", [String(describing: index + 1), String(describing: job.createdAt.formatted(date: .omitted, time: .standard)), String(describing: L10n.render(job.status.label))]))
                                     .tag(Optional(job.id))
                             }
                         }.labelsHidden().pickerStyle(.menu).controlSize(.small).frame(maxWidth: 250)
-                            .accessibilityLabel("选择生成任务日志")
+                            .accessibilityLabel(L10n.text("Choose generation log"))
                     }
                     Spacer()
-                    if let job = store.logGeneration { IconButton(symbol: "folder", label: "在 Finder 中显示完整日志") { store.revealLog(job) } }
-                    IconButton(symbol: "xmark", label: "关闭日志") { store.showLogs = false }
+                    if let job = store.logGeneration { IconButton(symbol: "folder", label: L10n.text("Show complete log in Finder")) { store.revealLog(job) } }
+                    IconButton(symbol: "xmark", label: L10n.text("Close log")) { store.showLogs = false }
                 }.font(.system(size: 11))
-                Text("最近 90 KB · 每轮完整日志保存在各自任务目录").font(.system(size: 9)).foregroundStyle(Palette.muted)
+                Text(L10n.text("Latest 90 KB · Each run keeps its full log in its task directory")).font(.system(size: 9)).foregroundStyle(Palette.muted)
             }.padding(.horizontal, 18).padding(.vertical, 6)
             Divider()
             ScrollViewReader { proxy in
                 GeometryReader { viewport in
                     ScrollView([.vertical, .horizontal]) {
                         VStack(alignment: .leading, spacing: 0) {
-                            Text(store.logs.isEmpty ? "开始生成后，这里会显示真实的 LightX2V 运行日志。" : store.logs)
+                            Text(store.logs.isEmpty ? L10n.text("Real LightX2V logs will appear here when generation starts.") : store.logs)
                                 .font(.system(size: 10, design: .monospaced)).textSelection(.enabled).padding(12)
                             Color.clear.frame(width: 1, height: 1).id("log-end")
                         }.frame(minWidth: viewport.size.width, minHeight: viewport.size.height, alignment: .topLeading)
@@ -592,7 +604,7 @@ struct LogPanel: View {
                     }.onAppear { proxy.scrollTo("log-end", anchor: .bottomLeading) }
                         .onChange(of: store.logs) { _, _ in proxy.scrollTo("log-end", anchor: .bottomLeading) }
                 }
-            }
+            }.environment(\.layoutDirection, .leftToRight)
         }.background(Palette.surfaceSubtle).overlay(alignment: .top) { Rectangle().fill(Palette.line).frame(height: 1) }
     }
 }

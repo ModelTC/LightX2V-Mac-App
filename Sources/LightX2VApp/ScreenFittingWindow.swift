@@ -1,8 +1,10 @@
+import LightX2VCore
 import AppKit
 import SwiftUI
 
 /// Fits the main window once per launch, after macOS restores its saved frame.
 struct ScreenFittingWindow: NSViewRepresentable {
+    @ObservedObject private var language = LanguagePreferences.shared
     static var launchScreen: NSScreen? {
         NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
     }
@@ -67,6 +69,7 @@ struct ScreenFittingWindow: NSViewRepresentable {
 
 /// A transparent title-bar region: drag to move, double-click to fit the screen.
 struct WindowDragArea: NSViewRepresentable {
+    @ObservedObject private var language = LanguagePreferences.shared
     var isNativeTitleBar = false
 
     func makeNSView(context: Context) -> DragView {

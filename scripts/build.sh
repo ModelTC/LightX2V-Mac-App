@@ -17,11 +17,16 @@ for resource in bridge.py prompt_enhancement.py requirements.txt; do
 done
 cp "$BIN/LightX2VAPP_LightX2VCore.bundle/qwen_image_21_turbo.json" "$APP/Contents/Resources/qwen_image_21_turbo.json"
 
+for locale in "$BIN/LightX2VAPP_LightX2VCore.bundle/"*.lproj; do
+    cp -R "$locale" "$APP/Contents/Resources/"
+done
+
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-<key>CFBundleDevelopmentRegion</key><string>zh_CN</string>
+<key>CFBundleDevelopmentRegion</key><string>en</string>
+<key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string><string>fr</string><string>ja</string><string>ko</string><string>de</string><string>ru</string><string>es</string><string>pt</string><string>ar</string></array>
 <key>CFBundleDisplayName</key><string>LightX2V APP</string>
 <key>CFBundleName</key><string>LightX2V APP</string>
 <key>CFBundleIdentifier</key><string>app.lightx2v.desktop</string>

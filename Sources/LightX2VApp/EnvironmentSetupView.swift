@@ -3,6 +3,7 @@ import AppKit
 import LightX2VCore
 
 struct EnvironmentSearchView: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     let environments: [PythonEnvironment]
     let searching: Bool
     let cancelled: Bool
@@ -22,15 +23,15 @@ struct EnvironmentSearchView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("选择 PyTorch 环境").font(.system(size: 18, weight: .semibold))
-                    Text(searching ? "正在检测 \(checked) / \(total) 个环境…" : cancelled ? "搜索已停止" : compatibleCount == 0 ? "未找到符合要求的环境" : "找到 \(compatibleCount) 个符合要求的环境")
+                    Text(L10n.text("Choose PyTorch environment")).font(.system(size: 18, weight: .semibold))
+                    Text(searching ? L10n.text("Checking %@ / %@ environments…", [String(describing: checked), String(describing: total)]) : cancelled ? L10n.text("Search stopped") : compatibleCount == 0 ? L10n.text("No compatible environment found") : L10n.text("Found %@ compatible environments", [String(describing: compatibleCount)]))
                         .font(.system(size: 11)).foregroundStyle(Palette.muted)
                 }
                 Spacer()
                 if searching { ProgressView().controlSize(.small) }
             }
             VStack(alignment: .leading, spacing: 7) {
-                Text("依赖要求 · Apple Silicon MPS").font(.system(size: 10, weight: .medium))
+                Text(L10n.text("Required dependencies · Apple Silicon MPS")).font(.system(size: 10, weight: .medium))
                 Text(PyTorchRequirements.summary).font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true).lineSpacing(3)
             }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
@@ -38,37 +39,37 @@ struct EnvironmentSearchView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack(alignment: .top, spacing: 12) {
-                        installationChoice("手动安装", symbol: "doc.text", detail: "按简短说明准备环境，安装后重新搜索。",
-                                           button: "查看安装说明", action: onInstructions)
-                        installationChoice("在工作目录中自动安装", symbol: "arrow.down.circle", detail: "自动安装 Miniconda、Python 3.11 和推理依赖。",
-                                           button: "开始自动安装", issue: managedInstallIssue, action: onInstall)
+                        installationChoice(L10n.text("Manual installation"), symbol: "doc.text", detail: L10n.text("Follow the instructions, then search again."),
+                                           button: L10n.text("View installation instructions"), action: onInstructions)
+                        installationChoice(L10n.text("Install automatically in workspace"), symbol: "arrow.down.circle", detail: L10n.text("Installs Miniconda, Python 3.11 and inference dependencies."),
+                                           button: L10n.text("Start automatic installation"), issue: managedInstallIssue, action: onInstall)
                     }
                     if environments.isEmpty && searching {
-                        Text("正在查找 Conda、venv、pyenv 等常见环境…")
+                        Text(L10n.text("Looking for Conda, venv, pyenv and other environments…"))
                             .font(.system(size: 11)).foregroundStyle(Palette.muted)
                             .frame(maxWidth: .infinity).padding(.vertical, 65)
                     }
                     if !environments.isEmpty {
                         if compatibleCount == 0 {
-                            Text("已检测环境").font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.muted)
+                            Text(L10n.text("Detected environments")).font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.muted)
                         }
                         ForEach(environments) { environment in
                             Button { onSelect(environment) } label: { EnvironmentResultRow(environment: environment) }
                                 .buttonStyle(HoverButtonStyle(radius: 10, border: true, dimsWhenDisabled: false))
-                                .disabled(!environment.isCompatible).help(environment.compatibilityDetail)
+                                .disabled(!environment.isCompatible).help(L10n.render(environment.compatibilityDetail))
                         }
                     }
                 }.padding(.trailing, 2).subtleScrollbars()
             }.frame(height: 330)
             if let error {
-                Text(error).font(.system(size: 11)).foregroundStyle(Palette.accent)
-                    .lineLimit(3).help(error).textSelection(.enabled)
+                Text(L10n.render(error)).font(.system(size: 11)).foregroundStyle(Palette.accent)
+                    .lineLimit(3).help(L10n.render(error)).textSelection(.enabled)
             }
             HStack {
-                if searching { Button("停止搜索", action: onStop) }
-                else { Button { onSearch() } label: { Label("搜索本机环境", systemImage: "magnifyingglass") } }
+                if searching { Button(L10n.text("Stop search"), action: onStop) }
+                else { Button { onSearch() } label: { Label(L10n.text("Search local environments"), systemImage: "magnifyingglass") } }
                 Spacer()
-                Button("关闭", action: onClose).keyboardShortcut(.cancelAction)
+                Button(L10n.text("Close"), action: onClose).keyboardShortcut(.cancelAction)
             }
         }.padding(24).frame(width: 630).background(Palette.canvas).foregroundStyle(Palette.ink)
             .buttonStyle(SettingsActionStyle()).tint(Palette.ink)
@@ -78,12 +79,12 @@ struct EnvironmentSearchView: View {
                                     issue: String? = nil, action: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: 11) {
             Image(systemName: symbol).font(.system(size: 19, weight: .light)).foregroundStyle(Palette.muted)
-            Text(title).font(.system(size: 12, weight: .semibold))
-            Text(detail).font(.system(size: 11)).foregroundStyle(Palette.muted)
+            Text(L10n.render(title)).font(.system(size: 12, weight: .semibold))
+            Text(L10n.render(detail)).font(.system(size: 11)).foregroundStyle(Palette.muted)
                 .fixedSize(horizontal: false, vertical: true).lineSpacing(3).frame(minHeight: 34, alignment: .topLeading)
             Button(button, action: action).font(.system(size: 11)).disabled(issue != nil)
             if let issue {
-                Text(issue).font(.system(size: 10)).foregroundStyle(Palette.muted)
+                Text(L10n.render(issue)).font(.system(size: 10)).foregroundStyle(Palette.muted)
                     .fixedSize(horizontal: false, vertical: true).lineSpacing(3)
             }
         }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
@@ -93,6 +94,7 @@ struct EnvironmentSearchView: View {
 }
 
 private struct EnvironmentResultRow: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     let environment: PythonEnvironment
     var body: some View {
         HStack(alignment: .top, spacing: 11) {
@@ -100,21 +102,21 @@ private struct EnvironmentResultRow: View {
                 .foregroundStyle(environment.isCompatible ? Palette.green : Palette.muted).padding(.top, 2)
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text(environment.name).font(.system(size: 12, weight: .semibold))
+                    Text(environment.name == "System Python" ? L10n.text("System Python") : environment.name).font(.system(size: 12, weight: .semibold))
                     Spacer()
-                    Text(environment.isCompatible ? "可选择" : "不符合要求")
+                    Text(environment.isCompatible ? L10n.text("Available") : L10n.text("Incompatible"))
                         .font(.system(size: 10, weight: .medium)).foregroundStyle(environment.isCompatible ? Palette.green : Palette.muted)
                 }
-                Text(environment.executable).font(.system(size: 10, design: .monospaced))
+                Text(environment.executable).environment(\.layoutDirection, .leftToRight).font(.system(size: 10, design: .monospaced))
                     .lineLimit(2).foregroundStyle(Palette.muted).multilineTextAlignment(.leading)
                 LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], alignment: .leading, spacing: 5) {
                     ForEach(PyTorchRequirements.dependencies, id: \.name) { dependency in
                         let version = environment.version(of: dependency.name)
-                        Text("\(dependency.name)  \(version.isEmpty ? "未安装" : version)")
+                        Text("\(dependency.name)  \(version.isEmpty ? L10n.text("Not installed") : version)")
                             .font(.system(size: 10, design: .monospaced)).foregroundStyle(Palette.muted)
                     }
                 }
-                Text(environment.isCompatible ? "Python \(environment.pythonVersion) · MPS 可用" : environment.compatibilityDetail)
+                Text(environment.isCompatible ? L10n.text("Python %@ · MPS available", [String(describing: environment.pythonVersion)]) : environment.compatibilityDetail)
                     .font(.system(size: 10)).foregroundStyle(Palette.muted).lineLimit(3).multilineTextAlignment(.leading)
             }
         }.padding(13).frame(maxWidth: .infinity, alignment: .leading)
@@ -124,6 +126,7 @@ private struct EnvironmentResultRow: View {
 }
 
 struct EnvironmentInstallInstructions: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     let onClose: () -> Void
     private var commands: String {
         return """
@@ -142,27 +145,28 @@ struct EnvironmentInstallInstructions: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("手动安装依赖").font(.system(size: 18, weight: .semibold))
-            Text("准备好 Python 3.11 环境，在该环境中执行以下命令。")
+            Text(L10n.text("Install dependencies manually")).font(.system(size: 18, weight: .semibold))
+            Text(L10n.text("Prepare a Python 3.11 environment and run these commands in it."))
                 .font(.system(size: 12)).foregroundStyle(Palette.muted)
             ScrollView([.vertical, .horizontal]) {
-                Text(commands).font(.system(size: 11, design: .monospaced)).lineSpacing(7)
+                Text(commands).environment(\.layoutDirection, .leftToRight).font(.system(size: 11, design: .monospaced)).lineSpacing(7)
                     .textSelection(.enabled).fixedSize(horizontal: true, vertical: true).padding(14)
             }.frame(height: 240).background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10)).subtleScrollbars()
-            Text("安装完成后，返回 APP 点击“搜索本机环境”，选择该环境。")
+            Text(L10n.text("After installation, search local environments in the APP and select this environment."))
                 .font(.system(size: 11)).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true).lineSpacing(3)
             HStack {
                 Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(commands, forType: .string) } label: {
-                    Label("复制安装命令", systemImage: "doc.on.doc")
+                    Label(L10n.text("Copy installation commands"), systemImage: "doc.on.doc")
                 }
                 Spacer()
-                Button("关闭", action: onClose).keyboardShortcut(.cancelAction)
+                Button(L10n.text("Close"), action: onClose).keyboardShortcut(.cancelAction)
             }
         }.padding(24).frame(width: 610).background(Palette.canvas).foregroundStyle(Palette.ink).buttonStyle(SettingsActionStyle())
     }
 }
 
 struct EnvironmentInstallView: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     let workspace: WorkspaceLayout
     let progress: EnvironmentInstallProgress
     let lines: [String]
@@ -179,7 +183,7 @@ struct EnvironmentInstallView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 7) {
-                Text(completed ? "环境已就绪" : "安装 PyTorch 环境").font(.system(size: 18, weight: .semibold))
+                Text(completed ? L10n.text("Environment ready") : L10n.text("Install PyTorch environment")).font(.system(size: 18, weight: .semibold))
                 Text("TorchLightX2V · Python 3.11").font(.system(size: 11)).foregroundStyle(Palette.muted)
             }
             Text(PyTorchEnvironmentInstaller.environment(in: workspace).path)
@@ -190,7 +194,7 @@ struct EnvironmentInstallView: View {
                     HStack(spacing: 10) {
                         Image(systemName: stage.rawValue < progress.stage.rawValue ? "checkmark.circle.fill" : "circle")
                             .foregroundStyle(stage.rawValue < progress.stage.rawValue ? Palette.green : Palette.muted)
-                        Text(stage.title).font(.system(size: 12, weight: stage == progress.stage ? .medium : .regular))
+                        Text(L10n.render(stage.title)).font(.system(size: 12, weight: stage == progress.stage ? .medium : .regular))
                             .foregroundStyle(stage == progress.stage || stage.rawValue < progress.stage.rawValue ? Palette.ink : Palette.muted)
                         Spacer()
                         if stage == progress.stage && installing { ProgressView().controlSize(.mini) }
@@ -201,24 +205,24 @@ struct EnvironmentInstallView: View {
                 ProgressView(value: fraction).tint(Palette.ink)
             }
             if !progress.detail.isEmpty && (installing || completed) {
-                Text(progress.detail).font(.system(size: 11)).foregroundStyle(Palette.muted)
+                Text(L10n.render(progress.detail)).font(.system(size: 11)).foregroundStyle(Palette.muted)
             }
-            if cancelled { Text("安装已取消，可继续安装。").font(.system(size: 11)).foregroundStyle(Palette.muted) }
+            if cancelled { Text(L10n.text("Installation cancelled. You can resume.")).font(.system(size: 11)).foregroundStyle(Palette.muted) }
             if let error {
-                Text(error).font(.system(size: 11)).foregroundStyle(Palette.accent).lineLimit(5).help(error).textSelection(.enabled)
+                Text(L10n.render(error)).font(.system(size: 11)).foregroundStyle(Palette.accent).lineLimit(5).help(L10n.render(error)).textSelection(.enabled)
             }
             Button { showLogs.toggle() } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "chevron.right").rotationEffect(.degrees(showLogs ? 90 : 0))
-                    Text("安装日志")
+                    Text(L10n.text("Installation log"))
                 }.font(.system(size: 11)).foregroundStyle(Palette.muted)
                     .padding(.horizontal, 6).padding(.vertical, 5)
             }.buttonStyle(HoverButtonStyle(radius: 6))
-                .accessibilityValue(showLogs ? "已展开" : "已折叠")
+                .accessibilityValue(showLogs ? L10n.text("Expanded") : L10n.text("Collapsed"))
             if showLogs {
                 ScrollViewReader { scroll in
                     ScrollView {
-                        Text(lines.joined(separator: "\n")).font(.system(size: 10, design: .monospaced))
+                        Text(lines.joined(separator: "\n")).environment(\.layoutDirection, .leftToRight).font(.system(size: 10, design: .monospaced))
                             .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                         Color.clear.frame(height: 1).id("log-bottom")
                     }.padding(10).frame(height: 115).background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8))
@@ -228,13 +232,13 @@ struct EnvironmentInstallView: View {
                 }
             }
             HStack {
-                if installing { Button("取消安装", action: onCancel).keyboardShortcut(.cancelAction) }
-                else if !completed { Button("继续安装", action: onRetry) }
+                if installing { Button(L10n.text("Cancel installation"), action: onCancel).keyboardShortcut(.cancelAction) }
+                else if !completed { Button(L10n.text("Resume installation"), action: onRetry) }
                 Spacer()
                 if completed {
-                    Button("关闭", action: onClose)
-                    Button("搜索本机环境", action: onSearch).buttonStyle(SettingsActionStyle(prominent: true)).keyboardShortcut(.defaultAction)
-                } else if !installing { Button("关闭", action: onClose).keyboardShortcut(.cancelAction) }
+                    Button(L10n.text("Close"), action: onClose)
+                    Button(L10n.text("Search local environments"), action: onSearch).buttonStyle(SettingsActionStyle(prominent: true)).keyboardShortcut(.defaultAction)
+                } else if !installing { Button(L10n.text("Close"), action: onClose).keyboardShortcut(.cancelAction) }
             }
         }.padding(24).frame(width: 610).background(Palette.canvas).foregroundStyle(Palette.ink).buttonStyle(SettingsActionStyle())
     }

@@ -10,7 +10,7 @@ public struct ImageDimensions: Equatable {
     public let width: Int
     public let height: Int
     public static let allowedRange = 256...2752
-    public static let validationMessage = "宽高需为 256–2752 之间的 32 的倍数。"
+    public static let validationMessage = L10n.english("Width and height must be multiples of 32 between 256 and 2752.")
 
     public init(width: Int, height: Int) { self.width = width; self.height = height }
     public var isValid: Bool {

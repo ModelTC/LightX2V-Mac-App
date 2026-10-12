@@ -12,7 +12,7 @@ public enum ModelResource: String, CaseIterable, Identifiable, Sendable {
         }
     }
     public var title: String {
-        switch self { case .turbo: return "图像生成模型"; case .t2i: return "PE-T2I"; case .i2i: return "PE-I2I" }
+        switch self { case .turbo: return L10n.english("Image generation model"); case .t2i: return "PE-T2I"; case .i2i: return "PE-I2I" }
     }
     public var modelName: String { repository.components(separatedBy: "/").last! }
     public var url: URL { URL(string: "https://huggingface.co/" + repository)! }
@@ -23,12 +23,12 @@ public enum ModelResource: String, CaseIterable, Identifiable, Sendable {
     }
 
     public func validate(directory: String) throws {
-        guard directory.hasPrefix("/") else { throw AppError.message("请选择\(title)的本地文件夹。") }
+        guard directory.hasPrefix("/") else { throw AppError.message(L10n.english("Choose a local directory for %@.", [String(describing: title)])) }
         if self == .turbo {
             let root = URL(fileURLWithPath: directory)
             for name in ["model_index.json", "transformer", "text_encoder", "vae", "scheduler", "processor"] {
                 guard FileManager.default.fileExists(atPath: root.appendingPathComponent(name).path) else {
-                    throw AppError.message("图像生成模型缺少 \(name)，请选择完整的 Qwen-Image-2.1-Turbo 文件夹。")
+                    throw AppError.message(L10n.english("Image generation model is missing %@. Choose the complete Qwen-Image-2.1-Turbo directory.", [String(describing: name)]))
                 }
             }
         } else { _ = try Self.enhancementFiles(in: directory, mode: self == .t2i ? .t2i : .i2i) }
@@ -36,7 +36,7 @@ public enum ModelResource: String, CaseIterable, Identifiable, Sendable {
 
     public static func enhancementFiles(in directory: String, mode: PromptEnhancementMode) throws -> (model: String, system: String, projector: String?) {
         let title = mode == .t2i ? ModelResource.t2i.title : ModelResource.i2i.title
-        guard directory.hasPrefix("/") else { throw AppError.message("请选择 \(title) 模型的本地文件夹。") }
+        guard directory.hasPrefix("/") else { throw AppError.message(L10n.english("Choose a local directory for the %@ model.", [String(describing: title)])) }
         let root = URL(fileURLWithPath: directory)
         let fm = FileManager.default
         let files = (try? fm.contentsOfDirectory(atPath: directory)) ?? []
@@ -45,20 +45,20 @@ public enum ModelResource: String, CaseIterable, Identifiable, Sendable {
             let size = (try? fm.attributesOfItem(atPath: path.path)[.size] as? NSNumber)?.intValue ?? 0
             var isDirectory: ObjCBool = false
             guard fm.fileExists(atPath: path.path, isDirectory: &isDirectory), !isDirectory.boolValue, fm.isReadableFile(atPath: path.path), size > 0 else {
-                throw AppError.message("\(title) 模型文件夹缺少 \(name)，请下载完整仓库。")
+                throw AppError.message(L10n.english("%@ model directory is missing %@. Download the complete repository.", [String(describing: title), String(describing: name)]))
             }
             return path.path
         }
         func pick(_ preferred: [String], matches: (String) -> Bool, label: String) throws -> String {
             if let name = preferred.first(where: { files.contains($0) }) { return try required(name) }
             let candidates = files.filter(matches).sorted()
-            guard candidates.count == 1 else { throw AppError.message("\(title) 模型文件夹\(candidates.isEmpty ? "缺少" : "存在多个")\(label)，请选择对应的模型仓库文件夹。") }
+            guard candidates.count == 1 else { throw AppError.message(L10n.english("%@ model directory %@%@. Choose the corresponding model repository directory.", [String(describing: title), String(describing: candidates.isEmpty ? L10n.english("is missing ") : L10n.english("has multiple ")), String(describing: label)])) }
             return try required(candidates[0])
         }
         let name = "Qwen-Image-2.1-PE-" + (mode == .t2i ? "T2I" : "I2I")
-        let model = try pick([name + "-Q8_0.gguf"], matches: { $0.contains(name) && $0.hasSuffix("-Q8_0.gguf") && !$0.hasPrefix("mmproj") }, label: "GGUF 模型")
+        let model = try pick([name + "-Q8_0.gguf"], matches: { $0.contains(name) && $0.hasSuffix("-Q8_0.gguf") && !$0.hasPrefix("mmproj") }, label: L10n.english("GGUF model"))
         let system = try required("system_prompt.txt")
-        let projector = mode == .i2i ? try pick(["mmproj-" + name + "-BF16.gguf", "mmproj-" + name + "-F16.gguf"], matches: { $0.hasPrefix("mmproj") && $0.hasSuffix(".gguf") }, label: "视觉编码器 mmproj") : nil
+        let projector = mode == .i2i ? try pick(["mmproj-" + name + "-BF16.gguf", "mmproj-" + name + "-F16.gguf"], matches: { $0.hasPrefix("mmproj") && $0.hasSuffix(".gguf") }, label: L10n.english("Vision encoder mmproj")) : nil
         return (model, system, projector)
     }
 }
@@ -70,7 +70,7 @@ public enum HuggingFaceModelDownloader {
             let cli = parent.appendingPathComponent("hf")
             if FileManager.default.isExecutableFile(atPath: cli.path) { return cli.path }
         }
-        throw AppError.message("所选 Python 环境中找不到 hf。请先在该环境运行 python -m pip install -U huggingface_hub，或按下载指南自行下载。")
+        throw AppError.message(L10n.english("hf was not found in the selected Python environment. Run python -m pip install -U huggingface_hub there, or download manually using the guide."))
     }
 
     public static func download(_ resource: ModelResource, python: String, workspace: WorkspaceLayout,
@@ -97,7 +97,7 @@ public enum HuggingFaceModelDownloader {
                 if let progress = updates.consume(line) { onProgress(progress) }
             }
         try Task.checkCancellation()
-        guard result.status == 0 else { throw AppError.message("HF 下载失败，可重试或按下载指南自行下载。\n" + String(result.output.suffix(1500))) }
+        guard result.status == 0 else { throw AppError.message(L10n.english("HF download failed. Retry or download manually using the guide.\n") + String(result.output.suffix(1500))) }
         onProgress(updates.checking())
         try resource.validate(directory: destination.path)
         return destination.path

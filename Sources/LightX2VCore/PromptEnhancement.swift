@@ -3,7 +3,7 @@ import Darwin
 
 public enum PromptEnhancementMode: String, Codable {
     case t2i, i2i
-    public var title: String { self == .t2i ? "文字增强" : "参考图增强" }
+    public var title: String { self == .t2i ? L10n.english("Text enhancement") : L10n.english("Reference image enhancement") }
 }
 
 /// Explicit local resources, snapshotted per run; no implicit PATH or shell.
@@ -53,13 +53,13 @@ public struct PromptEnhancementSettings: Codable, Equatable {
         let resolved = try resolvedResources(for: mode)
         let binary = runtimeDirectory + (mode == .t2i ? "/llama-completion" : "/llama-mtmd-cli")
         let files = mode == .t2i
-            ? [("T2I 模型", resolved.t2iModel), ("T2I 系统提示词", resolved.t2iSystemPrompt)]
-            : [("I2I 模型", resolved.i2iModel), ("I2I 系统提示词", resolved.i2iSystemPrompt), ("视觉编码器", resolved.visionProjector)]
+            ? [(L10n.english("T2I model"), resolved.t2iModel), (L10n.english("T2I system prompt"), resolved.t2iSystemPrompt)]
+            : [(L10n.english("I2I model"), resolved.i2iModel), (L10n.english("I2I system prompt"), resolved.i2iSystemPrompt), (L10n.english("Vision encoder"), resolved.visionProjector)]
         let fm = FileManager.default
         var directory: ObjCBool = false
         guard binary.hasPrefix("/"), fm.fileExists(atPath: binary, isDirectory: &directory),
               !directory.boolValue, fm.isExecutableFile(atPath: binary) else {
-            throw AppError.message("Prompt 增强需要 \(mode == .t2i ? "llama-completion" : "llama-mtmd-cli")，请在通用设置中配置 llama.cpp 二进制文件目录。")
+            throw AppError.message(L10n.english("Prompt enhancement requires %@. Configure the llama.cpp binaries directory in general settings.", [String(describing: mode == .t2i ? "llama-completion" : "llama-mtmd-cli")]))
         }
         for (label, path) in files {
             var isDirectory: ObjCBool = false
@@ -67,7 +67,7 @@ public struct PromptEnhancementSettings: Codable, Equatable {
             guard path.hasPrefix("/"), fm.fileExists(atPath: path, isDirectory: &isDirectory),
                   !isDirectory.boolValue, fm.isReadableFile(atPath: path),
                   stat(path, &metadata) == 0, metadata.st_size > 0 else {
-                throw AppError.message("找不到\(label)，请在模型准备中选择完整的增强模型文件夹。")
+                throw AppError.message(L10n.english("Missing %@. Choose a complete enhancement model directory in model preparation.", [String(describing: label)]))
             }
         }
     }

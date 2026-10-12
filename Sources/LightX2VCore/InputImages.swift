@@ -18,10 +18,10 @@ public enum InputImages {
     public static let maximumCount = 8
 
     public static func validate(_ images: [InputImage]) throws {
-        guard images.count <= maximumCount else { throw AppError.message("最多可添加 \(maximumCount) 张图片。") }
+        guard images.count <= maximumCount else { throw AppError.message(L10n.english("You can add up to %@ images.", [String(describing: maximumCount)])) }
         for image in images {
             guard image.path.hasPrefix("/"), FileManager.default.isReadableFile(atPath: image.path) else {
-                throw AppError.message("无法读取图片「\(image.name)」，请重新添加。")
+                throw AppError.message(L10n.english("Unable to read image “%@”. Add it again.", [String(describing: image.name)]))
             }
         }
     }
@@ -37,7 +37,7 @@ public enum InputImages {
         }) : []
         do {
             for url in urls {
-                guard url.isFileURL else { throw AppError.message("请拖入本机中的图片文件。") }
+                guard url.isFileURL else { throw AppError.message(L10n.english("Drag a local image file here.")) }
                 let access = url.startAccessingSecurityScopedResource()
                 defer { if access { url.stopAccessingSecurityScopedResource() } }
                 let values = try url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
@@ -47,7 +47,7 @@ public enum InputImages {
                       let width = properties[kCGImagePropertyPixelWidth] as? Int,
                       let height = properties[kCGImagePropertyPixelHeight] as? Int,
                       width > 0, height > 0, width <= 40000, height <= 40000, width * height <= 40_000_000 else {
-                    throw AppError.message("无法添加「\(url.lastPathComponent)」。请选择不超过 100 MB、4000 万像素的图片。")
+                    throw AppError.message(L10n.english("Unable to add “%@”. Choose an image no larger than 100 MB or 40 megapixels.", [String(describing: url.lastPathComponent)]))
                 }
                 let options: [CFString: Any] = [
                     kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -57,20 +57,20 @@ public enum InputImages {
                 ]
                 guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary),
                       CGImageSourceGetStatus(source) == .statusComplete else {
-                    throw AppError.message("图片「\(url.lastPathComponent)」已损坏或无法解码。")
+                    throw AppError.message(L10n.english("Image “%@” is damaged or cannot be decoded.", [String(describing: url.lastPathComponent)]))
                 }
                 let data = NSMutableData()
                 guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else {
-                    throw AppError.message("无法读取图片。")
+                    throw AppError.message(L10n.english("Unable to read image."))
                 }
                 CGImageDestinationAddImage(destination, image, nil)
-                guard CGImageDestinationFinalize(destination) else { throw AppError.message("无法保存输入图片。") }
+                guard CGImageDestinationFinalize(destination) else { throw AppError.message(L10n.english("Unable to save input image.")) }
                 let bytes = data as Data
                 // Each deliberate reference has its own identity and removable copy.
                 let digest = deduplicate ? SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined() : UUID().uuidString
                 let path = directory.appendingPathComponent(digest + ".png")
                 if deduplicate && digests.contains(digest) { continue }
-                guard result.count < maximumCount else { throw AppError.message("最多可添加 \(maximumCount) 张图片。") }
+                guard result.count < maximumCount else { throw AppError.message(L10n.english("You can add up to %@ images.", [String(describing: maximumCount)])) }
                 if !fm.fileExists(atPath: path.path) {
                     try bytes.write(to: path, options: .atomic)
                     created.append(path)

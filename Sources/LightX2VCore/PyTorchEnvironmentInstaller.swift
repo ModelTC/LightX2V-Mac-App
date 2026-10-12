@@ -6,12 +6,12 @@ public enum EnvironmentInstallStage: Int, CaseIterable, Sendable {
     case download, miniconda, python, dependencies, verify, completed
     public var title: String {
         switch self {
-        case .download: return "下载 Miniconda"
-        case .miniconda: return "安装 Miniconda"
-        case .python: return "创建 Python 3.11 环境"
-        case .dependencies: return "安装推理依赖"
-        case .verify: return "检查版本与 MPS"
-        case .completed: return "安装完成"
+        case .download: return L10n.english("Download Miniconda")
+        case .miniconda: return L10n.english("Install Miniconda")
+        case .python: return L10n.english("Create Python 3.11 environment")
+        case .dependencies: return L10n.english("Install inference dependencies")
+        case .verify: return L10n.english("Check versions and MPS")
+        case .completed: return L10n.english("Installation complete")
         }
     }
 }
@@ -47,13 +47,13 @@ public enum PyTorchEnvironmentInstaller {
     public static func installationIssue(in workspace: WorkspaceLayout) -> String? {
         guard manager(in: workspace).path.rangeOfCharacter(from: .whitespacesAndNewlines) != nil else { return nil }
         // The official constructor installer explicitly rejects space-containing prefixes.
-        return "Miniconda 要求工作目录路径不含空格。请更换目录，或选择自行安装。"
+        return L10n.english("Miniconda requires a workspace path without spaces. Choose another directory or install manually.")
     }
 
     public static func prepareRequirements(_ source: URL, workspace: WorkspaceLayout) throws -> URL {
         try workspace.prepare()
         let data = try Data(contentsOf: source)
-        guard !data.isEmpty else { throw AppError.message("APP 中的依赖文件缺失，请重新下载 APP。") }
+        guard !data.isEmpty else { throw AppError.message(L10n.english("The APP dependency file is missing. Download the APP again.")) }
         let target = workspace.root.appendingPathComponent("environments/requirements.txt")
         try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: target, options: .atomic)
@@ -93,7 +93,7 @@ public enum PyTorchEnvironmentInstaller {
         }
         func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
             do {
-                guard (downloadTask.response as? HTTPURLResponse)?.statusCode == 200 else { throw AppError.message("Miniconda 下载失败，请检查网络后重试。") }
+                guard (downloadTask.response as? HTTPURLResponse)?.statusCode == 200 else { throw AppError.message(L10n.english("Miniconda download failed. Check your network and retry.")) }
                 try FileManager.default.moveItem(at: location, to: destination)
             } catch { fileError = error }
         }
@@ -133,15 +133,15 @@ public enum PyTorchEnvironmentInstaller {
             progress(.init(.download, logLine: message))
         }
         func quoted(_ value: String) -> String { "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'" }
-        try log("下载命令（等效）：curl -L \(quoted(distribution.url.absoluteString)) -o \(quoted(file.path))")
-        try log("下载地址：\(distribution.url.absoluteString)\n保存路径：\(file.path)\n预期 SHA-256：\(distribution.sha256)")
+        try log(L10n.english("Equivalent download command: curl -L %@ -o %@", [String(describing: quoted(distribution.url.absoluteString)), String(describing: quoted(file.path))]))
+        try log(L10n.english("Download URL: %@\nDestination: %@\nExpected SHA-256: %@", [String(describing: distribution.url.absoluteString), String(describing: file.path), String(describing: distribution.sha256)]))
         if FileManager.default.fileExists(atPath: file.path), try digest(file) == distribution.sha256 {
-            try log("复用已下载的 Miniconda，SHA-256 校验通过。")
+            try log(L10n.english("Reusing downloaded Miniconda; SHA-256 verified."))
             return file
         }
         var finished = false
-        defer { if !finished { try? log("Miniconda 下载未完成或校验失败。") } }
-        progress(.init(.download, detail: "正在连接 Miniconda 官方下载源…"))
+        defer { if !finished { try? log(L10n.english("Miniconda download incomplete or verification failed.")) } }
+        progress(.init(.download, detail: L10n.english("Connecting to the official Miniconda download server…")))
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 60; configuration.timeoutIntervalForResource = 1800
         let temporary = workspace.temporary.appendingPathComponent("miniconda-\(UUID().uuidString).download")
@@ -156,12 +156,12 @@ public enum PyTorchEnvironmentInstaller {
             }
         }, onCancel: { observer.cancel() })
         try Task.checkCancellation()
-        progress(.init(.download, detail: "正在校验下载文件…"))
-        try log("下载完成，正在校验 SHA-256…")
-        guard try digest(temporary) == distribution.sha256 else { throw AppError.message("Miniconda 文件校验失败，请重新下载。") }
+        progress(.init(.download, detail: L10n.english("Verifying download…")))
+        try log(L10n.english("Download complete; verifying SHA-256…"))
+        guard try digest(temporary) == distribution.sha256 else { throw AppError.message(L10n.english("Miniconda verification failed. Download it again.")) }
         if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
         try FileManager.default.moveItem(at: temporary, to: file)
-        try log("SHA-256 校验通过，Miniconda 已保存。")
+        try log(L10n.english("SHA-256 verified. Miniconda saved."))
         finished = true
         return file
     }
@@ -174,9 +174,9 @@ public enum PyTorchEnvironmentInstaller {
         let folder = workspace.root.appendingPathComponent("environments")
         try fm.createDirectory(at: folder, withIntermediateDirectories: true)
         let lock = open(folder.appendingPathComponent("install.lock").path, O_CREAT | O_RDWR, 0o600)
-        guard lock >= 0 else { throw AppError.message("工作目录无法写入，请重新选择。") }
+        guard lock >= 0 else { throw AppError.message(L10n.english("Workspace is not writable. Choose another directory.")) }
         defer { flock(lock, LOCK_UN); close(lock) }
-        guard flock(lock, LOCK_EX | LOCK_NB) == 0 else { throw AppError.message("这个工作目录中已有安装正在进行，请稍后重试。") }
+        guard flock(lock, LOCK_EX | LOCK_NB) == 0 else { throw AppError.message(L10n.english("An installation is already running in this workspace. Try again later.")) }
         let requirements = try prepareRequirements(source, workspace: workspace)
         let prefix = manager(in: workspace), env = environment(in: workspace), python = executable(in: workspace)
         let marker = folder.appendingPathComponent("miniconda-install.json")
@@ -186,10 +186,10 @@ public enum PyTorchEnvironmentInstaller {
             return saved?["prefix"] == target.path && saved?["installer"] == distribution.sha256
         }
         if fm.fileExists(atPath: prefix.path) && !owns(marker, prefix) {
-            throw AppError.message("Miniconda 目标目录已存在且不是 APP 创建的环境，请更换工作目录，以免覆盖原有内容。")
+            throw AppError.message(L10n.english("The Miniconda directory already exists and was not created by this APP. Choose another workspace to preserve it."))
         }
         if fm.fileExists(atPath: env.path) && !owns(envMarker, env) {
-            throw AppError.message("TorchLightX2V 目录已存在且不是 APP 创建的环境，请返回搜索或更换工作目录。")
+            throw AppError.message(L10n.english("The TorchLightX2V directory already exists and was not created by this APP. Search existing environments or choose another workspace."))
         }
         let operation = UUID().uuidString
         let logs = workspace.root.appendingPathComponent("logs/environment-\(operation)")
@@ -213,7 +213,7 @@ public enum PyTorchEnvironmentInstaller {
             }
             guard result.status == 0 else {
                 let tail = result.output.components(separatedBy: .newlines).filter { !$0.isEmpty }.suffix(3).joined(separator: "\n")
-                throw AppError.message("\(stage.title)失败（退出码 \(result.status)）。\n\(tail)\n日志：\(log.path)")
+                throw AppError.message(L10n.english("%@ failed (exit code %@).\n%@\nLog: %@", [String(describing: stage.title), String(describing: result.status), String(describing: tail), String(describing: log.path)]))
             }
         }
         let conda = prefix.appendingPathComponent("bin/conda")
@@ -236,10 +236,10 @@ public enum PyTorchEnvironmentInstaller {
                 progress(.init(.verify, logLine: line))
             }
         guard checked.pythonVersion.hasPrefix("3.11."), checked.isCompatible else {
-            throw AppError.message("安装后的环境未通过检查：\(checked.compatibilityDetail)\n请查看日志后重试：\(logs.path)")
+            throw AppError.message(L10n.english("Installed environment failed verification: %@\nReview the logs and retry: %@", [String(describing: checked.compatibilityDetail), String(describing: logs.path)]))
         }
         try Task.checkCancellation()
-        progress(.init(.completed, detail: "TorchLightX2V 已就绪，请重新点击“搜索本机环境”。"))
+        progress(.init(.completed, detail: L10n.english("TorchLightX2V is ready. Search local environments again.")))
         return checked
     }
 }

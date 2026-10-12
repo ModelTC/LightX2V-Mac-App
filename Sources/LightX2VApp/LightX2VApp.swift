@@ -1,8 +1,10 @@
+import LightX2VCore
 import SwiftUI
 import AppKit
 
 @main
 struct LightX2VApplication: App {
+    @ObservedObject private var language = LanguagePreferences.shared
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var store = AppStore()
 
@@ -12,6 +14,8 @@ struct LightX2VApplication: App {
                 if store.showStartupSettings { FirstLaunchSetupView() }
                 else { WorkspaceView() }
             }.environmentObject(store)
+                .environment(\.locale, language.locale)
+                .environment(\.layoutDirection, language.direction)
                 .preferredColorScheme(.light)
                 .background(ScreenFittingWindow())
                 .onAppear { delegate.store = store; NSApp.setActivationPolicy(.regular); NSApp.activate(ignoringOtherApps: true); store.start() }
@@ -20,17 +24,17 @@ struct LightX2VApplication: App {
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("新建创作") { store.newGeneration() }.keyboardShortcut("n", modifiers: .command).disabled(store.isImportingImages)
+                Button(L10n.text("New creation")) { store.newGeneration() }.keyboardShortcut("n", modifiers: .command).disabled(store.isImportingImages)
             }
             CommandGroup(replacing: .appSettings) {
-                Button("设置…") { store.showSettings = true }.keyboardShortcut(",", modifiers: .command)
+                Button(L10n.text("Settings…")) { store.showSettings = true }.keyboardShortcut(",", modifiers: .command)
             }
-            CommandMenu("生成") {
-                Button("生成图片") { store.generate() }.keyboardShortcut(.return, modifiers: .command).disabled(!store.canGenerate)
-                Button("停止生成") { store.stop() }.keyboardShortcut(".", modifiers: .command).disabled(!store.isRunning || store.isStopping)
+            CommandMenu(L10n.text("Generate")) {
+                Button(L10n.text("Generate image")) { store.generate() }.keyboardShortcut(.return, modifiers: .command).disabled(!store.canGenerate)
+                Button(L10n.text("Stop generation")) { store.stop() }.keyboardShortcut(".", modifiers: .command).disabled(!store.isRunning || store.isStopping)
                 Divider()
-                Button("显示运行日志") { store.showLogs.toggle() }.keyboardShortcut("l", modifiers: [.command, .shift])
-                Button("显示模型准备与生成参数") { store.showInspector.toggle() }.keyboardShortcut("i", modifiers: [.command, .option])
+                Button(L10n.text("Show run log")) { store.showLogs.toggle() }.keyboardShortcut("l", modifiers: [.command, .shift])
+                Button(L10n.text("Show model preparation and generation settings")) { store.showInspector.toggle() }.keyboardShortcut("i", modifiers: [.command, .option])
             }
         }
     }
@@ -44,9 +48,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let store, store.busy else { store?.persist(); store?.clearInputImages(); return .terminateNow }
         if store.isRunning {
             let alert = NSAlert()
-            alert.messageText = "停止生成并退出？"
-            alert.informativeText = "当前图片尚未生成完成。退出会停止推理并释放模型内存，已完成的作品会保留。"
-            alert.addButton(withTitle: "停止并退出"); alert.addButton(withTitle: "继续生成")
+            alert.messageText = L10n.text("Stop generation and quit?")
+            alert.informativeText = L10n.text("The current image is unfinished. Quitting stops inference and releases model memory. Completed images are preserved.")
+            alert.addButton(withTitle: L10n.text("Stop and quit")); alert.addButton(withTitle: L10n.text("Continue generating"))
             if alert.runModal() != .alertFirstButtonReturn { return .terminateCancel }
         }
         store.prepareToTerminate { sender.reply(toApplicationShouldTerminate: true) }

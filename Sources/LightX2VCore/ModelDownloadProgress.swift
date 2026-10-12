@@ -19,8 +19,8 @@ public struct ModelDownloadProgress: Equatable, Sendable {
     }
     public var fileCountText: String { totalFiles.map { "\(completedFiles)/\($0)" } ?? "—/—" }
     public var percentage: String {
-        if stage == .preparing { return "准备" }
-        if stage == .checking { return "检查" }
+        if stage == .preparing { return L10n.english("Preparing") }
+        if stage == .checking { return L10n.english("Verifying") }
         return fraction.map { "\(Int(($0 * 100).rounded(.down)))%" } ?? "—%"
     }
     public func speed(at date: Date) -> Double? {
@@ -32,14 +32,14 @@ public struct ModelDownloadProgress: Equatable, Sendable {
     }
     public func detail(at date: Date) -> String {
         switch stage {
-        case .preparing: return "获取模型信息…"
-        case .checking: return "下载结束，正在检查模型文件…"
+        case .preparing: return L10n.english("Fetching model information…")
+        case .checking: return L10n.english("Download finished; checking model files…")
         case .downloading:
-            let amount = Self.bytes(completedBytes) + (totalBytes.map { " / " + Self.bytes($0) } ?? " · 总大小待确认")
-            var text = "已完成文件 " + fileCountText + "\n文件重建 " + amount + "\n网络速度 " + speedText(at: date)
+            let amount = Self.bytes(completedBytes) + (totalBytes.map { " / " + Self.bytes($0) } ?? L10n.english(" · Total size pending"))
+            var text = L10n.english("Completed files ") + fileCountText + L10n.english("\nFile reconstruction ") + amount + L10n.english("\nNetwork speed ") + speedText(at: date)
             if let remainingSeconds, remainingSeconds.isFinite, remainingSeconds > 0, speed(at: date) != 0 {
                 let minutes = max(1, Int(ceil(remainingSeconds / 60)))
-                text += "\n预计剩余 " + (minutes < 60 ? "约 \(minutes) 分钟" : "约 \(minutes / 60) 小时 \(minutes % 60) 分钟")
+                text += L10n.english("\nEstimated remaining ") + (minutes < 60 ? L10n.english("About %@ min", [String(describing: minutes)]) : L10n.english("About %@ h %@ min", [String(describing: minutes / 60), String(describing: minutes % 60)]))
             }
             return text
         }

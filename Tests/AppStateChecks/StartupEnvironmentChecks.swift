@@ -105,7 +105,7 @@ print('LIGHTX2V_ENV:' + (root / 'versions.json').read_text(), flush=True)
     try check(store.isChecking && store.showStartupSettings && !store.environmentReady && store.selectedModel == nil,
               "complete settings automatically probe before model selection")
     try await waitUntil { !store.isChecking }
-    try check(!store.environmentReady && store.environmentMessage == "缺少 loguru" && store.showStartupSettings,
+    try check(!store.environmentReady && store.environmentMessage == "Missing loguru" && store.showStartupSettings,
               "failed startup stays in general settings with the missing dependency")
     try await snapshot("startup-missing-dependency", FirstLaunchSetupView().environmentObject(store), size: NSSize(width: 900, height: 840))
     let initialCount = count()
@@ -184,7 +184,7 @@ print('LIGHTX2V_ENV:' + (root / 'versions.json').read_text(), flush=True)
     reopened.showSettings = true
     try await reopened.applyGeneralSettings(reopened.settings)
     try await waitUntil { !reopened.isChecking }
-    try check(!reopened.showSettings && !reopened.showStartupSettings && !reopened.environmentReady && reopened.environmentMessage == "缺少 pydantic",
+    try check(!reopened.showSettings && !reopened.showStartupSettings && !reopened.environmentReady && reopened.environmentMessage == "Missing pydantic",
               "saved settings dismiss the page while a failed dependency check keeps the workspace unready")
     try write(minimum)
     reopened.showSettings = true

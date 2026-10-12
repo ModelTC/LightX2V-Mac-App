@@ -25,7 +25,7 @@ extension SetupChecks {
         try expect(binary.bytesPerSecond == 1_048_576 && binary.fileCountText == "26/32", "binary speed must not reset files")
         let final = parser.consume("Fetching 32 files: 100%|████| 32/32 [00:02<00:00, 1.8it/s]")!
         try expect(final.fraction == 1 && final.percentage == "100%", "completion must come from the HF file counter")
-        try expect(parser.checking().percentage == "检查", "model validation must follow transfer completion")
+        try expect(parser.checking().percentage == "Verifying", "model validation must follow transfer completion")
         var retry = ModelDownloadProgressParser(); _ = retry.begin(totalBytes: nil)
         let resumed = retry.consume("Fetching 5 files: 60%| | 3/5 [00:01]")!
         try expect(resumed.percentage == "60%", "cached completed files must contribute to progress")

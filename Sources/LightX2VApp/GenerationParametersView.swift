@@ -2,12 +2,13 @@ import SwiftUI
 import LightX2VCore
 
 struct GenerationParametersView: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     @EnvironmentObject var store: AppStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            label("画面尺寸")
-            Picker("分辨率", selection: Binding(
+            label(L10n.text("Image size"))
+            Picker(L10n.text("Resolution"), selection: Binding(
                 get: { store.generationSize.resolution },
                 set: { store.generationSize.selectResolution($0) }
             )) {
@@ -15,10 +16,10 @@ struct GenerationParametersView: View {
                 Text("2K").tag(ImageResolution.twoK)
             }
             .pickerStyle(.segmented).labelsHidden()
-            .accessibilityLabel("分辨率")
-            .help("切换 1K / 2K 并保留画面比例")
+            .accessibilityLabel(L10n.text("Resolution"))
+            .help(L10n.text("Switch between 1K and 2K while preserving aspect ratio"))
 
-            label("画面比例").padding(.top, 3)
+            label(L10n.text("Aspect ratio")).padding(.top, 3)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 6) {
                 AspectRatioButton(ratio: nil, resolution: store.generationSize.resolution,
                                   selected: store.generationSize.aspectRatio == nil,
@@ -34,30 +35,31 @@ struct GenerationParametersView: View {
             }
 
             HStack(spacing: 8) {
-                label("输出尺寸")
+                label(L10n.text("Output size"))
                 Spacer(minLength: 0)
                 if let dimensions = store.generationSize.dimensions {
                     Text("\(String(dimensions.width)) × \(String(dimensions.height))")
                         .font(.system(size: 12, weight: .medium, design: .monospaced))
                     Text("px").font(.system(size: 9)).foregroundStyle(Palette.muted)
                 } else {
-                    Text("自动确定").font(.system(size: 11, weight: .medium))
+                    Text(L10n.text("Automatic")).font(.system(size: 11, weight: .medium))
                 }
             }
             .padding(.horizontal, 10).padding(.vertical, 10)
             .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8))
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("输出尺寸")
-            .accessibilityValue(store.generationSize.dimensions.map { "宽 \($0.width)，高 \($0.height) 像素" } ?? "自动确定")
+            .accessibilityLabel(L10n.text("Output size"))
+            .accessibilityValue(store.generationSize.dimensions.map { L10n.text("Width %@, height %@ pixels", [String(describing: $0.width), String(describing: $0.height)]) } ?? L10n.text("Automatic"))
         }
     }
 
     private func label(_ title: String) -> some View {
-        Text(title).font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.muted)
+        Text(L10n.render(title)).font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.muted)
     }
 }
 
 private struct AspectRatioButton: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     let ratio: ImageAspectRatio?
     let resolution: ImageResolution
     let selected: Bool
@@ -68,12 +70,12 @@ private struct AspectRatioButton: View {
     @State private var hovered = false
     @FocusState private var focused: Bool
 
-    private var title: String { ratio?.rawValue ?? "自适应" }
+    private var title: String { ratio?.rawValue ?? L10n.text("Adaptive") }
     private var sizeDescription: String {
         guard let dimensions = ratio?.dimensions(at: resolution) else {
-            return enhancementEnabled ? "根据增强结果自动确定比例" : "由模型自动确定，无参考图时为 1:1"
+            return enhancementEnabled ? L10n.text("Determine aspect ratio from the enhanced prompt") : L10n.text("Chosen by the model; 1:1 without reference images")
         }
-        return "\(dimensions.width) × \(dimensions.height) 像素"
+        return L10n.text("%@ × %@ pixels", [String(describing: dimensions.width), String(describing: dimensions.height)])
     }
 
     var body: some View {
@@ -90,7 +92,7 @@ private struct AspectRatioButton: View {
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
                         .font(.system(size: 16, weight: .regular)).frame(height: 22)
                 }
-                Text(title).font(.system(size: 10, weight: selected ? .semibold : .medium)).monospacedDigit()
+                Text(L10n.render(title)).font(.system(size: 10, weight: selected ? .semibold : .medium)).monospacedDigit()
             }
             .foregroundStyle(selected ? Palette.accent : Palette.muted)
             .frame(maxWidth: .infinity).frame(height: 60)
@@ -113,7 +115,7 @@ private struct AspectRatioButton: View {
         .animation(InteractionMotion.hover(reduced: reduceMotion), value: hovered)
         .animation(InteractionMotion.hover(reduced: reduceMotion), value: selected)
         .help("\(resolution.rawValue) · \(sizeDescription)")
-        .accessibilityLabel("画面比例 \(title)")
+        .accessibilityLabel(L10n.text("Aspect ratio %@", [String(describing: title)]))
         .accessibilityValue(sizeDescription)
         .accessibilityAddTraits(selected ? [.isSelected] : [])
     }

@@ -3,6 +3,7 @@ import AppKit
 import LightX2VCore
 
 struct InspectorView: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     @EnvironmentObject var store: AppStore
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -16,12 +17,13 @@ struct InspectorView: View {
 }
 
 private struct InspectorSectionsView: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     @EnvironmentObject var store: AppStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            sectionHeader("模型准备", symbol: "cube.transparent", expanded: $store.modelPreparationExpanded)
+            sectionHeader(L10n.text("Model preparation"), symbol: "cube.transparent", expanded: $store.modelPreparationExpanded)
             separator
             ClippedReveal(progress: store.selectedModel != nil && store.modelPreparationExpanded ? 1 : 0) {
                 VStack(spacing: 0) {
@@ -29,7 +31,7 @@ private struct InspectorSectionsView: View {
                     separator
                 }
             }.animation(disclosureAnimation, value: store.modelPreparationExpanded)
-            sectionHeader("生成参数", symbol: "slider.horizontal.3", expanded: $store.generationParametersExpanded)
+            sectionHeader(L10n.text("Generation settings"), symbol: "slider.horizontal.3", expanded: $store.generationParametersExpanded)
             separator
             ClippedReveal(progress: store.selectedModel != nil && store.generationParametersExpanded ? 1 : 0) {
                 GenerationParametersView().padding(.top, 16).padding(.bottom, 23)
@@ -45,7 +47,7 @@ private struct InspectorSectionsView: View {
             expanded.wrappedValue.toggle()
         } label: {
             HStack(spacing: 10) {
-                Text(title).font(.system(size: 12, weight: .semibold))
+                Text(L10n.render(title)).font(.system(size: 12, weight: .semibold))
                 Spacer()
                 Image(systemName: symbol).foregroundStyle(Palette.muted)
                 Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
@@ -56,12 +58,13 @@ private struct InspectorSectionsView: View {
         }
         .buttonStyle(HoverButtonStyle(radius: 8))
         .disabled(store.selectedModel == nil)
-        .accessibilityLabel(title)
-        .accessibilityValue(expanded.wrappedValue ? "已展开" : "已收起")
+        .accessibilityLabel(L10n.render(title))
+        .accessibilityValue(expanded.wrappedValue ? L10n.text("Expanded") : L10n.text("Collapsed"))
     }
 }
 
 struct FirstLaunchSetupView: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     @EnvironmentObject var store: AppStore
     var body: some View {
         SettingsView(settings: store.settings)
@@ -77,6 +80,7 @@ struct FirstLaunchSetupView: View {
 }
 
 struct PathSettingField: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     let title: String
     @Binding var value: String
     let directory: Bool
@@ -84,10 +88,10 @@ struct PathSettingField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text(title).font(.system(size: 11, weight: .medium))
+            Text(L10n.render(title)).font(.system(size: 11, weight: .medium))
             HStack(spacing: 8) {
                 TextField(title, text: $value).font(.system(size: 11, design: .monospaced)).textFieldStyle(.roundedBorder)
-                    .accessibilityLabel(title).help(value)
+                    .accessibilityLabel(L10n.render(title)).help(value)
                     .dismissEditingOnOutsideClick()
                 Button {
                     let panel = NSOpenPanel()
@@ -96,8 +100,8 @@ struct PathSettingField: View {
                     panel.directoryURL = value.isEmpty ? FileManager.default.homeDirectoryForCurrentUser : URL(fileURLWithPath: value).deletingLastPathComponent()
                     if panel.runModal() == .OK, let url = panel.url { value = url.path }
                 } label: {
-                    Text("选择…")
-                }.font(.system(size: 11)).help("选择\(title)").accessibilityLabel("选择\(title)")
+                    Text(L10n.text("Choose…"))
+                }.font(.system(size: 11)).help(L10n.text("Choose %@", [String(describing: title)])).accessibilityLabel(L10n.text("Choose %@", [String(describing: title)]))
             }
         }
     }

@@ -33,13 +33,13 @@ extension SetupChecks {
         try expect(env.isCompatible, "exact minimums should qualify")
         for package in present {
             env.packageVersions[package] = ""
-            try expect(!env.isCompatible && env.versionIssues == ["缺少 \(package)"], "missing \(package) was accepted or not explained")
+            try expect(!env.isCompatible && env.versionIssues == ["Missing \(package)"], "missing \(package) was accepted or not explained")
             env.packageVersions[package] = "any-installed-version"
             try expect(env.isCompatible, "presence-only dependency \(package) incorrectly requires a version")
         }
         for version in ["", "0.40.99", "0.41.0rc1", "0.41.0.dev1"] {
             env.diffusersVersion = version
-            let issue = version.isEmpty ? "缺少 diffusers" : "diffusers \(version)，需要 ≥ 0.41.0"
+            let issue = version.isEmpty ? "Missing diffusers" : "diffusers \(version); requires ≥ 0.41.0"
             try expect(!env.isCompatible && env.compatibilityDetail.contains(issue), "missing or old diffusers was accepted or not explained: \(version)")
         }
         for version in ["0.41.0", "0.41.1", "0.42.0"] {
@@ -50,7 +50,7 @@ extension SetupChecks {
         env.transformersVersion = "4.57.3"
         try expect(!env.isCompatible && env.compatibilityDetail.contains("transformers 4.57.3"), "old transformers was accepted or not explained")
         env.transformersVersion = "5.20.0"; env.torchaudioVersion = ""
-        try expect(!env.isCompatible && env.versionIssues.contains("缺少 torchaudio"), "missing torchaudio was accepted")
+        try expect(!env.isCompatible && env.versionIssues.contains("Missing torchaudio"), "missing torchaudio was accepted")
         env.torchaudioVersion = "2.11.0"; env.mpsAvailable = false
         try expect(!env.isCompatible, "MPS unavailable was accepted")
         env.mpsAvailable = true; env.architecture = "x86_64"

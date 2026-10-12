@@ -50,8 +50,8 @@ final class AppStore: ObservableObject {
     @Published var isPreparingResources = false
     var setupTask: Task<Void, Never>?
     @Published var environmentReady = false
-    @Published var environmentMessage = "尚未检查运行环境"
-    @Published var phase = "准备就绪"
+    @Published var environmentMessage = L10n.english("Environment has not been checked")
+    @Published var phase = L10n.english("Ready")
     @Published var currentStep = 0
     @Published var activeID: UUID?
     @Published var logs = ""
@@ -176,7 +176,7 @@ final class AppStore: ObservableObject {
             if fm.fileExists(atPath: stateURL.path) { data = try JSONFile.read(WorkspaceData.self, from: stateURL) }
         } catch {
             canPersist = false
-            readError = "无法读取原工作区，原文件已保留。\(error.localizedDescription)"
+            readError = L10n.english("Unable to read the previous workspace. Original files were preserved. %@", [String(describing: error.localizedDescription)])
         }
         data.recoverInterrupted()
         // Existing complete HF folders can populate the inline directory controls.
@@ -203,7 +203,7 @@ final class AppStore: ObservableObject {
     func persist() {
         guard canPersist, !isPreparingWorkspace, !settings.workingDirectory.isEmpty else { return }
         do { try JSONFile.write(WorkspaceData(settings: settings, generations: generations, hasCompletedGeneralSetup: hasCompletedGeneralSetup), to: stateURL) }
-        catch { errorMessage = "无法保存应用状态：\(error.localizedDescription)" }
+        catch { errorMessage = L10n.english("Unable to save application state: %@", [String(describing: error.localizedDescription)]) }
     }
 
     func newGeneration() {
@@ -219,7 +219,7 @@ final class AppStore: ObservableObject {
         panel.allowedContentTypes = [.image]
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
-        panel.prompt = "添加图片"
+        panel.prompt = L10n.english("Add images")
         panel.begin { [weak self] response in
             if response == .OK { self?.addInputImages(panel.urls) }
         }
@@ -239,7 +239,7 @@ final class AppStore: ObservableObject {
                     provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
                         let url = (item as? URL) ?? (item as? Data).flatMap { URL(dataRepresentation: $0, relativeTo: nil) }
                         if let url, url.isFileURL { continuation.resume(returning: url) }
-                        else { continuation.resume(throwing: AppError.message("无法读取拖入的图片，请从 Finder 拖入图片文件。")) }
+                        else { continuation.resume(throwing: AppError.message(L10n.english("Unable to read dropped image. Drag an image file from Finder."))) }
                     }
                 }
                 urls.append(url)
@@ -254,12 +254,12 @@ final class AppStore: ObservableObject {
     func receiveImagePaste(_ pasteboard: NSPasteboard) -> Bool {
         guard ImagePasteboard.containsImages(pasteboard) else { return false }
         guard canReferenceImages else {
-            if selectedModel == nil { errorMessage = "请先选择模型，再添加参考图。" }
+            if selectedModel == nil { errorMessage = L10n.english("Choose a model before adding reference images.") }
             return true
         }
         do {
             let sources = try ImagePasteboard.read(pasteboard)
-            guard !sources.isEmpty else { throw AppError.message("无法读取剪贴板图片，请重新复制。") }
+            guard !sources.isEmpty else { throw AppError.message(L10n.english("Unable to read clipboard image. Copy it again.")) }
             pendingImageImports.append(sources)
             importNextImageBatch()
         } catch { errorMessage = error.localizedDescription }
@@ -352,7 +352,7 @@ final class AppStore: ObservableObject {
     }
 
     func applyGeneralSettings(_ value: AppSettings) async throws {
-        guard !busy else { throw AppError.message("请等待当前任务结束后再保存设置。") }
+        guard !busy else { throw AppError.message(L10n.english("Wait for the current task to finish before saving settings.")) }
         var updated = settings
         func path(_ value: String) -> String {
             (value.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath
@@ -444,7 +444,7 @@ final class AppStore: ObservableObject {
         guard !busy, !needsGeneralSetup else { return }
         let downloadID = UUID(); modelDownloadID = downloadID
         activeModelDownload = resource; isPreparingResources = true
-        modelDownloadErrors.remove(resource); modelDownloadMessages[resource] = "获取模型信息…"
+        modelDownloadErrors.remove(resource); modelDownloadMessages[resource] = L10n.english("Fetching model information…")
         modelDownloadProgress[resource] = ModelDownloadProgress()
         let python = settings.python; let layout = WorkspaceLayout(settings.workingDirectory)
         setupTask = Task { [weak self] in
@@ -470,11 +470,11 @@ final class AppStore: ObservableObject {
                 }
                 try Task.checkCancellation()
                 switch resource { case .turbo: self.modelDirectory = path; case .t2i: self.t2iDirectory = path; case .i2i: self.i2iDirectory = path }
-                self.modelDownloadMessages[resource] = "下载完成 · 已自动保存"
+                self.modelDownloadMessages[resource] = L10n.english("Download complete · Saved automatically")
                 self.refreshModelResources()
                 self.refreshEnhancementResources()
             } catch {
-                if Task.isCancelled { self.modelDownloadMessages[resource] = "已停止 · 再次下载可继续" }
+                if Task.isCancelled { self.modelDownloadMessages[resource] = L10n.english("Stopped · Download again to resume") }
                 else { self.modelDownloadErrors.insert(resource); self.modelDownloadMessages[resource] = error.localizedDescription }
             }
         }
@@ -490,12 +490,13 @@ final class AppStore: ObservableObject {
     func start() {
         guard !didStart else { return }
         didStart = true
-        if needsGeneralSetup { environmentMessage = "请先完成通用设置。"; return }
+        if needsGeneralSetup { environmentMessage = L10n.english("Complete general settings first."); return }
         checkEnvironment(enterWorkspaceOnSuccess: true)
     }
 
     func closeGeneralSettings() {
-        setupTask?.cancel()
+        // A model transfer belongs to the main workspace, not the settings page.
+        if activeModelDownload == nil { setupTask?.cancel() }
         showStartupSettings = false; showSettings = false
     }
 
@@ -503,14 +504,14 @@ final class AppStore: ObservableObject {
         guard !busy, terminationCompletion == nil else { return }
         guard !needsGeneralSetup else {
             environmentReady = false
-            environmentMessage = "请先完成通用设置。"
+            environmentMessage = L10n.english("Complete general settings first.")
             return
         }
         do {
             try settings.validateGeneralPaths()
             let layout = WorkspaceLayout(settings.workingDirectory)
             try layout.prepare()
-            isChecking = true; environmentReady = false; environmentMessage = "正在检查环境依赖与 MPS…"
+            isChecking = true; environmentReady = false; environmentMessage = L10n.english("Checking dependencies and MPS…")
             let python = settings.python
             setupTask = Task {
                 defer { isChecking = false; finishSetupTask() }
@@ -524,7 +525,7 @@ final class AppStore: ObservableObject {
                     if environmentReady && enterWorkspaceOnSuccess { showStartupSettings = false }
                 } catch {
                     environmentReady = false
-                    environmentMessage = Task.isCancelled ? "环境检查已取消。" : error.localizedDescription
+                    environmentMessage = Task.isCancelled ? L10n.english("Environment check cancelled.") : error.localizedDescription
                 }
             }
         } catch {
@@ -535,7 +536,7 @@ final class AppStore: ObservableObject {
 
     func generate() {
         guard !busy, !isComposingPrompt else { return }
-        guard selectedModel != nil else { errorMessage = "请先选择模型。"; return }
+        guard selectedModel != nil else { errorMessage = L10n.english("Choose a model first."); return }
         guard !needsGeneralSetup else { showSettings = true; return }
         guard environmentReady else { showSettings = true; return }
         do {
@@ -543,7 +544,7 @@ final class AppStore: ObservableObject {
             try ModelResource.turbo.validate(directory: settings.model)
             if settings.promptEnhancement.enabled && (try? settings.promptEnhancement.validate(for: enhancementMode)) == nil {
                 showModelPreparation()
-                errorMessage = "请在模型准备中配置完整的增强模型文件夹，或关闭 Prompt 增强。"
+                errorMessage = L10n.english("Configure complete enhancement model directories in model preparation, or turn off prompt enhancement.")
                 return
             }
             let seed = Int64.random(in: 0...4294967295)
@@ -566,8 +567,8 @@ final class AppStore: ObservableObject {
             let logFile = try GenerationLog(directory: directory) { [weak self] message in self?.errorMessage = message }
             generations.insert(generation, at: 0)
             activeLogFile = logFile; activeLog = ""; activeID = id; selectedID = id
-            startedAt = Date(); phase = generation.enhancement == nil ? "正在启动推理" : "正在启动 Prompt 增强"; currentStep = 0
-            appendLog("任务：\(id.uuidString)\n开始：\(generation.createdAt.ISO8601Format())\n\(phase)\n")
+            startedAt = Date(); phase = generation.enhancement == nil ? L10n.english("Starting inference") : L10n.english("Starting prompt enhancement"); currentStep = 0
+            appendLog(L10n.english("Task: %@\nStarted: %@\n%@\n", [String(describing: id.uuidString), String(describing: generation.createdAt.ISO8601Format()), String(describing: phase)]))
             isRunning = true; isStopping = false; receivedDone = false
             persist()
             let process = ProcessRunner(); runner = process
@@ -607,8 +608,8 @@ final class AppStore: ObservableObject {
                 generations[index].enhancement?.thinking = thinkingStreams[id]?.text ?? ""
                 saveGeneration(generations[index]); persist()
             }
-            if !isStopping { phase = rewriting ? "正在整理增强提示词" : "正在增强提示词" }
-            appendLog((rewriting ? "正在整理增强提示词" : "正在增强提示词") + "\n")
+            if !isStopping { phase = rewriting ? L10n.english("Refining enhanced prompt") : L10n.english("Enhancing prompt") }
+            appendLog((rewriting ? L10n.english("Refining enhanced prompt") : L10n.english("Enhancing prompt")) + "\n")
         case "enhancement_result":
             guard let index = generations.firstIndex(where: { $0.id == id }),
                   let prompt = event["prompt"] as? String, !prompt.isEmpty else { break }
@@ -619,7 +620,7 @@ final class AppStore: ObservableObject {
             generations[index].enhancement?.ratioFollow = event["ratioFollow"] as? String
             generations[index].enhancement?.duration = event["duration"] as? Double
             generations[index].enhancement?.status = .completed
-            appendLog("Prompt 增强已完成\n")
+            appendLog(L10n.english("Prompt enhancement completed\n"))
             saveGeneration(generations[index]); persist()
         case "log":
             appendLog((event["message"] as? String ?? "") + "\n")
@@ -631,9 +632,9 @@ final class AppStore: ObservableObject {
         case "step":
             currentStep = event["step"] as? Int ?? 0
             let totalSteps = event["total"] as? Int ?? QwenImage21Turbo.inferenceSteps
-            if !isStopping { phase = "正在生成 · 第 \(currentStep) / \(totalSteps) 步" }
+            if !isStopping { phase = L10n.english("Generating · Step %@ / %@", [String(describing: currentStep), String(describing: totalSteps)]) }
         case "error":
-            appendLog("\n" + (event["message"] as? String ?? "未知错误") + "\n")
+            appendLog("\n" + (event["message"] as? String ?? L10n.english("Unknown error")) + "\n")
         case "done":
             receivedDone = true
             // The bridge validates PNG decoding and dimensions before completion.
@@ -663,21 +664,21 @@ final class AppStore: ObservableObject {
             generations[index].enhancement?.status = status == .cancelled ? .cancelled : .failed
         }
         phase = status.label
-        appendLog("\n\(status.label)" + (message.map { "：\($0)" } ?? "") + "\n")
+        appendLog("\n\(status.label)" + (message.map { ": \($0)" } ?? "") + "\n")
         saveGeneration(generations[index])
         persist()
     }
 
     private func saveGeneration(_ job: Generation) {
         do { try JSONFile.write(job, to: URL(fileURLWithPath: job.directory).appendingPathComponent("generation.json")) }
-        catch { errorMessage = "无法保存任务记录：\(error.localizedDescription)" }
+        catch { errorMessage = L10n.english("Unable to save task record: %@", [String(describing: error.localizedDescription)]) }
     }
 
     private func exited(_ code: Int32, for id: UUID) {
         guard activeID == id else { return }
         if !receivedDone {
             markFinished(id, status: isStopping ? .cancelled : .failed,
-                         message: isStopping ? "生成已停止" : "推理进程意外退出（\(code)）。请查看运行日志。")
+                         message: isStopping ? L10n.english("Generation stopped") : L10n.english("Inference process exited unexpectedly (%@). Check the run log.", [String(describing: code)]))
         }
         activeLogFile?.close(); activeLogFile = nil
         isRunning = false; isStopping = false; runner = nil; activeID = nil
@@ -686,7 +687,7 @@ final class AppStore: ObservableObject {
 
     func stop() {
         guard isRunning, !isStopping else { return }
-        isStopping = true; phase = "正在停止并释放内存…"; runner?.stop()
+        isStopping = true; phase = L10n.english("Stopping and releasing memory…"); runner?.stop()
     }
 
     func prepareToTerminate(_ completion: @escaping () -> Void) {
@@ -704,13 +705,13 @@ final class AppStore: ObservableObject {
 
     func elapsed(_ generation: Generation, now: Date = Date()) -> String {
         let seconds = Int(generation.duration ?? now.timeIntervalSince(generation.createdAt))
-        return seconds < 60 ? "\(seconds) 秒" : "\(seconds / 60) 分 \(seconds % 60) 秒"
+        return seconds < 60 ? L10n.english("%@ s", [String(describing: seconds)]) : L10n.english("%@ min %@ s", [String(describing: seconds / 60), String(describing: seconds % 60)])
     }
 
     private func loadSelectedLog() {
         guard let job = logGeneration else { logs = ""; return }
         if job.id == activeID { logs = activeLog; return }
-        logs = "正在读取日志…"
+        logs = L10n.english("Reading log…")
         let id = job.id
         let directory = job.directory
         let error = job.error

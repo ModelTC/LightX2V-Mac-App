@@ -3,6 +3,7 @@ import SwiftUI
 import LightX2VCore
 
 struct InputImageStrip: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     let images: [InputImage]
     var remove: ((InputImage) -> Void)?
 
@@ -27,12 +28,12 @@ struct InputImageStrip: View {
                                         .frame(width: 20, height: 20).background(Palette.surface, in: Circle())
                                         .overlay(Circle().strokeBorder(Palette.line, lineWidth: 1))
                                 }.buttonStyle(HoverButtonStyle(radius: 10)).padding(4)
-                                    .accessibilityLabel("移除图片 \(index + 1)")
+                                    .accessibilityLabel(L10n.text("Remove image %@", [String(describing: index + 1)]))
                             }
                         }
                         .help(image.name)
                         .accessibilityElement(children: .contain)
-                        .accessibilityLabel("图片 \(index + 1)：\(image.name)")
+                        .accessibilityLabel(L10n.text("Image %@: %@", [String(describing: index + 1), String(describing: image.name)]))
                         .onDrag { NSItemProvider(object: URL(fileURLWithPath: image.path) as NSURL) }
                 }
             }.padding(.vertical, 2)
@@ -42,6 +43,7 @@ struct InputImageStrip: View {
 }
 
 private struct InputThumbnail: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     let image: InputImage
     @State private var thumbnail: NSImage?
 

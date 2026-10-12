@@ -1,3 +1,4 @@
+import LightX2VCore
 import AppKit
 import SwiftUI
 
@@ -158,6 +159,7 @@ extension View {
 }
 
 private struct ScrollStyleAnchor: NSViewRepresentable {
+    @ObservedObject private var language = LanguagePreferences.shared
     func makeNSView(context: Context) -> AnchorView { AnchorView() }
     func updateNSView(_ view: AnchorView, context: Context) { view.scheduleStyle() }
 

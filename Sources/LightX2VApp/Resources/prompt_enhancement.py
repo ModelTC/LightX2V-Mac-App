@@ -15,26 +15,26 @@ END_TEXT = "[end of text]"
 
 def ratio_value(value):
     if not isinstance(value, str) or not re.fullmatch(r"[1-9]\d{0,4}:[1-9]\d{0,4}", value):
-        raise ValueError("增强模型返回了无效的画面比例")
+        raise ValueError("Enhancement model returned an invalid aspect ratio")
     a, b = map(int, value.split(":"))
     if not 0.1 <= a / b <= 10:
-        raise ValueError("增强模型返回的画面比例超出支持范围")
+        raise ValueError("Enhancement aspect ratio is outside the supported range")
     return a / b
 
 
 def validate_resources(settings, mode):
     if not isinstance(settings, dict) or settings.get("enabled") is not True:
-        raise ValueError("Prompt 增强配置无效")
+        raise ValueError("Invalid prompt enhancement configuration")
     binary = "llama-completion" if mode == "t2i" else "llama-mtmd-cli"
     runtime = settings.get("runtimeDirectory", "")
     executable = Path(runtime) / binary
     if not executable.is_absolute() or not executable.is_file() or not os.access(executable, os.X_OK):
-        raise ValueError(f"找不到 {binary}，请配置 Prompt 增强的运行目录")
+        raise ValueError(f"Missing {binary}; configure the prompt enhancement binaries directory")
     keys = [mode + "Model", mode + "SystemPrompt"] + (["visionProjector"] if mode == "i2i" else [])
     for key in keys:
         value = settings.get(key)
         if not isinstance(value, str) or not Path(value).is_absolute() or not Path(value).is_file() or Path(value).stat().st_size == 0:
-            raise ValueError(f"Prompt 增强资源缺失：{key}")
+            raise ValueError(f"Missing prompt enhancement resource: {key}")
     return str(executable)
 
 
@@ -45,7 +45,7 @@ def command(request, folder):
     executable = validate_resources(settings, mode)
     system = Path(settings[mode + "SystemPrompt"]).read_text(encoding="utf-8").strip()
     if not system or len(system) > 100000:
-        raise ValueError("增强模型的系统提示词为空或过长")
+        raise ValueError("Enhancement system prompt is empty or too long")
     args = [executable, "-m", settings[mode + "Model"]]
     if mode == "t2i":
         prompt_file = folder / "input.txt"
@@ -90,7 +90,7 @@ class PromptStream:
         self.last_emit = float("-inf")
 
     def invalid(self):
-        raise ValueError("Prompt 增强返回了无效的结果格式")
+        raise ValueError("Enhancement model returned an invalid result format")
 
     def feed(self, text):
         for char in text:
@@ -164,7 +164,7 @@ class PromptStream:
         elif self.key == "rewritten_prompt":
             self.prompt += text; self.delta += text
             if len(self.prompt) > 20000:
-                raise ValueError("增强后的提示词过长，已停止本次生成")
+                raise ValueError("Enhanced prompt is too long; generation stopped")
 
     def flush(self):
         if self.delta:
@@ -187,7 +187,7 @@ class ThinkingStream:
     def feed(self, text):
         self.raw += text
         if len(self.raw) > 1500000:
-            raise ValueError("增强响应过长，已停止本次生成")
+            raise ValueError("Enhancement response is too long; generation stopped")
         if self.closed:
             self.answer.feed(text)
             return
@@ -238,39 +238,39 @@ class ThinkingStream:
 def parse_result(raw, mode, image_count):
     _, marker, answer = raw.partition("</think>")
     if not marker:
-        raise ValueError("Prompt 增强未完整输出思考过程，请重试")
+        raise ValueError("Enhancement reasoning is incomplete; retry")
     answer = answer.strip()
     if mode == "t2i":
         if not answer.endswith(END_TEXT):
-            raise ValueError("Prompt 增强输出未完成，请重试")
+            raise ValueError("Enhancement output is incomplete; retry")
         answer = answer[:-len(END_TEXT)].rstrip()
     elif answer.endswith(END_TEXT):
         answer = answer[:-len(END_TEXT)].rstrip()
     def unique_fields(pairs):
         result = {}
         for key, value in pairs:
-            if key in result: raise ValueError("Prompt 增强返回了重复的结果字段")
+            if key in result: raise ValueError("Enhancement model returned duplicate result fields")
             result[key] = value
         return result
     result = json.loads(answer, object_pairs_hook=unique_fields)
     expected = {"rewritten_prompt", "wh_ratio"} | ({"ratio_follow"} if mode == "i2i" else set())
     if not isinstance(result, dict) or set(result) != expected or not all(isinstance(v, str) for v in result.values()):
-        raise ValueError("Prompt 增强返回了无效的结果格式")
+        raise ValueError("Enhancement model returned an invalid result format")
     prompt = result["rewritten_prompt"].strip()
     try: prompt.encode("utf-8")
-    except UnicodeEncodeError: raise ValueError("Prompt 增强返回了无效的文字编码") from None
+    except UnicodeEncodeError: raise ValueError("Enhancement model returned invalid text encoding") from None
     if not prompt or len(prompt) > 20000:
-        raise ValueError("增强后的提示词为空或过长")
+        raise ValueError("Enhanced prompt is empty or too long")
     result["rewritten_prompt"] = prompt
     if result["wh_ratio"]:
         ratio_value(result["wh_ratio"])
     follow = result.get("ratio_follow", "")
     if mode == "t2i" and not result["wh_ratio"]:
-        raise ValueError("文字增强没有返回画面比例")
+        raise ValueError("Text enhancement did not return an aspect ratio")
     if mode == "i2i":
         match = re.fullmatch(r"<image([1-8])>", follow)
         if bool(result["wh_ratio"]) == bool(follow) or (follow and (not match or int(match[1]) > image_count)):
-            raise ValueError("参考图增强返回了无效的比例或参考图编号")
+            raise ValueError("Reference enhancement returned an invalid ratio or reference index")
     return result
 
 
@@ -298,7 +298,7 @@ def run_enhancement(request, destination, emit, supervisor):
     folder.mkdir(exist_ok=True)
     args, mode = command(request, folder)
     (folder / "invocation.json").write_text(json.dumps({"argv": args, "cwd": str(destination)}, ensure_ascii=False, indent=2), encoding="utf-8")
-    emit("status", message="正在加载增强模型", phase="enhancement")
+    emit("status", message="Loading enhancement model", phase="enhancement")
     emit("enhancement_phase", phase="thinking", mode=mode)
     started = time.monotonic()
     stream = ThinkingStream(emit)
@@ -321,7 +321,7 @@ def run_enhancement(request, destination, emit, supervisor):
                 supervisor.release(child)
             supervisor.check_cancelled()
             if code != 0:
-                raise RuntimeError(f"Prompt 增强进程退出（{code}），请查看任务目录中的 enhancement/llama.log")
+                raise RuntimeError(f"Prompt enhancement process exited ({code}); see enhancement/llama.log in the task directory")
         stream.finish()
         result = parse_result(stream.raw, mode, len(request.get("inputImages", [])))
         effective = inference_request(request, result)

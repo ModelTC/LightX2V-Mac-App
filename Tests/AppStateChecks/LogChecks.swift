@@ -90,19 +90,19 @@ func generationLogChecks() async throws {
     store.prompt = "Keep this draft"
     store.generationSize.selectResolution(.twoK)
     store.openLog(for: first)
-    try await wait({ store.logs == "正在读取日志…" })
+    try await wait({ store.logs == "Reading log…" })
     try check(store.showLogs && store.logGeneration?.id == first.id && store.selectedID == second.id
               && store.logs == firstLog && store.prompt == "Keep this draft" && store.generationSize.resolution == .twoK,
               "opening an earlier turn reads its own log without changing conversation or draft")
     store.selectLog(second.id)
-    try await wait({ store.logs == "正在读取日志…" })
+    try await wait({ store.logs == "Reading log…" })
     try check(store.logs == secondLog, "task selector switches between logs in the same conversation")
 
     store.prompt = "LIVE"; store.generate()
     let live = store.generations[0]
     try await wait({ !store.logs.contains("LIVE_0") })
     store.openLog(for: first)
-    try await wait({ store.logs == "正在读取日志…" })
+    try await wait({ store.logs == "Reading log…" })
     let historicalLog = store.logs
     try await Task.sleep(for: .milliseconds(200))
     try check(store.isRunning && store.logs == historicalLog && store.logGenerationID == first.id,
@@ -126,7 +126,7 @@ func generationLogChecks() async throws {
     let stopped = store.generations[0]
     try await wait({ !store.logs.contains("LOG_START_STOP") })
     store.stop(); try await wait({ store.isRunning })
-    try check(store.generations[0].status == .cancelled && (try completeLog(stopped)).contains("生成已停止"),
+    try check(store.generations[0].status == .cancelled && (try completeLog(stopped)).contains("Generation stopped"),
               "stopping a task flushes its log and cancellation reason")
     let long = try await submit("LONG")
     let full = try completeLog(long)
@@ -136,16 +136,16 @@ func generationLogChecks() async throws {
               "Chinese and emoji logs are complete on disk and bounded without broken UTF-8 in the UI")
 
     let reopened = AppStore(); reopened.selectedID = long.id
-    try await wait({ reopened.logs == "正在读取日志…" })
+    try await wait({ reopened.logs == "Reading log…" })
     try check(reopened.logs.utf8.count <= GenerationLog.previewBytes && reopened.logs.contains("FULL_LOG_END")
               && !reopened.logs.contains("FULL_LOG_BEGIN") && !reopened.logs.contains("\u{fffd}"),
               "reopened long logs read only the tail and keep valid UTF-8")
     reopened.openLog(for: first)
-    try await wait({ reopened.logs == "正在读取日志…" })
+    try await wait({ reopened.logs == "Reading log…" })
     try check(reopened.logs == firstLog && reopened.selectedCreation.count == 7,
               "relaunch restores every turn and reads earlier logs independently")
     reopened.openLog(for: failed)
-    try await wait({ reopened.logs == "正在读取日志…" })
+    try await wait({ reopened.logs == "Reading log…" })
     try check(reopened.logs.contains("Failed before inference started"), "early failure log is readable after relaunch")
 
     // Old task files remain available through the same per-turn selector.
@@ -154,7 +154,7 @@ func generationLogChecks() async throws {
     _ = try file("existing-task/inference.log", "Existing inference log\n")
     reopened.generations.append(legacy)
     reopened.openLog(for: legacy)
-    try await wait({ reopened.logs == "正在读取日志…" })
+    try await wait({ reopened.logs == "Reading log…" })
     try check(reopened.logs == "Existing inference log\n", "existing inference logs remain readable")
     var enhancementFailure = legacy; enhancementFailure.id = UUID(); enhancementFailure.status = .failed
     enhancementFailure.error = "Existing enhancement failure"
@@ -162,13 +162,13 @@ func generationLogChecks() async throws {
     _ = try file("existing-enhancement/enhancement/llama.log", "Enhancement diagnostic\n")
     reopened.generations.append(enhancementFailure)
     reopened.openLog(for: enhancementFailure)
-    try await wait({ reopened.logs == "正在读取日志…" })
+    try await wait({ reopened.logs == "Reading log…" })
     try check(reopened.logs.contains("Enhancement diagnostic") && reopened.logs.contains("Existing enhancement failure"),
               "existing early enhancement failures show diagnostics and their saved error")
     var missing = enhancementFailure; missing.id = UUID()
     missing.request.output = root.appendingPathComponent("no-log/image.png").path
     reopened.generations.append(missing); reopened.openLog(for: missing)
-    try await wait({ reopened.logs == "正在读取日志…" })
+    try await wait({ reopened.logs == "Reading log…" })
     try check(reopened.logs == missing.error, "a task without log files still shows its saved failure")
 
     store.newGeneration()
@@ -176,7 +176,7 @@ func generationLogChecks() async throws {
     store.selectLog(first.id)
     try check(store.logGenerationID == independent.id, "the task selector cannot leak logs from another creation")
     store.selectedID = second.id
-    try await wait({ store.logs == "正在读取日志…" })
+    try await wait({ store.logs == "Reading log…" })
     try check(store.logGenerationID == second.id && store.logs == secondLog,
               "switching conversations resets the log selection to that conversation")
     try Data("invalid executable".utf8).write(to: python)
@@ -191,7 +191,7 @@ func generationLogChecks() async throws {
     if let snapshots = ProcessInfo.processInfo.environment["LIGHTX2V_LOG_SNAPSHOTS"] {
         try fm.createDirectory(atPath: snapshots, withIntermediateDirectories: true)
         reopened.openLog(for: failed)
-        try await wait({ reopened.logs == "正在读取日志…" })
+        try await wait({ reopened.logs == "Reading log…" })
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 650, height: 205),
                               styleMask: .borderless, backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false

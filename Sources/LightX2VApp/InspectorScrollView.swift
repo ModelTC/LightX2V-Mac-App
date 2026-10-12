@@ -1,3 +1,4 @@
+import LightX2VCore
 import AppKit
 import SwiftUI
 
@@ -5,6 +6,7 @@ import SwiftUI
 /// proposed to its cards. SwiftUI's scroll container can reserve a gutter during
 /// disclosure before the native scroller style is applied.
 struct InspectorScrollView<Content: View>: NSViewRepresentable {
+    @ObservedObject private var language = LanguagePreferences.shared
     let focus: Int
     @ViewBuilder var content: Content
 

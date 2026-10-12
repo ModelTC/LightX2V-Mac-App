@@ -62,10 +62,10 @@ server.serve_forever()
         let updates = DownloadUpdates()
         let logFile = workspace.root.appendingPathComponent("logs/0-download.log")
         let cached = try await PyTorchEnvironmentInstaller.downloadInstaller(distribution("installer.sh"), workspace: workspace, logFile: logFile) { updates.append($0) }
-        try expect(updates.logs.first?.hasPrefix("下载命令（等效）：curl -L ") == true, "download must show its command before progress")
-        try expect(updates.logs.contains { $0.contains("SHA-256 校验通过") }, "download verification result missing")
+        try expect(updates.logs.first?.hasPrefix("Equivalent download command: curl -L ") == true, "download must show its command before progress")
+        try expect(updates.logs.contains { $0.contains("SHA-256 verified") }, "download verification result missing")
         let savedLog = try String(contentsOf: logFile, encoding: .utf8)
-        try expect(savedLog.contains("下载地址：") && savedLog.contains(cached.path) && savedLog.contains(checksum), "download log missing URL, destination or checksum")
+        try expect(savedLog.contains("Download URL: ") && savedLog.contains(cached.path) && savedLog.contains(checksum), "download log missing URL, destination or checksum")
         let received = try Data(contentsOf: cached)
         try expect(received == payload, "download changed installer bytes")
         try expect(updates.hasByteProgress, "download did not stream byte progress")
@@ -77,7 +77,7 @@ server.serve_forever()
             _ = try await PyTorchEnvironmentInstaller.downloadInstaller(distribution("installer.sh", String(repeating: "0", count: 64)), workspace: invalid) { _ in }
             throw Failure(message: "incorrect checksum was accepted")
         } catch let error as Failure { throw error }
-        catch { try expect(error.localizedDescription.contains("校验失败"), "checksum failure diagnostic lost") }
+        catch { try expect(error.localizedDescription.contains("verification failed"), "checksum failure diagnostic lost") }
         try expect(!fm.fileExists(atPath: invalid.root.appendingPathComponent("cache/miniconda/installer.sh").path), "unverified installer retained as cache")
         let checksumTemporaryFiles = try fm.contentsOfDirectory(atPath: invalid.temporary.path)
         try expect(checksumTemporaryFiles.isEmpty, "checksum failure left a temporary download")
@@ -85,7 +85,7 @@ server.serve_forever()
             _ = try await PyTorchEnvironmentInstaller.downloadInstaller(distribution("missing.sh"), workspace: invalid) { _ in }
             throw Failure(message: "HTTP 404 was accepted")
         } catch let error as Failure { throw error }
-        catch { try expect(error.localizedDescription.contains("下载失败"), "HTTP failure diagnostic lost") }
+        catch { try expect(error.localizedDescription.contains("download failed"), "HTTP failure diagnostic lost") }
         let httpTemporaryFiles = try fm.contentsOfDirectory(atPath: invalid.temporary.path)
         try expect(httpTemporaryFiles.isEmpty, "HTTP failure left a temporary download")
 

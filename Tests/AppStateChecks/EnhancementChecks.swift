@@ -4,6 +4,8 @@ import LightX2VCore
 
 @MainActor
 func enhancementStateChecks() async throws {
+    LanguagePreferences.shared.selection = "ar"
+    defer { LanguagePreferences.shared.selection = "en" }
     let fm = FileManager.default
     let root = fm.temporaryDirectory.appendingPathComponent("pe-state-" + UUID().uuidString)
     defer { try? fm.removeItem(at: root) }
@@ -98,6 +100,7 @@ func enhancementStateChecks() async throws {
     try check(store.settings.promptEnhancement.enabled, "enhancement cannot change midway through a run")
     try await wait({ store.isRunning })
     let first = store.generations[0]
+    try check(store.logs.contains("Enhancing prompt") && store.logs.contains("Prompt enhancement completed"), "APP enhancement log stays English with Arabic interface")
     try check(store.currentStep == 8 && !store.logs.contains("思考 🐈") && !store.logs.contains("Enhanced Original input"),
               "eight Turbo steps are handled without an explicit total or streaming reply text in the task log")
     store.reference(first); store.reference(first)
@@ -118,7 +121,7 @@ func enhancementStateChecks() async throws {
     store.stop(); try await wait({ store.isRunning })
     try check(store.selected?.status == .cancelled && store.selected?.enhancement?.status == .cancelled && store.selected?.enhancement?.thinking == "思考 🐈", "stop during thinking preserves partial reply and cancels image generation")
     let stoppedLog = try String(contentsOfFile: store.selected!.directory + "/run.log", encoding: .utf8)
-    try check(stoppedLog.contains("生成已停止"), "stopping enhancement saves its cancellation log")
+    try check(stoppedLog.contains("Generation stopped"), "stopping enhancement saves its cancellation log")
     store.prompt = "STOP_REWRITING"; store.generate()
     try await wait({ store.selected.map { store.promptStream(for: $0).text.isEmpty } == true })
     store.stop(); try await wait({ store.isRunning })

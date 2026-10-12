@@ -1,9 +1,11 @@
+import LightX2VCore
 import AppKit
 import SwiftUI
 
 /// Keep the latest reply visible through asynchronous decoding and composer
 /// resizing, without pulling someone away from an older reply they are reading.
 struct ConversationScrollAnchor: NSViewRepresentable {
+    @ObservedObject private var language = LanguagePreferences.shared
     let turns: [UUID]
 
     func makeNSView(context: Context) -> AnchorView { AnchorView() }

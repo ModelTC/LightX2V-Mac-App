@@ -1,8 +1,10 @@
+import LightX2VCore
 import SwiftUI
 
 /// Text, optional leading icon and padding form one editable target. A chooser
 /// can share the enclosing path bar while retaining its own cursor and feedback.
 struct PathInputField: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     let title: String
     let placeholder: String
     let symbol: String?
@@ -19,9 +21,9 @@ struct PathInputField: View {
             if let symbol {
                 Image(systemName: symbol).foregroundStyle(Palette.muted).font(.system(size: 12))
             }
-            TextField(placeholder, text: $text)
+            TextField(L10n.render(placeholder), text: $text)
                 .textFieldStyle(.plain).font(.system(size: 11))
-                .accessibilityLabel(title).help(text)
+                .accessibilityLabel(L10n.render(title)).help(text)
                 .focused($focused)
                 .onSubmit(onCommit)
         }

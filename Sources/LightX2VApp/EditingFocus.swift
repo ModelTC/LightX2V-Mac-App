@@ -1,3 +1,4 @@
+import LightX2VCore
 import AppKit
 import SwiftUI
 
@@ -19,6 +20,7 @@ private struct OutsideClickEditingModifier: ViewModifier {
 }
 
 struct OutsideClickObserver: NSViewRepresentable {
+    @ObservedObject private var language = LanguagePreferences.shared
     let isEditing: Bool
     let isEnabled: Bool
     var onHoverChange: ((Bool) -> Void)?

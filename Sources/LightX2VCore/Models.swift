@@ -42,27 +42,27 @@ public struct AppSettings: Codable, Equatable {
         if step == .workspace { try WorkspaceLayout.validate(workingDirectory); return }
         if step == .llama { try LlamaRuntimeDownloader.validateRuntime(promptEnhancement.runtimeDirectory); return }
         let fm = FileManager.default
-        let (label, value) = step == .source ? ("LightX2V 源码目录", repository) : ("PyTorch 环境", python)
-        guard !value.isEmpty else { throw AppError.message("请选择\(label)。") }
-        guard value.hasPrefix("/") else { throw AppError.message("\(label)必须使用绝对路径。") }
+        let (label, value) = step == .source ? (L10n.english("LightX2V source directory"), repository) : (L10n.english("PyTorch environment"), python)
+        guard !value.isEmpty else { throw AppError.message(L10n.english("Choose %@.", [String(describing: label)])) }
+        guard value.hasPrefix("/") else { throw AppError.message(L10n.english("%@ must use an absolute path.", [String(describing: label)])) }
         if step == .source {
             guard fm.fileExists(atPath: repository + "/lightx2v/infer.py") else {
-                throw AppError.message("源码目录中找不到 lightx2v/infer.py，请选择正确的 LightX2V 目录。")
+                throw AppError.message(L10n.english("lightx2v/infer.py is missing from the source directory. Choose the correct LightX2V directory."))
             }
             return
         }
         var directory: ObjCBool = false
         guard fm.fileExists(atPath: python, isDirectory: &directory), !directory.boolValue,
               fm.isExecutableFile(atPath: python) else {
-            throw AppError.message("请选择 PyTorch 环境中的 Python 可执行文件，例如 bin/python。")
+            throw AppError.message(L10n.english("Choose the Python executable in your PyTorch environment, for example bin/python."))
         }
     }
 
     public func validatePaths() throws {
         let fm = FileManager.default
         try validateGeneralPaths()
-        guard model.hasPrefix("/") else { throw AppError.message("模型目录必须使用绝对路径。") }
-        guard fm.fileExists(atPath: model + "/model_index.json") else { throw AppError.message("模型目录缺少 model_index.json。") }
+        guard model.hasPrefix("/") else { throw AppError.message(L10n.english("Model directory must use an absolute path.")) }
+        guard fm.fileExists(atPath: model + "/model_index.json") else { throw AppError.message(L10n.english("Model directory is missing model_index.json.")) }
     }
 }
 
@@ -86,18 +86,18 @@ public struct InferenceRequest: Codable {
 
     public init(settings: AppSettings, prompt: String, width: Int?, height: Int?, seed: Int64, output: String, inputImages: [InputImage] = [], resolution: Int? = nil) throws {
         guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, prompt.count <= 20000 else {
-            throw AppError.message("请输入 1–20000 字的提示词。")
+            throw AppError.message(L10n.english("Enter a prompt between 1 and 20000 characters."))
         }
         if let resolution {
             guard [1024, 2048].contains(resolution), width == nil, height == nil else {
-                throw AppError.message("自适应模式请选择 1K 或 2K，无需指定宽高。")
+                throw AppError.message(L10n.english("Choose 1K or 2K for adaptive mode; width and height are not required."))
             }
         } else {
             guard let width, let height, ImageDimensions(width: width, height: height).isValid else {
                 throw AppError.message(ImageDimensions.validationMessage)
             }
         }
-        guard (0...4294967295).contains(seed) else { throw AppError.message("种子须介于 0 和 4294967295 之间。") }
+        guard (0...4294967295).contains(seed) else { throw AppError.message(L10n.english("Seed must be between 0 and 4294967295.")) }
         try InputImages.validate(inputImages)
         repository = settings.repository; model = settings.model; config = settings.config
         self.prompt = prompt; self.width = width; self.height = height; self.seed = seed; self.output = output
@@ -127,11 +127,11 @@ public enum GenerationStatus: String, Codable {
     case running, completed, failed, cancelled, interrupted
     public var label: String {
         switch self {
-        case .running: return "生成中"
-        case .completed: return "已完成"
-        case .failed: return "生成失败"
-        case .cancelled: return "已停止"
-        case .interrupted: return "已中断"
+        case .running: return L10n.english("Generating")
+        case .completed: return L10n.english("Completed")
+        case .failed: return L10n.english("Generation failed")
+        case .cancelled: return L10n.english("Stopped")
+        case .interrupted: return L10n.english("Interrupted")
         }
     }
 }
@@ -186,7 +186,7 @@ public struct WorkspaceData: Codable {
     public mutating func recoverInterrupted() {
         for index in generations.indices where generations[index].status == .running {
             generations[index].status = .interrupted
-            generations[index].error = "应用在上次生成完成前退出，可复用参数重新生成。"
+            generations[index].error = L10n.english("The APP exited before generation finished. Reuse the settings to generate again.")
             if generations[index].enhancement?.status.isActive == true { generations[index].enhancement?.status = .interrupted }
         }
     }

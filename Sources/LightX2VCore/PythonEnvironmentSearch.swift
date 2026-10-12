@@ -70,22 +70,22 @@ public struct PythonEnvironment: Identifiable, Codable, Equatable {
     public var versionIssues: [String] {
         PyTorchRequirements.dependencies.compactMap { dependency in
             let current = version(of: dependency.name)
-            if current.isEmpty { return "缺少 \(dependency.name)" }
+            if current.isEmpty { return L10n.english("Missing %@", [String(describing: dependency.name)]) }
             guard let minimum = dependency.minimum else { return nil }
-            return PyTorchRequirements.meetsMinimum(current, minimum) ? nil : "\(dependency.name) \(current)，需要 ≥ \(minimum)"
+            return PyTorchRequirements.meetsMinimum(current, minimum) ? nil : L10n.english("%@ %@; requires ≥ %@", [String(describing: dependency.name), String(describing: current), String(describing: minimum)])
         }
     }
     public var isCompatible: Bool { mpsAvailable && architecture == "arm64" && versionIssues.isEmpty }
     public var compatibilityDetail: String {
-        if isCompatible { return "依赖符合要求 · MPS 可用" }
+        if isCompatible { return L10n.english("Dependencies meet requirements · MPS available") }
         var issues = versionIssues
-        if !architecture.isEmpty && architecture != "arm64" { issues.append("需要 Apple Silicon arm64 环境") }
-        if !mpsAvailable { issues.append(detail.isEmpty ? "MPS 不可用" : detail) }
+        if !architecture.isEmpty && architecture != "arm64" { issues.append(L10n.english("An Apple Silicon arm64 environment is required")) }
+        if !mpsAvailable { issues.append(detail.isEmpty ? L10n.english("MPS unavailable") : detail) }
         return issues.joined(separator: "；")
     }
     public var name: String {
         let prefix = URL(fileURLWithPath: executable).deletingLastPathComponent().deletingLastPathComponent()
-        return ["usr", "opt"].contains(prefix.lastPathComponent) ? "系统 Python" : prefix.lastPathComponent
+        return ["usr", "opt"].contains(prefix.lastPathComponent) ? L10n.english("System Python") : prefix.lastPathComponent
     }
     public init(executable: String) { self.executable = executable }
 }
@@ -181,9 +181,9 @@ try:
     import torch
     result["torch"] = str(torch.__version__)
     result["mps"] = bool(hasattr(torch.backends, "mps") and torch.backends.mps.is_available())
-    result["detail"] = "支持 Apple Silicon MPS" if result["mps"] else "PyTorch 已安装，但 MPS 不可用"
+    result["detail"] = "Apple Silicon MPS supported" if result["mps"] else "PyTorch installed, but MPS unavailable"
 except Exception as error:
-    result["detail"] = "未安装 PyTorch" if isinstance(error, ModuleNotFoundError) and error.name == "torch" else "PyTorch 无法加载：" + str(error)[:160]
+    result["detail"] = "PyTorch not installed" if isinstance(error, ModuleNotFoundError) and error.name == "torch" else "Unable to load PyTorch: " + str(error)[:160]
 print("LIGHTX2V_ENV:" + json.dumps(result, ensure_ascii=False))
 """#
         do {
@@ -192,7 +192,7 @@ print("LIGHTX2V_ENV:" + json.dumps(result, ensure_ascii=False))
             guard output.status == 0,
                   let line = output.output.components(separatedBy: "\n").last(where: { $0.hasPrefix("LIGHTX2V_ENV:") }),
                   let info = try JSONSerialization.jsonObject(with: Data(line.dropFirst("LIGHTX2V_ENV:".count).utf8)) as? [String: Any] else {
-                result.detail = "无法运行此 Python（退出码 \(output.status)）"; return result
+                result.detail = L10n.english("Unable to run this Python (exit code %@)", [String(describing: output.status)]); return result
             }
             result.pythonVersion = info["python"] as? String ?? ""
             result.torchVersion = info["torch"] as? String ?? ""
@@ -203,7 +203,7 @@ print("LIGHTX2V_ENV:" + json.dumps(result, ensure_ascii=False))
             result.packageVersions = Dictionary(uniqueKeysWithValues: PyTorchRequirements.dependencies.map { ($0.name, info[$0.name] as? String ?? "") })
             result.architecture = info["architecture"] as? String ?? ""
             result.mpsAvailable = info["mps"] as? Bool ?? false
-            result.detail = info["detail"] as? String ?? "检测失败"
+            result.detail = info["detail"] as? String ?? L10n.english("Check failed")
         } catch {
             try Task.checkCancellation()
             result.detail = error.localizedDescription

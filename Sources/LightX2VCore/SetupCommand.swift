@@ -54,7 +54,7 @@ public enum SetupCommand {
                         var pid: pid_t = 0
                         if cancellation.cancelled { throw CancellationError() }
                         let code = posix_spawn(&pid, executable, &actions, &attributes, &spawnArguments, &spawnEnvironment)
-                        guard code == 0 else { throw AppError.message("无法运行 \(URL(fileURLWithPath: executable).lastPathComponent)：\(String(cString: strerror(code)))") }
+                        guard code == 0 else { throw AppError.message(L10n.english("Unable to run %@: %@", [String(describing: URL(fileURLWithPath: executable).lastPathComponent), String(describing: String(cString: strerror(code)))])) }
                         var reaped = false
                         defer {
                             if !reaped { kill(-pid, SIGKILL); var ignored: Int32 = 0; waitpid(pid, &ignored, 0) }
@@ -84,7 +84,7 @@ public enum SetupCommand {
                             if waited == pid { reaped = true; break }
                             if waited == -1 {
                                 if errno == EINTR { continue }
-                                throw AppError.message("无法获取安装进程的状态。")
+                                throw AppError.message(L10n.english("Unable to obtain installation process status."))
                             }
                             try readOutput()
                             if cancellation.cancelled || Date() > deadline {
@@ -97,7 +97,7 @@ public enum SetupCommand {
                         try readOutput()
                         if !pending.isEmpty { onOutput(String(decoding: pending, as: UTF8.self)) }
                         if cancellation.cancelled { throw CancellationError() }
-                        if stoppedAt != nil { throw AppError.message("操作超时，请检查网络后重试。") }
+                        if stoppedAt != nil { throw AppError.message(L10n.english("Operation timed out. Check your network and retry.")) }
                         let exitCode = status & 0x7f == 0 ? (status >> 8) & 0xff : 128 + (status & 0x7f)
                         continuation.resume(returning: SetupCommandResult(status: exitCode, output: String(decoding: captured, as: UTF8.self)))
                     } catch { continuation.resume(throwing: error) }

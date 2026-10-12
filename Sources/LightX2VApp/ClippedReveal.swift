@@ -1,9 +1,11 @@
+import LightX2VCore
 import SwiftUI
 
 /// Reveals content in place, inside its own changing bounds. The content is
 /// always laid out at its natural height, so controls never squeeze or slide
 /// through the section header while the surrounding stack changes height.
 struct ClippedReveal<Content: View>: View {
+    @ObservedObject private var language = LanguagePreferences.shared
     let progress: CGFloat
     @ViewBuilder var content: Content
 

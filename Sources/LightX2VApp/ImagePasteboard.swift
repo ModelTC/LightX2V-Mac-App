@@ -1,3 +1,4 @@
+import LightX2VCore
 import AppKit
 import UniformTypeIdentifiers
 
@@ -24,7 +25,7 @@ enum ImagePasteboard {
             guard let type else { return nil }
             guard let data = item.data(forType: type), !data.isEmpty, data.count <= 100 * 1024 * 1024 else {
                 throw NSError(domain: "LightX2V.Clipboard", code: 1,
-                              userInfo: [NSLocalizedDescriptionKey: "无法读取剪贴板图片，请重新复制不超过 100 MB 的图片。"])
+                              userInfo: [NSLocalizedDescriptionKey: L10n.english("Unable to read clipboard image. Copy an image no larger than 100 MB again.")])
             }
             return .data(data, fileExtension: UTType(type.rawValue)?.preferredFilenameExtension ?? "png")
         }
@@ -36,7 +37,7 @@ enum ImagePasteboard {
             switch source {
             case .file(let url): return url
             case .data(let bytes, let fileExtension):
-                let url = directory.appendingPathComponent("粘贴图片-\(index + 1).\(fileExtension)")
+                let url = directory.appendingPathComponent(L10n.english("Pasted-image-%@.%@", [String(describing: index + 1), String(describing: fileExtension)]))
                 try bytes.write(to: url, options: .atomic)
                 return url
             }
