@@ -12,6 +12,8 @@ struct SettingsView: View {
     @State private var saveError: String?
     @State private var downloadMessage = ""
     @State private var downloading = false
+    @State private var runtimeDownloadMessage = ""
+    @State private var runtimeDownloading = false
     @State private var showEnvironments = false
     @State private var searching = false
     @State private var environments: [PythonEnvironment] = []
@@ -43,7 +45,7 @@ struct SettingsView: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 8) {
-                    Text("已填写 \(setupProgress.completed.count) / 3")
+                    Text("已填写 \(setupProgress.completed.count) / \(GeneralSetupStep.allCases.count)")
                         .font(.system(size: 10, weight: .medium)).monospacedDigit()
                         .foregroundStyle(Palette.muted)
                     HStack(spacing: 4) {
@@ -52,7 +54,7 @@ struct SettingsView: View {
                                 .frame(width: 22, height: 3)
                         }
                     }.accessibilityHidden(true)
-                }.accessibilityLabel("通用设置已填写 \(setupProgress.completed.count) 项，共 3 项")
+                }.accessibilityLabel("通用设置已填写 \(setupProgress.completed.count) 项，共 \(GeneralSetupStep.allCases.count) 项")
             }.padding(26)
                 .focusable().focusEffectDisabled().focused($headerFocused)
             ScrollViewReader { scroll in
@@ -108,6 +110,28 @@ struct SettingsView: View {
                                     .font(.system(size: 10)).foregroundStyle(Palette.muted)
                             }
                         }.id(GeneralSetupStep.python)
+                        SettingsSection(step: .llama, progress: setupProgress, animation: guideAnimation,
+                                        title: "llama.cpp 运行目录（bin）", subtitle: "Prompt 增强共用的本地运行程序，支持文字和参考图增强。") {
+                            pathRow("llama.cpp 运行目录（bin）", value: $settings.promptEnhancement.runtimeDirectory, directory: true,
+                                    placeholder: "选择已有 bin 目录，或点击下方自动下载")
+                            HStack(spacing: 10) {
+                                Button { downloadRuntime() } label: {
+                                    Label("自动下载", systemImage: "arrow.down.to.line")
+                                }.disabled(store.busy || !hasWorkDirectory)
+                                    .accessibilityLabel("自动下载 llama.cpp")
+                                Text("存入工作目录 / runtimes · b11564 · Apple Silicon")
+                                    .font(.system(size: 10)).foregroundStyle(Palette.muted)
+                                Spacer(minLength: 0)
+                            }.font(.system(size: 11))
+                            if !runtimeDownloadMessage.isEmpty {
+                                HStack(spacing: 8) {
+                                    if runtimeDownloading { ProgressView().controlSize(.mini) }
+                                    Text(runtimeDownloadMessage).font(.system(size: 10)).foregroundStyle(Palette.muted)
+                                    Spacer()
+                                    if runtimeDownloading { Button("取消下载") { store.setupTask?.cancel() }.font(.system(size: 10)) }
+                                }
+                            }
+                        }.id(GeneralSetupStep.llama)
                     }.padding(.horizontal, 26).padding(.bottom, 22).subtleScrollbars()
                 }.frame(maxHeight: 490)
                 .onChange(of: setupProgress.current) { _, step in
@@ -244,6 +268,26 @@ struct SettingsView: View {
             } catch {
                 if Task.isCancelled { searchCancelled = true }
                 else { searchError = error.localizedDescription }
+            }
+        }
+    }
+
+    private func downloadRuntime() {
+        guard !store.busy, hasWorkDirectory else { return }
+        saveError = nil; runtimeDownloading = true; store.isPreparingResources = true
+        let workspace = layout; let token = UUID(); operationID = token
+        store.setupTask = Task {
+            defer { runtimeDownloading = false; operationID = nil; store.finishSetupTask() }
+            do {
+                let result = try await LlamaRuntimeDownloader.download(workspace: workspace) { message in
+                    Task { @MainActor in if operationID == token { runtimeDownloadMessage = message } }
+                }
+                settings.promptEnhancement.runtimeDirectory = result.directory
+                updateGuide()
+                runtimeDownloadMessage = "已就绪 · \(result.version)"
+            } catch {
+                if Task.isCancelled { runtimeDownloadMessage = "下载已取消，可随时重试。" }
+                else { runtimeDownloadMessage = ""; saveError = "llama.cpp 下载失败：\(error.localizedDescription)" }
             }
         }
     }

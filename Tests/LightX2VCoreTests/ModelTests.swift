@@ -87,7 +87,8 @@ struct CoreChecks {
         let unfinished = try JSONFile.read(WorkspaceData.self, from: url)
         try expect(!unfinished.hasCompletedGeneralSetup, "quitting before setup marked it complete")
 
-        let settings = AppSettings(repository: "/custom/LightX2V", model: "", config: "", python: "/custom/env/bin/python", workingDirectory: "/custom/workspace")
+        var settings = AppSettings(repository: "/custom/LightX2V", model: "", config: "", python: "/custom/env/bin/python", workingDirectory: "/custom/workspace")
+        settings.promptEnhancement.runtimeDirectory = "/custom/llama/bin"
         let request = try InferenceRequest(settings: settings, prompt: "保留历史", width: 1024, height: 1024, seed: 42, output: "/custom/images/image.png")
         let history = Generation(request: request)
         let completed = WorkspaceData(settings: settings, generations: [history], hasCompletedGeneralSetup: true)
@@ -121,11 +122,17 @@ struct CoreChecks {
         try Data("#!/bin/sh\nexit 0\n".utf8).write(to: python)
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: python.path)
         let output = dir.appendingPathComponent("new/images")
-        let valid = AppSettings(repository: repo.path, model: "", config: "", python: python.path, workingDirectory: output.path)
+        var valid = AppSettings(repository: repo.path, model: "", config: "", python: python.path, workingDirectory: output.path)
+        let bin = dir.appendingPathComponent("bin")
+        try fm.createDirectory(at: bin, withIntermediateDirectories: true)
+        for name in ["llama-completion", "llama-mtmd-cli"] { try fm.copyItem(at: python, to: bin.appendingPathComponent(name)) }
+        valid.promptEnhancement.runtimeDirectory = bin.path
         try valid.validateGeneralPaths()
         try expect(!fm.fileExists(atPath: output.path), "validation unexpectedly created output folders")
         let invalid: [(WritableKeyPath<AppSettings, String>, String)] = [
             (\.repository, ""), (\.python, ""), (\.workingDirectory, ""),
+            (\.promptEnhancement.runtimeDirectory, ""), (\.promptEnhancement.runtimeDirectory, "relative/bin"),
+            (\.promptEnhancement.runtimeDirectory, repo.path),
             (\.repository, "relative/repo"), (\.python, "relative/python"), (\.workingDirectory, "relative/output"),
             (\.repository, dir.path), (\.python, repo.path), (\.python, dir.appendingPathComponent("missing").path),
             (\.python, repo.appendingPathComponent("lightx2v/infer.py").path),

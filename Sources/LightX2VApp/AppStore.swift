@@ -98,7 +98,7 @@ final class AppStore: ObservableObject {
     func setPromptEnhancementEnabled(_ enabled: Bool) {
         guard !configurationBusy else { return }
         var value = settings.promptEnhancement
-        if enabled { value.discover(near: [settings.model, settings.repository, settings.workingDirectory]) }
+        if enabled { value.discover(near: [settings.model, settings.repository, settings.workingDirectory], includeRuntime: false) }
         value.enabled = enabled
         settings.promptEnhancement = value
         persist()
@@ -107,7 +107,9 @@ final class AppStore: ObservableObject {
 
     func applyEnhancementSettings(_ value: PromptEnhancementSettings) {
         guard !configurationBusy else { return }
-        settings.promptEnhancement = value
+        var updated = value
+        updated.runtimeDirectory = settings.promptEnhancement.runtimeDirectory
+        settings.promptEnhancement = updated
         persist(); showEnhancementSettings = false
     }
 
@@ -328,6 +330,7 @@ final class AppStore: ObservableObject {
         updated.workingDirectory = path(value.workingDirectory)
         updated.repository = path(value.repository)
         updated.python = path(value.python)
+        updated.promptEnhancement.runtimeDirectory = path(value.promptEnhancement.runtimeDirectory)
         // Default to the only supported model's config in the selected checkout.
         var suggested: String?
         if updated.config.isEmpty {

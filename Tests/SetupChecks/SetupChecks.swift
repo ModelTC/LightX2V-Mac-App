@@ -17,6 +17,19 @@ func rejects(_ body: () throws -> Void) throws {
         let root = fm.temporaryDirectory.appendingPathComponent("LightX2V setup checks \(UUID().uuidString)")
         try fm.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: root) }
+        if let index = CommandLine.arguments.firstIndex(of: "--llama-download"), CommandLine.arguments.count > index + 1 {
+            let workspace = WorkspaceLayout(CommandLine.arguments[index + 1])
+            let result = try await LlamaRuntimeDownloader.download(workspace: workspace) { print($0) }
+            try LlamaRuntimeDownloader.validateRuntime(result.directory)
+            let second = try await LlamaRuntimeDownloader.download(workspace: workspace) { print($0) }
+            try expect(second.directory == result.directory, "real runtime was not reused")
+            for name in ["llama-completion", "llama-mtmd-cli"] {
+                let version = try await SetupCommand.run(result.directory + "/" + name, arguments: ["--version"], workspace: workspace, timeout: 30)
+                try expect(version.status == 0 && version.output.contains("11564"), "real runtime version check failed: " + version.output)
+            }
+            print("PASS official llama.cpp download, shared libraries, both CLI versions and reuse: " + result.directory)
+            return
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--install-real"), CommandLine.arguments.count > index + 2 {
             let workspace = WorkspaceLayout(CommandLine.arguments[index + 1])
             let requirements = URL(fileURLWithPath: CommandLine.arguments[index + 2])
@@ -62,7 +75,9 @@ func rejects(_ body: () throws -> Void) throws {
         print("PASS installer byte progress, cache reuse, checksum rejection, HTTP failure and download cancellation")
         try await environmentInstallation(root)
         print("PASS managed installation, requirements, discovery, reuse, rejection, retry and process-group cancellation")
-        print("9 setup checks passed")
+        try await llamaRuntimeDownload(root)
+        print("PASS llama.cpp download, dynamic libraries, reuse, checksum, HTTP, archive rejection, cancellation and retry")
+        print("10 setup checks passed")
     }
 
     static func setupGuide(_ root: URL) throws {
@@ -92,14 +107,21 @@ func rejects(_ body: () throws -> Void) throws {
         settings.python = source.path
         try expect(GeneralSetupProgress(settings: settings).current == .python, "directory accepted as Python")
         settings.python = python.path
+        progress = GeneralSetupProgress(settings: settings)
+        try expect(progress.current == .llama && progress.completed.count == 3 && !settings.hasGeneralPaths,
+                   "three paths must advance to the required fourth llama.cpp setting")
+        let runtime = root.appendingPathComponent("guide bin")
+        try fm.createDirectory(at: runtime, withIntermediateDirectories: true)
+        for name in ["llama-completion", "llama-mtmd-cli"] { try fm.copyItem(at: python, to: runtime.appendingPathComponent(name)) }
+        settings.promptEnhancement.runtimeDirectory = runtime.path
         try settings.validateGeneralPaths()
         let complete = GeneralSetupProgress(settings: settings)
-        try expect(complete.current == nil && complete.completed.count == 3, "complete settings should end guide")
+        try expect(complete.current == nil && complete.completed.count == 4, "four complete settings should end guide")
         let reopened = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
         try expect(GeneralSetupProgress(settings: reopened) == complete, "reopening must not replay completed steps")
         settings.repository = ""
         progress = GeneralSetupProgress(settings: settings)
-        try expect(progress.current == .source && progress.completed == [.workspace, .python], "clearing source should return to step 2 and retain Python")
+        try expect(progress.current == .source && progress.completed == [.workspace, .python, .llama], "clearing source should retain Python and llama.cpp")
         settings.workingDirectory = ""
         try expect(GeneralSetupProgress(settings: settings).current == .workspace, "out-of-order entries should still guide to earliest missing step")
         settings.repository = source.path
@@ -110,6 +132,7 @@ func rejects(_ body: () throws -> Void) throws {
         settings.workingDirectory = " \(workspace.path)\n"
         settings.repository = " \(source.path) "
         settings.python = "\n\(python.path) "
+        settings.promptEnhancement.runtimeDirectory = " \(runtime.path)\n"
         try expect(GeneralSetupProgress(settings: settings) == complete, "guide normalization differs from Save")
         try fm.setAttributes([.posixPermissions: 0o644], ofItemAtPath: python.path)
         try expect(GeneralSetupProgress(settings: settings).current == .python, "non-executable Python accepted")
@@ -162,12 +185,21 @@ func rejects(_ body: () throws -> Void) throws {
         try fm.createDirectory(at: managed, withIntermediateDirectories: true)
         try Data("{}".utf8).write(to: managed.appendingPathComponent("config.json"))
         var next = same; next.settings.repository = managed.path; next.settings.config = managed.appendingPathComponent("config.json").path
+        let runtime = WorkspaceLayout(saved.settings.workingDirectory).runtimes.appendingPathComponent("llama.cpp-b11564/bin")
+        try fm.createDirectory(at: runtime, withIntermediateDirectories: true)
+        try Data("runtime".utf8).write(to: runtime.appendingPathComponent("llama-completion"))
+        next.settings.promptEnhancement.runtimeDirectory = runtime.path
         try JSONFile.write(next, to: location)
         next.settings.workingDirectory = root.appendingPathComponent("second workspace").path
         let moved = try WorkspaceStorage.save(next, previousState: location, locatorRoot: support)
         try expect(moved.settings.repository.hasPrefix(next.settings.workingDirectory + "/code/"), "managed source not moved")
         try expect(fm.fileExists(atPath: moved.settings.config), "config not rebased")
         try expect(fm.fileExists(atPath: managed.path), "original source removed")
+        try expect(moved.settings.promptEnhancement.runtimeDirectory.hasPrefix(next.settings.workingDirectory + "/runtimes/"),
+                   "managed runtime path was not rebased to the new workspace")
+        try expect(fm.fileExists(atPath: moved.settings.promptEnhancement.runtimeDirectory + "/llama-completion")
+                   && fm.fileExists(atPath: runtime.appendingPathComponent("llama-completion").path),
+                   "workspace runtime copy lost the original or downloaded binary")
         try expect(moved.generations.isEmpty, "later workspace switch kept old records")
         let previousAfterSwitch = try JSONFile.read(WorkspaceData.self, from: location)
         try expect(previousAfterSwitch.generations.first?.id == job.id, "switch modified previous workspace history")

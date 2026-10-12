@@ -26,7 +26,7 @@ public struct PromptEnhancementSettings: Codable, Equatable {
         var directory: ObjCBool = false
         guard binary.hasPrefix("/"), fm.fileExists(atPath: binary, isDirectory: &directory),
               !directory.boolValue, fm.isExecutableFile(atPath: binary) else {
-            throw AppError.message("Prompt 增强需要 \(mode == .t2i ? "llama-completion" : "llama-mtmd-cli")，请配置 llama.cpp 的 bin 目录。")
+            throw AppError.message("Prompt 增强需要 \(mode == .t2i ? "llama-completion" : "llama-mtmd-cli")，请在通用设置中配置 llama.cpp 运行目录（bin）。")
         }
         for (label, path) in files {
             var isDirectory: ObjCBool = false
@@ -41,7 +41,7 @@ public struct PromptEnhancementSettings: Codable, Equatable {
 
     /// The supplied PE scripts' layout, discovered near the selected source/model.
     /// Existing explicit selections always win.
-    public mutating func discover(near paths: [String]) {
+    public mutating func discover(near paths: [String], includeRuntime: Bool = true) {
         let fm = FileManager.default
         var roots: [URL] = []
         for path in paths where path.hasPrefix("/") {
@@ -58,7 +58,7 @@ public struct PromptEnhancementSettings: Codable, Equatable {
                     && (executable ? fm.isExecutableFile(atPath: path) : fm.isReadableFile(atPath: path))
             }
         }
-        if runtimeDirectory.isEmpty,
+        if includeRuntime, runtimeDirectory.isEmpty,
            let binary = first(roots.flatMap { root in
                [".qwen-image-pe-t2i/build/bin", ".qwen-image-pe-i2i/build/bin", "llama.cpp/build/bin", "bin"].flatMap { folder in
                    ["llama-completion", "llama-mtmd-cli"].map { root.appendingPathComponent(folder + "/" + $0).path }

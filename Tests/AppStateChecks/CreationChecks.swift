@@ -41,6 +41,7 @@ func creationChecks() async throws {
     var settings = AppSettings(repository: source.path, model: model.path, config: config.path,
                                python: executable.path, workingDirectory: workspace.path)
     settings.promptEnhancement.enabled = false // This fixture exercises ordinary image inference.
+    settings.promptEnhancement.runtimeDirectory = try runtimeFixture(in: root)
     setenv("LIGHTX2V_APP_STATE_DIR", support.path, 1)
     try JSONFile.write(WorkspaceData(settings: settings, hasCompletedGeneralSetup: true), to: layout.state)
     try JSONFile.write(WorkspaceLocation(workingDirectory: workspace.path), to: support.appendingPathComponent("workspace_location.json"))

@@ -1,7 +1,7 @@
 import Foundation
 
 public enum GeneralSetupStep: Int, CaseIterable {
-    case workspace = 1, source, python
+    case workspace = 1, source, python, llama
 }
 
 /// A snapshot of committed input. The UI refreshes this after editing finishes,
@@ -18,6 +18,7 @@ public struct GeneralSetupProgress: Equatable {
         paths.workingDirectory = normalized(settings.workingDirectory)
         paths.repository = normalized(settings.repository)
         paths.python = normalized(settings.python)
+        paths.promptEnhancement.runtimeDirectory = normalized(settings.promptEnhancement.runtimeDirectory)
         completed = Set(GeneralSetupStep.allCases.filter { (try? paths.validateGeneralPath($0)) != nil })
     }
 }

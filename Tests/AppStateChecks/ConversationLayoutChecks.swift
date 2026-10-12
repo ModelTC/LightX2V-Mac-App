@@ -17,6 +17,7 @@ func conversationLayoutChecks() async throws {
     settings.workingDirectory = layout.root.path
     settings.repository = root.appendingPathComponent("fake-source").path
     settings.python = "/usr/bin/false"
+    settings.promptEnhancement.runtimeDirectory = try runtimeFixture(in: root)
     setenv("LIGHTX2V_APP_STATE_DIR", support.path, 1)
     try JSONFile.write(WorkspaceData(settings: settings, hasCompletedGeneralSetup: true), to: layout.state)
     try JSONFile.write(WorkspaceLocation(workingDirectory: layout.root.path), to: support.appendingPathComponent("workspace_location.json"))

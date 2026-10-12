@@ -13,6 +13,7 @@ struct AppStateChecks {
             return
         }
         if CommandLine.arguments.dropFirst().first == "--settings-only" {
+            try await generalRuntimeChecks()
             try await generalSettingsFocusChecks()
             try await environmentPresentationChecks()
             return
@@ -60,6 +61,7 @@ struct AppStateChecks {
         settings.workingDirectory = workspace.path
         settings.repository = root.appendingPathComponent("fake-source").path
         settings.python = "/usr/bin/false"
+        settings.promptEnhancement.runtimeDirectory = try runtimeFixture(in: root)
         try JSONFile.write(WorkspaceData(settings: settings, hasCompletedGeneralSetup: true), to: layout.state)
         try JSONFile.write(WorkspaceLocation(workingDirectory: workspace.path), to: support.appendingPathComponent("workspace_location.json"))
         let store = AppStore()
@@ -175,6 +177,7 @@ struct AppStateChecks {
         try await turboPreparationChecks()
         try await enhancementStateChecks()
         try await startupEnvironmentChecks()
+        try await generalRuntimeChecks()
         try await generalSettingsFocusChecks()
         try await environmentPresentationChecks()
         try await modelSelectionLayoutChecks()

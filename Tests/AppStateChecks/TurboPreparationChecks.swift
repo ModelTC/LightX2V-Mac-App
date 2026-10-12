@@ -29,8 +29,9 @@ func turboPreparationChecks() async throws {
     let store = AppStore()
     try check(store.needsGeneralSetup && store.modelDirectory.isEmpty && store.modelConfig.isEmpty,
               "first launch has no model paths or general setup")
-    let settings = AppSettings(repository: source.path, model: "", config: "", python: "/usr/bin/false",
+    var settings = AppSettings(repository: source.path, model: "", config: "", python: "/usr/bin/false",
                                workingDirectory: root.appendingPathComponent("workspace").path)
+    settings.promptEnhancement.runtimeDirectory = try runtimeFixture(in: root)
     try await store.applyGeneralSettings(settings)
     while store.isChecking { try await Task.sleep(for: .milliseconds(10)) }
     try check(!store.needsGeneralSetup && store.selectedModel == nil && store.settings.config == config.path,

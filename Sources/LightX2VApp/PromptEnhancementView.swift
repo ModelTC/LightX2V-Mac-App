@@ -58,10 +58,9 @@ struct PromptEnhancementSettingsView: View {
                         .font(.system(size: 11)).foregroundStyle(Palette.muted)
                 }
                 Spacer()
-                Button("自动查找") { settings.discover(near: [store.settings.model, store.settings.repository, store.settings.workingDirectory]) }
+                Button("自动查找") { settings.discover(near: [store.settings.model, store.settings.repository, store.settings.workingDirectory], includeRuntime: false) }
                     .buttonStyle(SettingsActionStyle())
             }
-            PathSettingField(title: "llama.cpp 运行目录（bin）", value: $settings.runtimeDirectory, directory: true)
             Picker("增强模型", selection: $mode) {
                 Text("文字 → 画面").tag(PromptEnhancementMode.t2i)
                 Text("参考图 → 画面").tag(PromptEnhancementMode.i2i)
@@ -93,7 +92,6 @@ struct PromptEnhancementSettingsView: View {
     private var normalizedSettings: PromptEnhancementSettings {
         var value = settings
         func path(_ text: String) -> String { (text.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath }
-        value.runtimeDirectory = path(value.runtimeDirectory)
         value.t2iModel = path(value.t2iModel); value.t2iSystemPrompt = path(value.t2iSystemPrompt)
         value.i2iModel = path(value.i2iModel); value.i2iSystemPrompt = path(value.i2iSystemPrompt)
         value.visionProjector = path(value.visionProjector)

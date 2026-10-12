@@ -22,6 +22,7 @@ func modelSelectionLayoutChecks() async throws {
     settings.workingDirectory = layout.root.path
     settings.repository = root.appendingPathComponent("source").path
     settings.python = "/usr/bin/false"
+    settings.promptEnhancement.runtimeDirectory = try runtimeFixture(in: root)
     try JSONFile.write(WorkspaceData(settings: settings, hasCompletedGeneralSetup: true), to: layout.state)
     try JSONFile.write(WorkspaceLocation(workingDirectory: layout.root.path),
                        to: root.appendingPathComponent("support/workspace_location.json"))

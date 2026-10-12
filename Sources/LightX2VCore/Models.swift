@@ -31,7 +31,7 @@ public struct AppSettings: Codable, Equatable {
     }
 
     public var hasGeneralPaths: Bool {
-        [workingDirectory, repository, python].allSatisfy { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        [workingDirectory, repository, python, promptEnhancement.runtimeDirectory].allSatisfy { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
     public func validateGeneralPaths() throws {
@@ -40,6 +40,7 @@ public struct AppSettings: Codable, Equatable {
 
     public func validateGeneralPath(_ step: GeneralSetupStep) throws {
         if step == .workspace { try WorkspaceLayout.validate(workingDirectory); return }
+        if step == .llama { try LlamaRuntimeDownloader.validateRuntime(promptEnhancement.runtimeDirectory); return }
         let fm = FileManager.default
         let (label, value) = step == .source ? ("LightX2V 源码目录", repository) : ("PyTorch 环境", python)
         guard !value.isEmpty else { throw AppError.message("请选择\(label)。") }

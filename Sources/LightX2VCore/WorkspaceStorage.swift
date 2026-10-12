@@ -6,6 +6,7 @@ public struct WorkspaceLayout: Sendable {
     public var state: URL { root.appendingPathComponent("workspace.json") }
     public var outputs: URL { root.appendingPathComponent("outputs") }
     public var code: URL { root.appendingPathComponent("code") }
+    public var runtimes: URL { root.appendingPathComponent("runtimes") }
     public var temporary: URL { root.appendingPathComponent("tmp") }
 
     public static func validate(_ path: String) throws {
@@ -105,6 +106,19 @@ public enum WorkspaceStorage {
                         if data.settings.config.hasPrefix(repository.path + "/") {
                             data.settings.config = target.path + data.settings.config.dropFirst(repository.path.count)
                         }
+                    }
+                    let runtime = URL(fileURLWithPath: data.settings.promptEnhancement.runtimeDirectory).standardizedFileURL.resolvingSymlinksInPath()
+                    let installation = runtime.deletingLastPathComponent()
+                    if runtime.lastPathComponent == "bin", installation.deletingLastPathComponent() == old.runtimes {
+                        guard !layout.root.path.hasPrefix(installation.path + "/") else {
+                            throw AppError.message("工作目录不能放在要迁移的 llama.cpp 目录内部，请另选文件夹。")
+                        }
+                        let target = layout.runtimes.appendingPathComponent(installation.lastPathComponent)
+                        guard !fm.fileExists(atPath: target.path) else { throw AppError.message("新工作目录已有同名 llama.cpp 目录，请另选目录。") }
+                        try fm.createDirectory(at: layout.runtimes, withIntermediateDirectories: true)
+                        created.append(target)
+                        try fm.copyItem(at: installation, to: target)
+                        data.settings.promptEnhancement.runtimeDirectory = target.appendingPathComponent("bin").path
                     }
                 }
             }

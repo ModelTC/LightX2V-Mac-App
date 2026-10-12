@@ -14,6 +14,7 @@ func generalSettingsFocusChecks() async throws {
     settings.workingDirectory = layout.root.path
     settings.repository = root.appendingPathComponent("source").path
     settings.python = "/usr/bin/false"
+    settings.promptEnhancement.runtimeDirectory = try runtimeFixture(in: root)
     setenv("LIGHTX2V_APP_STATE_DIR", support.path, 1)
     try JSONFile.write(WorkspaceData(settings: settings, hasCompletedGeneralSetup: true), to: layout.state)
     try JSONFile.write(WorkspaceLocation(workingDirectory: layout.root.path), to: support.appendingPathComponent("workspace_location.json"))
@@ -39,7 +40,7 @@ func generalSettingsFocusChecks() async throws {
             throw AppError.message("General settings sheet did not open")
         }
         let inputs = fields(content).filter(\.isEditable)
-        try check(inputs.count == 3 && inputs.allSatisfy { $0.currentEditor() == nil },
+        try check(inputs.count == 4 && inputs.allSatisfy { $0.currentEditor() == nil },
                   "settings opening \(opening) leaves every path unselected")
         let workspaceField = inputs.first { $0.stringValue == settings.workingDirectory }!
         sheet.makeFirstResponder(workspaceField)

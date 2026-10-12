@@ -41,6 +41,7 @@ print('LIGHTX2V_ENV:' + (root / 'versions.json').read_text(), flush=True)
     settings.workingDirectory = layout.root.path; settings.python = python.path
     settings.repository = root.appendingPathComponent("source").path
     settings.promptEnhancement.enabled = false
+    settings.promptEnhancement.runtimeDirectory = try runtimeFixture(in: root)
     let source = URL(fileURLWithPath: settings.repository).appendingPathComponent("lightx2v")
     try fm.createDirectory(at: source, withIntermediateDirectories: true)
     try Data("raise RuntimeError('Startup must not import inference or services')\n".utf8).write(to: source.appendingPathComponent("infer.py"))
@@ -92,6 +93,12 @@ print('LIGHTX2V_ENV:' + (root / 'versions.json').read_text(), flush=True)
               "closing incomplete setup allows the workspace but keeps generation unavailable")
 
     var missing = minimum; missing["loguru"] = ""
+    var missingRuntime = settings; missingRuntime.promptEnhancement.runtimeDirectory = ""
+    let fourth = try savedStore(missingRuntime)
+    fourth.start()
+    try check(fourth.needsGeneralSetup && fourth.showStartupSettings && !fourth.isChecking && count() == 0,
+              "missing fourth runtime setting opens general setup without probing Python")
+    fourth.closeGeneralSettings()
     try write(missing)
     let store = try savedStore()
     store.start()

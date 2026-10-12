@@ -62,6 +62,7 @@ func generationLogChecks() async throws {
                                model: root.appendingPathComponent("model").path,
                                config: config.path, python: python.path, workingDirectory: layout.root.path)
     settings.promptEnhancement.enabled = false
+    settings.promptEnhancement.runtimeDirectory = try runtimeFixture(in: root)
     try JSONFile.write(WorkspaceData(settings: settings, hasCompletedGeneralSetup: true), to: layout.state)
     try JSONFile.write(WorkspaceLocation(workingDirectory: layout.root.path), to: support.appendingPathComponent("workspace_location.json"))
     let store = AppStore(); store.selectModel(.qwenImage21Turbo)
