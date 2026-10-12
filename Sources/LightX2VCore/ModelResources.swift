@@ -73,17 +73,68 @@ public enum HuggingFaceModelDownloader {
     }
 
     public static func download(_ resource: ModelResource, python: String, workspace: WorkspaceLayout,
+                                onProgress: @escaping @Sendable (ModelDownloadProgress) -> Void = { _ in },
                                 onOutput: @escaping @Sendable (String) -> Void) async throws -> String {
         let cli = try executable(python: python)
         try workspace.prepare()
         let destination = resource.destination(in: workspace)
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
-        let result = try await SetupCommand.run(cli, arguments: ["download", resource.repository, "--local-dir", destination.path],
-            workspace: workspace, timeout: 86400, environment: ["HF_HUB_DOWNLOAD_TIMEOUT": "60", "HF_HUB_DISABLE_UPDATE_CHECK": "1"],
-            logFile: workspace.root.appendingPathComponent("logs/hf-" + resource.rawValue + ".log"), onOutput: onOutput)
+        // Resolve the byte total before concurrent workers start. Reading only
+        // metadata never downloads weights and reuses the same HF local cache.
+        var metadata: DownloadMetadata?
+        do {
+            let result = try await SetupCommand.run(python, arguments: ["-u", "-c", metadataScript, resource.repository, destination.path],
+                workspace: workspace, timeout: 60,
+                environment: ["HF_HUB_DISABLE_PROGRESS_BARS": "1", "HF_HUB_DISABLE_UPDATE_CHECK": "1"],
+                logFile: workspace.root.appendingPathComponent("logs/hf-" + resource.rawValue + "-metadata.log"))
+            if result.status == 0, let marker = result.output.range(of: "LIGHTX2V_DOWNLOAD_METADATA:"),
+               let json = result.output[marker.upperBound...].split(whereSeparator: \.isNewline).first,
+               let data = String(json).data(using: .utf8) {
+                metadata = try? JSONDecoder().decode(DownloadMetadata.self, from: data)
+            }
+        } catch { try Task.checkCancellation() }
+        try Task.checkCancellation()
+        let updates = DownloadUpdates()
+        onProgress(updates.begin(totalBytes: metadata?.totalBytes))
+        var arguments = ["download", resource.repository, "--local-dir", destination.path]
+        if let revision = metadata?.revision, revision.range(of: "^[0-9a-f]{40}$", options: .regularExpression) != nil {
+            arguments += ["--revision", revision]
+        }
+        let result = try await SetupCommand.run(cli, arguments: arguments,
+            workspace: workspace, timeout: 86400,
+            environment: ["HF_HUB_DOWNLOAD_TIMEOUT": "60", "HF_HUB_DISABLE_UPDATE_CHECK": "1",
+                          "HF_HUB_DISABLE_PROGRESS_BARS": "0", "TQDM_POSITION": "-1", "TQDM_MININTERVAL": "0.5", "COLUMNS": "200"],
+            logFile: workspace.root.appendingPathComponent("logs/hf-" + resource.rawValue + ".log")) { line in
+                onOutput(line)
+                if let progress = updates.consume(line) { onProgress(progress) }
+            }
         try Task.checkCancellation()
         guard result.status == 0 else { throw AppError.message("HF 下载失败，可重试或按下载指南自行下载。\n" + String(result.output.suffix(1500))) }
+        onProgress(updates.checking())
         try resource.validate(directory: destination.path)
         return destination.path
+    }
+
+    private struct DownloadMetadata: Decodable {
+        let totalBytes: Double?
+        let revision: String?
+    }
+
+    private static let metadataScript = #"""
+import json, sys
+from huggingface_hub import snapshot_download
+files = snapshot_download(sys.argv[1], local_dir=sys.argv[2], dry_run=True)
+pending = [item for item in files if item.will_download]
+total = None if any(item.file_size is None for item in pending) else sum(item.file_size for item in pending)
+revisions = {item.commit_hash for item in files}
+print("LIGHTX2V_DOWNLOAD_METADATA:" + json.dumps({"totalBytes": total, "revision": next(iter(revisions)) if len(revisions) == 1 else None}), flush=True)
+"""#
+
+    private final class DownloadUpdates: @unchecked Sendable {
+        private let lock = NSLock()
+        private var parser = ModelDownloadProgressParser()
+        func begin(totalBytes: Double?) -> ModelDownloadProgress { lock.lock(); defer { lock.unlock() }; return parser.begin(totalBytes: totalBytes) }
+        func consume(_ line: String) -> ModelDownloadProgress? { lock.lock(); defer { lock.unlock() }; return parser.consume(line) }
+        func checking() -> ModelDownloadProgress { lock.lock(); defer { lock.unlock() }; return parser.checking() }
     }
 }

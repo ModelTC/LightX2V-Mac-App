@@ -136,8 +136,14 @@ func unifiedModelPreparationChecks() async throws {
     func settle() async throws -> CGFloat { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(80)); host.layoutSubtreeIfNeeded(); return host.fittingSize.height }
     let height = try await settle()
     try check(height <= 410, "three model cards no longer reserve separate status rows")
-    for scenario in ["ready", "download", "failed", "off"] {
-        if scenario == "download" { store.activeModelDownload = .t2i; store.isPreparingResources = true; store.modelDownloadMessages[.t2i] = "Fetching 12 files: 25% · 1.2 / 7.8 GB" }
+    for scenario in ["ready", "preparing", "download", "large-rate", "checking", "failed", "off"] {
+        if scenario == "preparing" { store.activeModelDownload = .t2i; store.isPreparingResources = true; store.modelDownloadProgress[.t2i] = ModelDownloadProgress() }
+        if scenario == "download" || scenario == "large-rate" || scenario == "checking" {
+            var parser = ModelDownloadProgressParser(); _ = parser.begin(totalBytes: 1_000_000_000)
+            _ = parser.consume("Reconstructing (incomplete total...): 50%|█| 250MB / 500MB 999GB/s")
+            _ = parser.consume(scenario == "large-rate" ? "Downloading bytes: | 10.0MB 999.9GB/s" : "Downloading bytes: | 10.0MB 2.5MB/s")
+            store.modelDownloadProgress[.t2i] = scenario == "checking" ? parser.checking() : parser.progress
+        }
         if scenario == "failed" { store.activeModelDownload = nil; store.isPreparingResources = false; store.modelDownloadErrors.insert(.t2i); store.modelDownloadMessages[.t2i] = String(repeating: "下载失败请重试 ", count: 60) }
         if scenario == "off" { store.setPromptEnhancementEnabled(false) }
         let measured = try await settle()

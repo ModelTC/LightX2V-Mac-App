@@ -14,6 +14,7 @@ struct AppStateChecks {
         }
         if CommandLine.arguments.dropFirst().first == "--models-only" {
             try await unifiedModelPreparationChecks()
+            try await modelDownloadStateChecks()
             try await turboPreparationChecks()
             return
         }
@@ -197,6 +198,7 @@ struct AppStateChecks {
         try await generationLogChecks()
         try await turboPreparationChecks()
         try await unifiedModelPreparationChecks()
+        try await modelDownloadStateChecks()
         try await enhancementStateChecks()
         try await startupEnvironmentChecks()
         try await generalRuntimeChecks()

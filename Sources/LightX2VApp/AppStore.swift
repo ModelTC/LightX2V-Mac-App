@@ -24,7 +24,9 @@ final class AppStore: ObservableObject {
     @Published var i2iDirectory: String { didSet { if oldValue != i2iDirectory { modelPathChanged(.i2i) } } }
     @Published var activeModelDownload: ModelResource?
     @Published var modelDownloadMessages: [ModelResource: String] = [:]
+    @Published var modelDownloadProgress: [ModelResource: ModelDownloadProgress] = [:]
     @Published var modelDownloadErrors: Set<ModelResource> = []
+    private var modelDownloadID: UUID?
     @Published var readyModelResources: Set<ModelResource> = []
     @Published var modelResourceMessages: [ModelResource: String] = [:]
     private var modelResourceTask: Task<Void, Never>?
@@ -404,7 +406,10 @@ final class AppStore: ObservableObject {
         }
         settings = updated
         persist()
-        if activeModelDownload != resource { modelDownloadMessages.removeValue(forKey: resource); modelDownloadErrors.remove(resource) }
+        if activeModelDownload != resource {
+            modelDownloadMessages.removeValue(forKey: resource); modelDownloadErrors.remove(resource)
+            modelDownloadProgress.removeValue(forKey: resource)
+        }
         refreshModelResources()
     }
 
@@ -437,18 +442,29 @@ final class AppStore: ObservableObject {
 
     func downloadModel(_ resource: ModelResource) {
         guard !busy, !needsGeneralSetup else { return }
+        let downloadID = UUID(); modelDownloadID = downloadID
         activeModelDownload = resource; isPreparingResources = true
-        modelDownloadErrors.remove(resource); modelDownloadMessages[resource] = "正在启动 hf 下载…"
+        modelDownloadErrors.remove(resource); modelDownloadMessages[resource] = "获取模型信息…"
+        modelDownloadProgress[resource] = ModelDownloadProgress()
         let python = settings.python; let layout = WorkspaceLayout(settings.workingDirectory)
         setupTask = Task { [weak self] in
             guard let self else { return }
-            defer { self.activeModelDownload = nil; self.finishSetupTask() }
+            defer {
+                self.modelDownloadID = nil; self.activeModelDownload = nil
+                self.modelDownloadProgress.removeValue(forKey: resource); self.finishSetupTask()
+            }
             do {
-                let path = try await HuggingFaceModelDownloader.download(resource, python: python, workspace: layout) { [weak self] line in
+                let path = try await HuggingFaceModelDownloader.download(resource, python: python, workspace: layout, onProgress: { [weak self] progress in
+                    Task { @MainActor [weak self] in
+                        guard let self, self.modelDownloadID == downloadID,
+                              progress.sequence > (self.modelDownloadProgress[resource]?.sequence ?? -1) else { return }
+                        self.modelDownloadProgress[resource] = progress
+                    }
+                }) { [weak self] line in
                     let text = line.replacingOccurrences(of: "\u{1B}\\[[0-9;]*[A-Za-z]", with: "", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !text.isEmpty else { return }
                     Task { @MainActor [weak self] in
-                        guard let self, self.activeModelDownload == resource else { return }
+                        guard let self, self.modelDownloadID == downloadID else { return }
                         self.modelDownloadMessages[resource] = String(text.suffix(500))
                     }
                 }

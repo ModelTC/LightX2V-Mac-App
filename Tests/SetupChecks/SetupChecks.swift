@@ -78,7 +78,8 @@ func rejects(_ body: () throws -> Void) throws {
         try await llamaRuntimeDownload(root)
         print("PASS llama.cpp download, dynamic libraries, reuse, checksum, HTTP, archive rejection, cancellation and retry")
         try await modelDownloadChecks(root)
-        print("11 setup checks passed")
+        try modelDownloadProgressChecks()
+        print("12 setup checks passed")
     }
 
     static func setupGuide(_ root: URL) throws {

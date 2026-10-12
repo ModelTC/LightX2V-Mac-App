@@ -41,14 +41,14 @@ private struct ModelDownloadCard: View {
     private var ready: Bool { store.readyModelResources.contains(resource) && !store.modelDownloadErrors.contains(resource) && !downloading }
     private var status: String {
         if optionalDisabled { return "Prompt 增强已关闭，无需配置" }
-        if downloading { return "正在下载 · " + concise(store.modelDownloadMessages[resource] ?? "正在启动 hf…") }
+        if downloading { return (store.modelDownloadProgress[resource] ?? ModelDownloadProgress()).detail(at: Date()) }
         if store.modelDownloadErrors.contains(resource) { return "下载失败 · " + concise(store.modelDownloadMessages[resource] ?? "请重试") }
         if ready { return "模型文件已就绪" }
         if let message = store.modelDownloadMessages[resource] { return concise(message) }
         return path.isEmpty ? "尚未选择模型文件夹" : concise(store.modelResourceMessages[resource] ?? "正在确认模型文件…")
     }
     private var statusColor: Color {
-        optionalDisabled ? Palette.muted : ready ? Palette.green : Palette.accent
+        optionalDisabled || downloading ? Palette.muted : ready ? Palette.green : Palette.accent
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -69,14 +69,20 @@ private struct ModelDownloadCard: View {
             }.background(Palette.surface, in: RoundedRectangle(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line, lineWidth: 1).allowsHitTesting(false))
                 .disabled(optionalDisabled || store.configurationBusy)
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Button {
                     if downloading { store.setupTask?.cancel() } else { store.downloadModel(resource) }
                 } label: {
-                    Label(downloading ? "停止" : "自动下载", systemImage: downloading ? "stop" : "arrow.down.to.line")
+                    HStack(spacing: 4) {
+                        Image(systemName: downloading ? "stop" : "arrow.down.to.line")
+                        Text(downloading ? "停止" : "自动下载").lineLimit(1)
+                    }.fixedSize().frame(width: 56, alignment: .leading)
                 }.disabled(optionalDisabled || (store.busy && !downloading))
                     .accessibilityLabel((downloading ? "停止下载" : "自动下载") + resource.title)
-                Spacer(minLength: 0)
+                if downloading {
+                    ModelDownloadFeedback(resource: resource, progress: store.modelDownloadProgress[resource] ?? ModelDownloadProgress())
+                        .onHover { statusHovered = $0 }
+                } else { Spacer(minLength: 0) }
                 Button { statusPinned.toggle() } label: {
                     Group {
                         if downloading { ProgressView().controlSize(.mini).tint(statusColor) }
@@ -87,8 +93,13 @@ private struct ModelDownloadCard: View {
                     .onHover { statusHovered = $0 }
                     .overlay(alignment: .bottomTrailing) {
                         if showsStatus {
-                            ModelStatusBubble(message: status)
-                                .offset(y: -24).allowsHitTesting(false).accessibilityHidden(true)
+                            Group {
+                                if downloading {
+                                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                                        ModelStatusBubble(message: (store.modelDownloadProgress[resource] ?? ModelDownloadProgress()).detail(at: context.date))
+                                    }
+                                } else { ModelStatusBubble(message: status) }
+                            }.offset(y: -24).allowsHitTesting(false).accessibilityHidden(true)
                         }
                     }
             }.font(.system(size: 10)).buttonStyle(HoverButtonStyle(radius: 6)).frame(height: 22)
@@ -127,6 +138,37 @@ private struct ModelDownloadCard: View {
         panel.allowsMultipleSelection = false; panel.title = "选择" + resource.title + "目录"
         panel.directoryURL = path.isEmpty ? URL(fileURLWithPath: store.settings.workingDirectory) : URL(fileURLWithPath: path).deletingLastPathComponent()
         if panel.runModal() == .OK, let url = panel.url { path = url.path }
+    }
+}
+
+private struct ModelDownloadFeedback: View {
+    let resource: ModelResource
+    let progress: ModelDownloadProgress
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            HStack(spacing: 6) {
+                Group {
+                    if let fraction = progress.fraction, progress.stage == .downloading {
+                        GeometryReader { geometry in
+                            Capsule().fill(Palette.line)
+                                .overlay(alignment: .leading) {
+                                    Capsule().fill(Palette.button).frame(width: geometry.size.width * fraction)
+                                }
+                        }.frame(height: 4)
+                    } else {
+                        ProgressView().progressViewStyle(.linear).tint(Palette.button).frame(height: 4)
+                    }
+                }.frame(maxWidth: .infinity)
+                Text(progress.percentage).font(.system(size: 10)).monospacedDigit()
+                    .frame(width: 28, alignment: .trailing)
+                Text(progress.speedText(at: context.date)).font(.system(size: 9)).monospacedDigit()
+                    .foregroundStyle(Palette.muted).frame(width: 62, alignment: .trailing)
+            }.lineLimit(1)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(resource.title + "下载进度")
+                .accessibilityValue(progress.percentage + " · " + progress.detail(at: context.date))
+        }.frame(maxWidth: .infinity)
     }
 }
 
