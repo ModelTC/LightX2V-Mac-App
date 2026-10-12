@@ -37,13 +37,11 @@ struct EnvironmentSearchView: View {
                 .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10))
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    if !searching && compatibleCount == 0 {
-                        HStack(alignment: .top, spacing: 12) {
-                            installationChoice("手动安装", symbol: "doc.text", detail: "按简短说明准备环境，安装后重新搜索。",
-                                               button: "查看安装说明", action: onInstructions)
-                            installationChoice("在工作目录中自动安装", symbol: "arrow.down.circle", detail: "自动安装 Miniconda、Python 3.11 和推理依赖。",
-                                               button: "开始自动安装", issue: managedInstallIssue, action: onInstall)
-                        }
+                    HStack(alignment: .top, spacing: 12) {
+                        installationChoice("手动安装", symbol: "doc.text", detail: "按简短说明准备环境，安装后重新搜索。",
+                                           button: "查看安装说明", action: onInstructions)
+                        installationChoice("在工作目录中自动安装", symbol: "arrow.down.circle", detail: "自动安装 Miniconda、Python 3.11 和推理依赖。",
+                                           button: "开始自动安装", issue: managedInstallIssue, action: onInstall)
                     }
                     if environments.isEmpty && searching {
                         Text("正在查找 Conda、venv、pyenv 等常见环境…")
