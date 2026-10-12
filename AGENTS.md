@@ -1,11 +1,11 @@
-# 维护要求
+# Maintenance Requirements
 
-- 每次完成代码修改后，运行相关验证，提交并推送到本仓库 GitHub。
-- 根据改动范围在本地完成相关 APP 状态与交互验证。GitHub 构建仅执行 APP 编译、打包校验和发布，不运行测试、不安装测试依赖、不提供测试开关。相关测试按修改范围在本地执行。
-- 等待与推送提交对应的 GitHub Actions 自动构建和 APP 发布成功；回复用户时提供 APP 直接下载链接和构建结果链接。
-- 确认下载包与本次提交对应。构建或发布失败时继续处理并报告实际状态，不将旧安装包当作本次结果。
-- 测试使用全新隔离工作目录，不改原工作区，不绕过 macOS 安全机制。
-- README 仅保留下载、构建状态和源码构建。
+- After every code change, run the relevant verification, commit the changes, and push them to this repository on GitHub.
+- Validate the relevant APP states and interactions locally according to the scope of the changes. GitHub builds must only compile the APP, validate the package, and publish it. Do not run tests, install test dependencies, or provide test switches in GitHub builds. Run relevant tests locally according to the scope of the changes.
+- Wait for the GitHub Actions build and APP release corresponding to the pushed commit to succeed. Include a direct APP download link and a link to the build results when replying to the user.
+- Confirm that the download package corresponds to the current commit. If the build or release fails, continue addressing the failure and report its actual status. Do not present an older package as the result of the current changes.
+- Use a fresh, isolated working directory for testing. Do not modify the original workspace or bypass macOS security mechanisms.
+- Keep only downloads, build status, and source build instructions in the README.
 
-- 界面翻译统一使用本地化资源，语言偏好独立于工作目录保存，切换语言不得重建任务或清空输入。
-- APP 自己写入日志文件的文字必须使用英文；保留用户输入、模型输出和第三方日志原文。
+- Use localization resources consistently for interface translations. Store the language preference independently of the working directory. Switching languages must not recreate tasks or clear user input.
+- All text written by the APP itself to log files must be in English. Preserve user input, model output, and third-party logs in their original form.
