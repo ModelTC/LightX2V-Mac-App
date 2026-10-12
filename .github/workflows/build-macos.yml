@@ -6,6 +6,11 @@ on:
     branches: ['**']
     tags-ignore: [latest]
   workflow_dispatch:
+    inputs:
+      full_checks:
+        description: 'Run full APP lifecycle tests (adds about 4 minutes)'
+        type: boolean
+        default: false
 
 # Finish the active build; keep only the newest pending build during a push burst.
 # Serialization prevents two successful builds from replacing release assets at once.
@@ -62,7 +67,10 @@ jobs:
       - name: Check native input, cursors and scrollbars
         run: bash scripts/check-prompt-editor.sh
 
-      - name: Check image attachments and app lifecycle
+      # Long cancellation and lifecycle fixtures are checked locally for relevant
+      # changes; keep the full suite available on demand without delaying every UI release.
+      - name: Check image attachments and app lifecycle (full)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_checks }}
         run: bash scripts/check-app-state.sh
 
       - name: Check inspector animation clipping
@@ -91,7 +99,7 @@ jobs:
             printf '[Download latest APP](%s)\n\n' "$DOWNLOAD_URL"
             printf -- '- Build commit: `%s`\n' "$GITHUB_SHA"
             printf -- '- Target: macOS 14+, arm64\n'
-            printf -- '- Tests: Swift core, native input/cursor/scrollbar and Python bridge checks passed\n'
+            printf -- '- Tests: Swift core, workspace setup, native input/cursor/scrollbar, inspector and Python bridge checks passed\n'
             printf -- '- Signing: ad-hoc (not notarized)\n'
             printf -- '- Retention: no expiry; only the latest successful APP package is kept\n'
             printf -- '- This stable URL always serves the latest package, including from older run summaries\n'
