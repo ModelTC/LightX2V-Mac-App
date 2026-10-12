@@ -211,7 +211,7 @@ struct EnvironmentInstallView: View {
             DisclosureGroup("安装日志", isExpanded: $showLogs) {
                 ScrollViewReader { scroll in
                     ScrollView {
-                        Text(lines.suffix(80).joined(separator: "\n")).font(.system(size: 10, design: .monospaced))
+                        Text(lines.joined(separator: "\n")).font(.system(size: 10, design: .monospaced))
                             .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                         Color.clear.frame(height: 1).id("log-bottom")
                     }.padding(10).frame(height: 115).background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8))

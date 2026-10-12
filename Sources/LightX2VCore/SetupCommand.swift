@@ -17,6 +17,7 @@ public enum SetupCommand {
     }
     public static func run(_ executable: String, arguments: [String], workspace: WorkspaceLayout,
                            timeout: TimeInterval = 15, environment: [String: String] = [:], logFile: URL? = nil,
+                           logCommand: Bool = false,
                            useWorkspaceEnvironment: Bool = true,
                            onOutput: @escaping @Sendable (String) -> Void = { _ in }) async throws -> SetupCommandResult {
         let cancellation = Cancellation()
@@ -27,14 +28,19 @@ public enum SetupCommand {
                     do {
                         let file = logFile ?? workspace.temporary.appendingPathComponent("process-\(UUID().uuidString).log")
                         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-                        FileManager.default.createFile(atPath: file.path, contents: nil)
+                        let command = "$ " + ([executable] + arguments).map {
+                            "'" + $0.replacingOccurrences(of: "'", with: "'\\''") + "'"
+                        }.joined(separator: " ")
+                        let header = logCommand ? Data((command + "\n").utf8) : Data()
+                        FileManager.default.createFile(atPath: file.path, contents: header)
+                        if logCommand { onOutput(command) }
                         defer { if logFile == nil { try? FileManager.default.removeItem(at: file) } }
                         var actions: posix_spawn_file_actions_t?
                         var attributes: posix_spawnattr_t?
                         posix_spawn_file_actions_init(&actions); posix_spawnattr_init(&attributes)
                         defer { posix_spawn_file_actions_destroy(&actions); posix_spawnattr_destroy(&attributes) }
                         posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0)
-                        posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, file.path, O_WRONLY | O_TRUNC, 0o600)
+                        posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, file.path, O_WRONLY | O_APPEND, 0o600)
                         posix_spawn_file_actions_adddup2(&actions, STDOUT_FILENO, STDERR_FILENO)
                         posix_spawn_file_actions_addchdir_np(&actions, workspace.root.path)
                         posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP))
@@ -55,6 +61,7 @@ public enum SetupCommand {
                         }
                         let reader = try FileHandle(forReadingFrom: file)
                         defer { try? reader.close() }
+                        try reader.seek(toOffset: UInt64(header.count))
                         var captured = Data(), pending = Data()
                         func readOutput() throws {
                             while let data = try reader.read(upToCount: 65536), !data.isEmpty {

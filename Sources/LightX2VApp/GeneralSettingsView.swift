@@ -378,8 +378,7 @@ struct SettingsView: View {
                         if let line = value.logLine, !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             let clean = line.replacingOccurrences(of: #"\x1b\[[0-9;]*[A-Za-z]"#, with: "", options: .regularExpression)
                                 .replacingOccurrences(of: "\r", with: "")
-                            installLines.append(String(clean.prefix(1000)))
-                            if installLines.count > 160 { installLines.removeFirst(installLines.count - 160) }
+                            installLines.append(clean)
                         }
                     }
                 }

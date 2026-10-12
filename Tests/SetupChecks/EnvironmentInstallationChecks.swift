@@ -2,6 +2,16 @@ import Foundation
 import Darwin
 import LightX2VCore
 
+private final class InstallationLogUpdates: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [String] = []
+    func append(_ value: EnvironmentInstallProgress) {
+        guard let line = value.logLine else { return }
+        lock.lock(); storage.append(line); lock.unlock()
+    }
+    var lines: [String] { lock.lock(); defer { lock.unlock() }; return storage }
+}
+
 extension SetupChecks {
     static func environmentVersions() throws {
         for (actual, minimum, accepted) in [
@@ -99,7 +109,20 @@ printf '%s\n' 'LIGHTX2V_ENV:{"python":"3.11.14","architecture":"arm64","torch":"
 """#
         try Data(script.utf8).write(to: fakePython)
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakePython.path)
-        let installed = try await PyTorchEnvironmentInstaller.install(workspace: layout, requirements: requirements, distribution: distribution) { _ in }
+        let logUpdates = InstallationLogUpdates()
+        let installed = try await PyTorchEnvironmentInstaller.install(workspace: layout, requirements: requirements, distribution: distribution) { logUpdates.append($0) }
+        let commands = logUpdates.lines.filter { $0.hasPrefix("$ ") }
+        try expect(commands.count == 5, "installation must stream every command, including final environment probe")
+        try expect(commands.contains { $0.contains("'pip' 'install'") } && commands.contains { $0.contains("'pip' 'check'") }, "pip commands missing from installation log")
+        try expect(logUpdates.lines.contains("installing dependencies"), "command logging replaced process output")
+        let logFiles = try fm.contentsOfDirectory(at: layout.root.appendingPathComponent("logs"), includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.hasPrefix("environment-") }
+            .flatMap { try fm.contentsOfDirectory(at: $0, includingPropertiesForKeys: nil) }
+        try expect(logFiles.count == 5, "installation must retain all command log files")
+        for file in logFiles {
+            let log = try String(contentsOf: file, encoding: .utf8)
+            try expect(log.hasPrefix("$ ") && commands.contains { log.hasPrefix($0 + "\n") }, "saved installation log missing the executed command")
+        }
         try expect(installed.isCompatible && installed.pythonVersion == "3.11.14", "installation did not validate all versions")
         try expect(installed.executable == PyTorchEnvironmentInstaller.executable(in: layout).path, "installation chose a different environment")
         let copied = layout.root.appendingPathComponent("environments/requirements.txt")

@@ -185,7 +185,7 @@ public enum PyTorchEnvironmentInstaller {
             progress(.init(stage))
             let log = logs.appendingPathComponent("\(stage.rawValue)-\(stage).log")
             let result = try await SetupCommand.run(executable, arguments: arguments, workspace: workspace, timeout: timeout,
-                                                    environment: overrides, logFile: log) { line in
+                                                    environment: overrides, logFile: log, logCommand: true) { line in
                 progress(.init(stage, logLine: line))
             }
             guard result.status == 0 else {
@@ -207,7 +207,10 @@ public enum PyTorchEnvironmentInstaller {
         }
         try await run(python.path, ["-I", "-B", "-m", "pip", "install", "--no-input", "--progress-bar", "off", "--no-compile", "-r", requirements.path], stage: .dependencies)
         try await run(python.path, ["-I", "-B", "-m", "pip", "check"], stage: .verify, timeout: 60)
-        let checked = try await PythonEnvironmentSearch.probe(python.path, workspace: workspace)
+        let checked = try await PythonEnvironmentSearch.probe(python.path, workspace: workspace,
+            logFile: logs.appendingPathComponent("4-probe.log")) { line in
+                progress(.init(.verify, logLine: line))
+            }
         guard checked.pythonVersion.hasPrefix("3.11."), checked.isCompatible else {
             throw AppError.message("安装后的环境未通过检查：\(checked.compatibilityDetail)\n请查看日志后重试：\(logs.path)")
         }

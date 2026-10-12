@@ -166,7 +166,8 @@ public enum PythonEnvironmentSearch {
         return found
     }
 
-    public static func probe(_ executable: String, workspace: WorkspaceLayout) async throws -> PythonEnvironment {
+    public static func probe(_ executable: String, workspace: WorkspaceLayout, logFile: URL? = nil,
+                             onOutput: @escaping @Sendable (String) -> Void = { _ in }) async throws -> PythonEnvironment {
         var result = PythonEnvironment(executable: executable)
         let packages = String(decoding: try JSONEncoder().encode(PyTorchRequirements.dependencies.map(\.name)), as: UTF8.self)
         let script = #"""
@@ -185,7 +186,8 @@ except Exception as error:
 print("LIGHTX2V_ENV:" + json.dumps(result, ensure_ascii=False))
 """#
         do {
-            let output = try await SetupCommand.run(executable, arguments: ["-I", "-B", "-u", "-c", script], workspace: workspace, timeout: 20)
+            let output = try await SetupCommand.run(executable, arguments: ["-I", "-B", "-u", "-c", script], workspace: workspace,
+                timeout: 20, logFile: logFile, logCommand: logFile != nil, onOutput: onOutput)
             guard output.status == 0,
                   let line = output.output.components(separatedBy: "\n").last(where: { $0.hasPrefix("LIGHTX2V_ENV:") }),
                   let info = try JSONSerialization.jsonObject(with: Data(line.dropFirst("LIGHTX2V_ENV:".count).utf8)) as? [String: Any] else {
