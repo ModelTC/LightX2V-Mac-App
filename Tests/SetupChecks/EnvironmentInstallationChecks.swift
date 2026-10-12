@@ -118,6 +118,7 @@ printf '%s\n' 'LIGHTX2V_ENV:{"python":"3.11.14","architecture":"arm64","torch":"
         let logFiles = try fm.contentsOfDirectory(at: layout.root.appendingPathComponent("logs"), includingPropertiesForKeys: nil)
             .filter { $0.lastPathComponent.hasPrefix("environment-") }
             .flatMap { try fm.contentsOfDirectory(at: $0, includingPropertiesForKeys: nil) }
+            .filter { !$0.lastPathComponent.hasPrefix("0-") }
         try expect(logFiles.count == 5, "installation must retain all command log files")
         for file in logFiles {
             let log = try String(contentsOf: file, encoding: .utf8)

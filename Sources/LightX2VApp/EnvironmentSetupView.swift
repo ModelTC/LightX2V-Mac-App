@@ -208,7 +208,15 @@ struct EnvironmentInstallView: View {
             if let error {
                 Text(error).font(.system(size: 11)).foregroundStyle(Palette.accent).lineLimit(5).help(error).textSelection(.enabled)
             }
-            DisclosureGroup("安装日志", isExpanded: $showLogs) {
+            Button { showLogs.toggle() } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right").rotationEffect(.degrees(showLogs ? 90 : 0))
+                    Text("安装日志")
+                }.font(.system(size: 11)).foregroundStyle(Palette.muted)
+                    .padding(.horizontal, 6).padding(.vertical, 5)
+            }.buttonStyle(HoverButtonStyle(radius: 6))
+                .accessibilityValue(showLogs ? "已展开" : "已折叠")
+            if showLogs {
                 ScrollViewReader { scroll in
                     ScrollView {
                         Text(lines.joined(separator: "\n")).font(.system(size: 10, design: .monospaced))
@@ -217,7 +225,7 @@ struct EnvironmentInstallView: View {
                     }.padding(10).frame(height: 115).background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8))
                         .subtleScrollbars().onChange(of: lines.last) { _, _ in scroll.scrollTo("log-bottom", anchor: .bottom) }
                 }
-            }.font(.system(size: 11)).tint(Palette.muted)
+            }
             HStack {
                 if installing { Button("取消安装", action: onCancel).keyboardShortcut(.cancelAction) }
                 else if !completed { Button("继续安装", action: onRetry) }

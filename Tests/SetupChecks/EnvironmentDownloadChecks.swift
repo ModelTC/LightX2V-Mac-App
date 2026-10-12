@@ -5,6 +5,7 @@ private final class DownloadUpdates: @unchecked Sendable {
     private let lock = NSLock()
     private var updates: [EnvironmentInstallProgress] = []
     func append(_ value: EnvironmentInstallProgress) { lock.lock(); updates.append(value); lock.unlock() }
+    var logs: [String] { lock.lock(); defer { lock.unlock() }; return updates.compactMap(\.logLine) }
     var hasByteProgress: Bool {
         lock.lock(); defer { lock.unlock() }
         return updates.contains { ($0.fraction ?? 0) > 0 && $0.detail.contains("MB") }
@@ -59,7 +60,12 @@ server.serve_forever()
         }
         let workspace = WorkspaceLayout(root.appendingPathComponent("download with spaces").path)
         let updates = DownloadUpdates()
-        let cached = try await PyTorchEnvironmentInstaller.downloadInstaller(distribution("installer.sh"), workspace: workspace) { updates.append($0) }
+        let logFile = workspace.root.appendingPathComponent("logs/0-download.log")
+        let cached = try await PyTorchEnvironmentInstaller.downloadInstaller(distribution("installer.sh"), workspace: workspace, logFile: logFile) { updates.append($0) }
+        try expect(updates.logs.first?.hasPrefix("下载命令（等效）：curl -L ") == true, "download must show its command before progress")
+        try expect(updates.logs.contains { $0.contains("SHA-256 校验通过") }, "download verification result missing")
+        let savedLog = try String(contentsOf: logFile, encoding: .utf8)
+        try expect(savedLog.contains("下载地址：") && savedLog.contains(cached.path) && savedLog.contains(checksum), "download log missing URL, destination or checksum")
         let received = try Data(contentsOf: cached)
         try expect(received == payload, "download changed installer bytes")
         try expect(updates.hasByteProgress, "download did not stream byte progress")

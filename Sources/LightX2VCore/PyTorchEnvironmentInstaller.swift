@@ -114,13 +114,33 @@ public enum PyTorchEnvironmentInstaller {
         }
     }
 
-    public static func downloadInstaller(_ distribution: MinicondaDistribution = .official, workspace: WorkspaceLayout,
+    public static func downloadInstaller(_ distribution: MinicondaDistribution = .official, workspace: WorkspaceLayout, logFile: URL? = nil,
                                          progress: @escaping @Sendable (EnvironmentInstallProgress) -> Void) async throws -> URL {
         try workspace.prepare(); try Task.checkCancellation()
         let cache = workspace.root.appendingPathComponent("cache/miniconda")
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
         let file = cache.appendingPathComponent(distribution.url.lastPathComponent)
-        if FileManager.default.fileExists(atPath: file.path), try digest(file) == distribution.sha256 { return file }
+        if let logFile {
+            try FileManager.default.createDirectory(at: logFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data().write(to: logFile)
+        }
+        func log(_ message: String) throws {
+            if let logFile {
+                let writer = try FileHandle(forWritingTo: logFile)
+                defer { try? writer.close() }
+                try writer.seekToEnd(); try writer.write(contentsOf: Data((message + "\n").utf8))
+            }
+            progress(.init(.download, logLine: message))
+        }
+        func quoted(_ value: String) -> String { "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'" }
+        try log("下载命令（等效）：curl -L \(quoted(distribution.url.absoluteString)) -o \(quoted(file.path))")
+        try log("下载地址：\(distribution.url.absoluteString)\n保存路径：\(file.path)\n预期 SHA-256：\(distribution.sha256)")
+        if FileManager.default.fileExists(atPath: file.path), try digest(file) == distribution.sha256 {
+            try log("复用已下载的 Miniconda，SHA-256 校验通过。")
+            return file
+        }
+        var finished = false
+        defer { if !finished { try? log("Miniconda 下载未完成或校验失败。") } }
         progress(.init(.download, detail: "正在连接 Miniconda 官方下载源…"))
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 60; configuration.timeoutIntervalForResource = 1800
@@ -137,9 +157,12 @@ public enum PyTorchEnvironmentInstaller {
         }, onCancel: { observer.cancel() })
         try Task.checkCancellation()
         progress(.init(.download, detail: "正在校验下载文件…"))
+        try log("下载完成，正在校验 SHA-256…")
         guard try digest(temporary) == distribution.sha256 else { throw AppError.message("Miniconda 文件校验失败，请重新下载。") }
         if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
         try FileManager.default.moveItem(at: temporary, to: file)
+        try log("SHA-256 校验通过，Miniconda 已保存。")
+        finished = true
         return file
     }
 
@@ -195,7 +218,8 @@ public enum PyTorchEnvironmentInstaller {
         }
         let conda = prefix.appendingPathComponent("bin/conda")
         if !fm.isExecutableFile(atPath: conda.path) {
-            let installer = try await downloadInstaller(distribution, workspace: workspace, progress: progress)
+            let installer = try await downloadInstaller(distribution, workspace: workspace,
+                logFile: logs.appendingPathComponent("0-download.log"), progress: progress)
             if fm.fileExists(atPath: prefix.path) { try fm.removeItem(at: prefix) } // Only a marked, incomplete installation reaches this branch.
             try JSONFile.write(["prefix": prefix.path, "installer": distribution.sha256], to: marker)
             try await run("/bin/bash", [installer.path, "-b", "-p", prefix.path], stage: .miniconda)
