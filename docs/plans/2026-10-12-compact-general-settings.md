@@ -2,7 +2,7 @@
 
 **Goal:** Show all four required settings in the default window and keep their fields and controls stationary during downloads, checks, errors and completion.
 
-**Architecture:** Replace the scrolling expanded cards with four compact cards. Put each uniformly named “选择” button immediately to the right of its path. Keep download, search and check buttons below, alongside fixed progress slots. Remove inline purpose text; retain explanations and full results in detail popovers. Preserve existing download, save, close and startup behavior; a fixed footer names incomplete configuration and focuses its input on request.
+**Architecture:** Replace the scrolling expanded cards with four compact cards. Embed a folder icon at the right edge of each path bar; keep its hit area separate from the editable text. The workspace card contains only its heading and path, without an empty action row. Keep download, search and check buttons below the other three paths, alongside fixed progress slots. Remove inline purpose text; retain explanations and full results in detail popovers. Preserve existing download, save, close and startup behavior; a fixed footer names incomplete configuration and focuses its input on request.
 
 **Tech Stack:** SwiftUI, AppKit, native input focus, existing cancellable resource tasks and app-state checks.
 

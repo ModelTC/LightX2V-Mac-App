@@ -80,10 +80,10 @@ struct SettingsView: View {
 
     private var workspaceCard: some View {
         SettingsSection(step: .workspace, current: setupProgress.current, title: "LightX2V 工作目录",
-                        status: pathStatus(.workspace), details: workspaceMessage) {
+                        status: pathStatus(.workspace), details: workspaceMessage, hasActions: false) {
             pathRow("LightX2V 工作目录", value: $settings.workingDirectory, directory: true, create: true)
         } actions: {
-            Spacer()
+            EmptyView()
         }
     }
 
@@ -223,31 +223,37 @@ struct SettingsView: View {
 
     private func pathRow(_ title: String, value: Binding<String>, directory: Bool, create: Bool = false,
                          placeholder: String? = nil) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 0) {
             PathInputField(title: title,
                            placeholder: placeholder ?? (directory ? "选择文件夹，或粘贴完整路径" : "选择环境中的 bin/python，或搜索本机环境"),
-                           symbol: directory ? "folder" : "terminal", text: value,
+                           symbol: nil, text: value,
                            onCommit: { updateGuide() },
                            focusRequest: focusStep.map { inputTitle($0) == title } == true ? focusRequest : 0)
-                .background(Palette.surface, in: RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line, lineWidth: 1))
             chooseButton(title, value: value, directory: directory, create: create)
-                .frame(width: 56)
-        }.disabled(store.busy)
+                .padding(.trailing, 6)
+        }
+        .background(Palette.surface, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line, lineWidth: 1).allowsHitTesting(false))
+        .disabled(store.busy)
     }
 
     private func chooseButton(_ title: String, value: Binding<String>, directory: Bool, create: Bool = false) -> some View {
-        Button("选择") {
-                let panel = NSOpenPanel()
-                panel.canChooseDirectories = directory; panel.canChooseFiles = !directory
-                panel.canCreateDirectories = create; panel.allowsMultipleSelection = false
-                panel.title = directory ? "选择\(title)" : "选择 PyTorch 环境中的 Python 可执行文件"
-                panel.directoryURL = value.wrappedValue.isEmpty ? FileManager.default.homeDirectoryForCurrentUser : URL(fileURLWithPath: normalized(value.wrappedValue)).deletingLastPathComponent()
-                if panel.runModal() == .OK, let url = panel.url {
-                    value.wrappedValue = url.path
-                    updateGuide()
-                }
-        }.accessibilityLabel("选择\(title)")
+        Button {
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = directory; panel.canChooseFiles = !directory
+            panel.canCreateDirectories = create; panel.allowsMultipleSelection = false
+            panel.title = directory ? "选择\(title)" : "选择 PyTorch 环境中的 Python 可执行文件"
+            panel.directoryURL = value.wrappedValue.isEmpty ? FileManager.default.homeDirectoryForCurrentUser : URL(fileURLWithPath: normalized(value.wrappedValue)).deletingLastPathComponent()
+            if panel.runModal() == .OK, let url = panel.url {
+                value.wrappedValue = url.path
+                updateGuide()
+            }
+        } label: {
+            Image(systemName: "folder").font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Palette.muted).frame(width: 32, height: 32)
+        }
+            .buttonStyle(HoverButtonStyle(radius: 6))
+            .accessibilityLabel("浏览\(title)").help("浏览\(title)")
             .disabled(store.busy)
     }
 
@@ -405,6 +411,7 @@ private struct SettingsSection<Content: View, Actions: View>: View {
     let status: String
     var statusColor: Color = Palette.muted
     let details: String
+    var hasActions = true
     @ViewBuilder let content: Content
     @ViewBuilder let actions: Actions
     @State private var showsDetails = false
@@ -426,9 +433,11 @@ private struct SettingsSection<Content: View, Actions: View>: View {
                     .frame(width: 80, alignment: .trailing).lineLimit(1)
             }.frame(height: 20)
             content.padding(.top, 4).frame(height: 48)
-            HStack(spacing: 8) { actions }.padding(.top, 4).frame(height: 30)
+            if hasActions {
+                HStack(spacing: 8) { actions }.padding(.top, 4).frame(height: 30)
+            }
         }
-        .padding(.horizontal, 12).padding(.vertical, 8)
+        .padding(.horizontal, 12).padding(.vertical, 10)
         .background(current == step ? Palette.surfaceSubtle.opacity(0.65) : Palette.canvas,
                     in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12)
