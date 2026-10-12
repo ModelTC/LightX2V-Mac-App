@@ -145,3 +145,25 @@ class StableReleaseTests(unittest.TestCase):
                 publisher.publish(client, archive, "stable-commit", 1, "stable-run", "1", tag="stable")
             self.assertEqual(client.assets[8]["name"], publisher.ASSET_NAME)
             self.assertEqual(client.ref["object"]["sha"], "old")
+
+class ReadmeCommitTests(unittest.TestCase):
+    def test_updates_one_channel_commit_without_changing_downloads(self):
+        import base64
+        class ReadmeClient:
+            repository = "example/app"
+            def __init__(self):
+                self.content = ("| Latest | [Download](latest.zip) | old-latest | Every build |\n"
+                                "| Stable | [Download](stable.zip) | old-stable | Manual |\n")
+            def api(self, method, path, payload=None):
+                if method == "GET":
+                    return {"sha": "file-revision", "content": base64.b64encode(self.content.encode()).decode()}
+                self.payload = payload
+                self.content = base64.b64decode(payload["content"]).decode()
+        client = ReadmeClient()
+        publisher.record_download_commit(client, "latest", "a" * 40)
+        self.assertIn("/commit/" + "a" * 40, client.content)
+        self.assertIn("| Stable | [Download](stable.zip) | old-stable | Manual |", client.content)
+        publisher.record_download_commit(client, "stable", "b" * 40)
+        self.assertIn("/commit/" + "a" * 40, client.content)
+        self.assertIn("/commit/" + "b" * 40, client.content)
+        self.assertEqual(client.payload["sha"], "file-revision")

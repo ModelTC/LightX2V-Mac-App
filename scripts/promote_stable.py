@@ -8,7 +8,7 @@ import tempfile
 import urllib.request
 import zipfile
 
-from publish_latest import ASSET_NAME, GitHub, publish
+from publish_latest import ASSET_NAME, GitHub, publish, record_download_commit
 
 
 def promote(client, run_number, run_id, attempt):
@@ -35,6 +35,7 @@ def promote(client, run_number, run_id, attempt):
             if package.testzip() is not None or not any(".app/Contents/MacOS/" in n for n in package.namelist()):
                 raise RuntimeError("Latest package is invalid")
         publish(client, archive, sha, run_number, run_id, attempt, tag="stable")
+        record_download_commit(client, "stable", sha)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Maintain one non-expiring APP per release channel; called under workflow concurrency control."""
+import base64
 import hashlib
 import json
 import os
@@ -125,11 +126,27 @@ def publish(client, archive, sha, run_number, run_id, attempt, tag="latest"):
     return True
 
 
+def record_download_commit(client, tag, sha):
+    """Update only the published channel row, with optimistic file revision checks."""
+    readme = client.api("GET", "contents/README.md?ref=main")
+    content = base64.b64decode(readme["content"]).decode("utf-8")
+    pattern = re.compile(rf"^(\| {tag.title()} \| [^\n]*? \| )[^\n]*?( \| [^\n]* \|)$", re.MULTILINE)
+    link = f"[`{sha[:7]}`](https://github.com/{client.repository}/commit/{sha})"
+    updated, count = pattern.subn(lambda match: match[1] + link + match[2], content)
+    if count != 1:
+        raise RuntimeError("Download channel row missing from README")
+    if updated != content:
+        client.api("PUT", "contents/README.md", {
+            "message": f"docs: record {tag.title()} APP commit {sha[:7]}", "branch": "main",
+            "sha": readme["sha"], "content": base64.b64encode(updated.encode("utf-8")).decode("ascii")})
+
+
 if __name__ == "__main__":
     try:
-        publish(GitHub(os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_TOKEN"]),
-                Path(sys.argv[1]), os.environ["GITHUB_SHA"], int(os.environ["GITHUB_RUN_NUMBER"]),
-                os.environ["GITHUB_RUN_ID"], os.environ["GITHUB_RUN_ATTEMPT"])
+        client = GitHub(os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_TOKEN"])
+        if publish(client, Path(sys.argv[1]), os.environ["GITHUB_SHA"], int(os.environ["GITHUB_RUN_NUMBER"]),
+                   os.environ["GITHUB_RUN_ID"], os.environ["GITHUB_RUN_ATTEMPT"]):
+            record_download_commit(client, "latest", os.environ["GITHUB_SHA"])
     except urllib.error.HTTPError as error:
         print(f"GitHub API error {error.code}: {error.read().decode(errors='replace')}", file=sys.stderr)
         sys.exit(1)
