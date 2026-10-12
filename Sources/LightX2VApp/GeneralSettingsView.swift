@@ -81,9 +81,8 @@ struct SettingsView: View {
     private var workspaceCard: some View {
         SettingsSection(step: .workspace, current: setupProgress.current, title: "LightX2V 工作目录",
                         status: pathStatus(.workspace), details: workspaceMessage) {
-            pathRow("LightX2V 工作目录", value: $settings.workingDirectory, directory: true)
+            pathRow("LightX2V 工作目录", value: $settings.workingDirectory, directory: true, create: true)
         } actions: {
-            chooseButton("LightX2V 工作目录", value: $settings.workingDirectory, directory: true, create: true)
             Spacer()
         }
     }
@@ -102,7 +101,6 @@ struct SettingsView: View {
             pathRow("LightX2V 源码目录", value: $settings.repository, directory: true,
                     placeholder: "选择已有源码文件夹，或自动下载")
         } actions: {
-            chooseButton("LightX2V 源码目录", value: $settings.repository, directory: true)
             downloadButton("自动下载 LightX2V 源码", action: downloadSource)
             SettingsStatusLine(message: downloads.sourceMessage,
                                running: downloads.sourceRunning, cancel: { store.setupTask?.cancel() })
@@ -115,7 +113,6 @@ struct SettingsView: View {
                         details: "搜索依赖齐全且符合版本要求的本机环境，或在工作目录中安装。\n保存设置后自动检查环境依赖与 MPS。\n\n" + pythonMessage) {
             pathRow("PyTorch 环境", value: $settings.python, directory: false)
         } actions: {
-            chooseButton("PyTorch 环境", value: $settings.python, directory: false)
             Button { startSearch() } label: { Label("搜索本机环境", systemImage: "magnifyingglass") }
                 .disabled(store.busy || !hasWorkDirectory)
             Button("检查环境") { store.checkEnvironment() }
@@ -151,7 +148,6 @@ struct SettingsView: View {
             pathRow("llama.cpp 运行目录（bin）", value: $settings.promptEnhancement.runtimeDirectory, directory: true,
                     placeholder: "选择已有 bin 目录，或自动下载")
         } actions: {
-            chooseButton("llama.cpp 运行目录（bin）", value: $settings.promptEnhancement.runtimeDirectory, directory: true)
             downloadButton("自动下载 llama.cpp", action: downloadRuntime)
             SettingsStatusLine(message: downloads.runtimeMessage,
                                running: downloads.runtimeRunning, cancel: { store.setupTask?.cancel() })
@@ -225,20 +221,23 @@ struct SettingsView: View {
         }
     }
 
-    private func pathRow(_ title: String, value: Binding<String>, directory: Bool,
+    private func pathRow(_ title: String, value: Binding<String>, directory: Bool, create: Bool = false,
                          placeholder: String? = nil) -> some View {
-        PathInputField(title: title,
-                       placeholder: placeholder ?? (directory ? "选择文件夹，或粘贴完整路径" : "选择环境中的 bin/python，或搜索本机环境"),
-                       symbol: directory ? "folder" : "terminal", text: value,
-                       onCommit: { updateGuide() },
-                       focusRequest: focusStep.map { inputTitle($0) == title } == true ? focusRequest : 0)
-            .background(Palette.surface, in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line, lineWidth: 1))
-            .disabled(store.busy)
+        HStack(spacing: 8) {
+            PathInputField(title: title,
+                           placeholder: placeholder ?? (directory ? "选择文件夹，或粘贴完整路径" : "选择环境中的 bin/python，或搜索本机环境"),
+                           symbol: directory ? "folder" : "terminal", text: value,
+                           onCommit: { updateGuide() },
+                           focusRequest: focusStep.map { inputTitle($0) == title } == true ? focusRequest : 0)
+                .background(Palette.surface, in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line, lineWidth: 1))
+            chooseButton(title, value: value, directory: directory, create: create)
+                .frame(width: 56)
+        }.disabled(store.busy)
     }
 
     private func chooseButton(_ title: String, value: Binding<String>, directory: Bool, create: Bool = false) -> some View {
-        Button(directory ? "选择…" : "手动选择…") {
+        Button("选择") {
                 let panel = NSOpenPanel()
                 panel.canChooseDirectories = directory; panel.canChooseFiles = !directory
                 panel.canCreateDirectories = create; panel.allowsMultipleSelection = false
