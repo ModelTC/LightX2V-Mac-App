@@ -489,8 +489,10 @@ private struct SettingsDetails: View {
                     Text(message).font(.system(size: 11)).textSelection(.enabled)
                     if let command {
                         Text("手动下载 LightX2V " + SourceDownloader.version).font(.system(size: 11, weight: .medium))
-                        Text(command).font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true).padding(10)
+                        ScrollView(.horizontal) {
+                            Text(command).font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
+                                .fixedSize(horizontal: true, vertical: true).padding(10)
+                        }.frame(height: CGFloat(command.components(separatedBy: "\n").count) * 13 + 32)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8))
                     }
