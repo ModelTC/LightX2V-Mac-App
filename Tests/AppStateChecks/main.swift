@@ -26,7 +26,12 @@ struct AppStateChecks {
             return
         }
         if CommandLine.arguments.dropFirst().first == "--layout-only" {
+            try await modelSelectionLayoutChecks()
             try await conversationLayoutChecks()
+            return
+        }
+        if CommandLine.arguments.dropFirst().first == "--model-selection-only" {
+            try await modelSelectionLayoutChecks()
             return
         }
         if CommandLine.arguments.dropFirst().first == "--logs-only" {
@@ -172,6 +177,7 @@ struct AppStateChecks {
         try await startupEnvironmentChecks()
         try await generalSettingsFocusChecks()
         try await environmentPresentationChecks()
+        try await modelSelectionLayoutChecks()
         try await conversationLayoutChecks()
         print("App state checks passed")
     }

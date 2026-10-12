@@ -251,7 +251,7 @@ struct ComposerView: View {
 
     private var composerActions: some View {
         HStack(spacing: 7) {
-            if store.selectedModel == .qwenImage21Turbo { attachmentButton }
+            attachmentButton
             ModelSelector()
             if store.selectedModel == nil {
                 Label("请先选择模型", systemImage: "arrow.left")
@@ -315,7 +315,9 @@ struct ModelSelector: View {
         .font(.system(size: 11, weight: .medium))
         .menuStyle(.borderlessButton)
         .menuIndicator(.visible)
-        .fixedSize()
+        // Constrain the native menu itself, so changing its title does not
+        // move either the popup anchor or the indicator while it closes.
+        .frame(width: 180)
         .padding(.horizontal, 8).frame(height: 30)
         .foregroundStyle(store.selectedModel == nil ? Palette.accent : Palette.ink)
         .background(store.selectedModel == nil ? Palette.accentSurface : Palette.surfaceSubtle,
