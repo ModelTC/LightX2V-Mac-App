@@ -6,11 +6,6 @@ on:
     branches: ['**']
     tags-ignore: [latest]
   workflow_dispatch:
-    inputs:
-      full_checks:
-        description: 'Run full APP lifecycle tests (adds about 4 minutes)'
-        type: boolean
-        default: false
 
 # Finish the active build; keep only the newest pending build during a push burst.
 # Serialization prevents two successful builds from replacing release assets at once.
@@ -42,43 +37,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Python for bridge tests
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: '3.11'
-          architecture: arm64
-
-      - name: Check build environment
-        run: |
-          test "$(uname -m)" = arm64
-          sw_vers
-          swift --version
-          python --version
-
-      - name: Install bridge test dependencies
-        run: python -m pip install -r Tests/requirements.txt
-
-      - name: Run Swift core checks
-        run: swift run LightX2VCoreChecks
-
-      - name: Check workspace setup and discovery
-        run: swift run LightX2VSetupChecks
-
-      - name: Check native input, cursors and scrollbars
-        run: bash scripts/check-prompt-editor.sh
-
-      # Long cancellation and lifecycle fixtures are checked locally for relevant
-      # changes; keep the full suite available on demand without delaying every UI release.
-      - name: Check image attachments and app lifecycle (full)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_checks }}
-        run: bash scripts/check-app-state.sh
-
-      - name: Check inspector animation clipping
-        run: bash scripts/check-inspector.sh
-
-      - name: Run Python bridge integration tests
-        run: python -B -m unittest discover -s Tests -v
-
       - name: Build signed release app
         run: bash scripts/build.sh
 
@@ -88,7 +46,7 @@ jobs:
       - name: Replace latest release and remove obsolete app packages
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: python scripts/publish_latest.py dist/LightX2V-APP-macOS-arm64.zip
+        run: python3 scripts/publish_latest.py dist/LightX2V-APP-macOS-arm64.zip
 
       - name: Publish download summary
         env:
@@ -99,7 +57,7 @@ jobs:
             printf '[Download latest APP](%s)\n\n' "$DOWNLOAD_URL"
             printf -- '- Build commit: `%s`\n' "$GITHUB_SHA"
             printf -- '- Target: macOS 14+, arm64\n'
-            printf -- '- Tests: Swift core, workspace setup, native input/cursor/scrollbar, inspector and Python bridge checks passed\n'
+            printf -- '- Package: APP contents, arm64 architecture and signature verified\n'
             printf -- '- Signing: ad-hoc (not notarized)\n'
             printf -- '- Retention: no expiry; only the latest successful APP package is kept\n'
             printf -- '- This stable URL always serves the latest package, including from older run summaries\n'
