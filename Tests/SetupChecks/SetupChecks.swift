@@ -108,17 +108,17 @@ func rejects(_ body: () throws -> Void) throws {
         try expect(GeneralSetupProgress(settings: settings).current == .source, "unrelated folder accepted as source")
         settings.repository = source.path
         progress = GeneralSetupProgress(settings: settings)
-        try expect(progress.current == .python && progress.completed.count == 2, "source should advance to Python")
-        settings.python = source.path
-        try expect(GeneralSetupProgress(settings: settings).current == .python, "directory accepted as Python")
-        settings.python = python.path
-        progress = GeneralSetupProgress(settings: settings)
-        try expect(progress.current == .llama && progress.completed.count == 3 && !settings.hasGeneralPaths,
-                   "three paths must advance to the required fourth llama.cpp setting")
+        try expect(progress.current == .llama && progress.completed.count == 2, "source should advance to llama.cpp")
         let runtime = root.appendingPathComponent("guide bin")
         try fm.createDirectory(at: runtime, withIntermediateDirectories: true)
         for name in ["llama-completion", "llama-mtmd-cli"] { try fm.copyItem(at: python, to: runtime.appendingPathComponent(name)) }
         settings.promptEnhancement.runtimeDirectory = runtime.path
+        progress = GeneralSetupProgress(settings: settings)
+        try expect(progress.current == .python && progress.completed.count == 3 && !settings.hasGeneralPaths,
+                   "llama.cpp should advance to the final PyTorch setting")
+        settings.python = source.path
+        try expect(GeneralSetupProgress(settings: settings).current == .python, "directory accepted as Python")
+        settings.python = python.path
         try settings.validateGeneralPaths()
         let complete = GeneralSetupProgress(settings: settings)
         try expect(complete.current == nil && complete.completed.count == 4, "four complete settings should end guide")

@@ -1,7 +1,7 @@
 import Foundation
 
 public enum GeneralSetupStep: Int, CaseIterable {
-    case workspace = 1, source, python, llama
+    case workspace = 1, source, llama, python
 }
 
 /// A snapshot of committed input. The UI refreshes this after editing finishes,

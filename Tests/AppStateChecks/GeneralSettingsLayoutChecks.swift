@@ -38,6 +38,14 @@ func generalSettingsLayoutChecks() async throws {
         host.layoutSubtreeIfNeeded()
         let inputs = fields(host).filter(\.isEditable).sorted { $0.convert($0.bounds, to: host).minY < $1.convert($1.bounds, to: host).minY }
         guard inputs.count == 4 else { throw AppError.message("All four setting paths must exist without scrolling") }
+        if let runtime = inputs.first(where: { $0.stringValue == settings.promptEnhancement.runtimeDirectory }),
+           let python = inputs.first(where: { $0.stringValue == settings.python }) {
+            let runtimeY = runtime.convert(runtime.bounds, to: host).midY
+            let pythonY = python.convert(python.bounds, to: host).midY
+            guard host.isFlipped ? runtimeY < pythonY : runtimeY > pythonY else {
+                throw AppError.message("llama.cpp must appear before PyTorch in general settings")
+            }
+        }
         var frames: [String: NSRect] = [:]
         for (index, input) in inputs.enumerated() {
             let frame = input.convert(input.bounds, to: host)
@@ -57,7 +65,7 @@ func generalSettingsLayoutChecks() async throws {
         host.cacheDisplay(in: host.bounds, to: bitmap)
         try bitmap.representation(using: .png, properties: [:])!.write(to: directory.appendingPathComponent(name + ".png"))
     }
-    let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 640, height: 619),
+    let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 640, height: 680),
                           styleMask: [.titled, .closable], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     defer { window.orderOut(nil); window.contentView = nil }
@@ -73,7 +81,7 @@ func generalSettingsLayoutChecks() async throws {
         window.makeKeyAndOrderFront(nil)
         window.makeKey()
         try await Task.sleep(for: .milliseconds(150))
-        try check(host.fittingSize.height <= 620, "\(name) general settings fits the default sheet")
+        try check(host.fittingSize.height <= 680, "\(name) five-item general settings fits the default sheet: \(host.fittingSize)")
         _ = try geometry(host)
         try snapshot(name, host)
     }
@@ -134,9 +142,9 @@ func generalSettingsLayoutChecks() async throws {
 
     let first = try store(settings, completed: false)
     let firstHost = NSHostingView(rootView: FirstLaunchSetupView().environmentObject(first).preferredColorScheme(.light))
-    window.contentView = firstHost; window.setContentSize(NSSize(width: 688, height: 680))
+    window.contentView = firstHost; window.setContentSize(NSSize(width: 688, height: 740))
     try await Task.sleep(for: .milliseconds(200))
-    try check(firstHost.fittingSize.height <= 680, "first-launch card fits a compact laptop window")
+    try check(firstHost.fittingSize.height <= 740, "five-item first-launch card fits a compact laptop window")
     _ = try geometry(firstHost)
     try snapshot("first-launch", firstHost)
 }

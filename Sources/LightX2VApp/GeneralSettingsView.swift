@@ -40,8 +40,8 @@ struct SettingsView: View {
                 languageCard
                 workspaceCard
                 sourceCard
-                pythonCard
                 runtimeCard
+                pythonCard
             }.padding(.horizontal, 24).padding(.bottom, 12)
             Rectangle().fill(Palette.line).frame(height: 1)
             HStack(spacing: 10) {
@@ -158,8 +158,6 @@ struct SettingsView: View {
         } actions: {
             Button { startSearch() } label: { Label(L10n.text("Search local environments"), systemImage: "magnifyingglass").fixedSize() }
                 .disabled(store.busy || !hasWorkDirectory)
-            Button(L10n.text("Check environment")) { store.checkEnvironment() }.fixedSize()
-                .disabled(store.busy || !pythonMatchesSaved)
             SettingsStatusLine(message: pythonMatchesSaved && !store.environmentReady && store.environmentMessage != "Environment has not been checked" ? pythonMessage : "",
                                running: pythonMatchesSaved && store.isChecking,
                                color: pythonMatchesSaved && store.environmentReady ? Palette.green : Palette.muted)
