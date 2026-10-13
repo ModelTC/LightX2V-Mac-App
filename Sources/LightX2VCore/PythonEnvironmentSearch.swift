@@ -13,7 +13,7 @@ public enum PyTorchRequirements {
                                       PythonDependency("loguru"), PythonDependency("imageio"), PythonDependency("imageio_ffmpeg"),
                                       PythonDependency("safetensors"), PythonDependency("einops"), PythonDependency("gguf"),
                                       PythonDependency("opencv-python"), PythonDependency("prometheus_client"), PythonDependency("pydantic"),
-                                      PythonDependency("huggingface_hub")]
+                                      PythonDependency("huggingface_hub"), PythonDependency("modelscope")]
     public static var summary: String {
         dependencies.map { dependency in
             if let minimum = dependency.minimum { return "\(dependency.name) ≥ \(minimum)" }

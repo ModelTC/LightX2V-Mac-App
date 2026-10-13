@@ -27,7 +27,7 @@ extension SetupChecks {
         env.torchvisionVersion = "0.29.1"; env.torchaudioVersion = "2.11.0"; env.transformersVersion = "5.19.0"
         env.diffusersVersion = "0.41.0"
         let present = PyTorchRequirements.dependencies.filter { $0.minimum == nil }.map(\.name)
-        try expect(present == ["loguru", "imageio", "imageio_ffmpeg", "safetensors", "einops", "gguf", "opencv-python", "prometheus_client", "pydantic", "huggingface_hub"],
+        try expect(present == ["loguru", "imageio", "imageio_ffmpeg", "safetensors", "einops", "gguf", "opencv-python", "prometheus_client", "pydantic", "huggingface_hub", "modelscope"],
                    "presence-only dependency list changed")
         env.packageVersions = Dictionary(uniqueKeysWithValues: present.map { ($0, "0.0.1.dev1") })
         try expect(env.isCompatible, "exact minimums should qualify")
@@ -105,7 +105,7 @@ if [ "${3:-}" = '-m' ]; then
     fi
     exit 0
 fi
-printf '%s\n' 'LIGHTX2V_ENV:{"python":"3.11.14","architecture":"arm64","torch":"2.14.1","torchvision":"0.29.1","torchaudio":"2.11.0","transformers":"5.19.0","diffusers":"0.41.0","loguru":"0.0.1","imageio":"0.0.1","imageio_ffmpeg":"0.0.1","safetensors":"0.0.1","einops":"0.0.1","gguf":"0.0.1","opencv-python":"0.0.1","prometheus_client":"0.0.1","pydantic":"0.0.1","huggingface_hub":"0.0.1","mps":true,"detail":"ready"}'
+printf '%s\n' 'LIGHTX2V_ENV:{"python":"3.11.14","architecture":"arm64","torch":"2.14.1","torchvision":"0.29.1","torchaudio":"2.11.0","transformers":"5.19.0","diffusers":"0.41.0","loguru":"0.0.1","imageio":"0.0.1","imageio_ffmpeg":"0.0.1","safetensors":"0.0.1","einops":"0.0.1","gguf":"0.0.1","opencv-python":"0.0.1","prometheus_client":"0.0.1","pydantic":"0.0.1","huggingface_hub":"0.0.1","modelscope":"0.0.1","mps":true,"detail":"ready"}'
 """#
         try Data(script.utf8).write(to: fakePython)
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakePython.path)

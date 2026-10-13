@@ -141,6 +141,7 @@ struct EnvironmentInstallInstructions: View {
         pip install prometheus_client
         pip install pydantic
         pip install huggingface_hub
+        pip install modelscope
         """
     }
     var body: some View {

@@ -62,6 +62,7 @@ func rejects(_ body: () throws -> Void) throws {
         print("PASS setup guide ordering, path validation, clearing and reopening")
         try workspaceSwitching(root)
         print("PASS empty history on workspace switch, unchanged original data and macOS locator")
+        try expect(PyTorchRequirements.summary.contains("modelscope"), "dependency hint must include modelscope")
         try migrationFailure(root)
         try workspaceReconnection(root)
         print("PASS destination collision and failed locator rollback")
