@@ -71,7 +71,7 @@ final class AppStore: ObservableObject {
     private var receivedDone = false
     private var didStart = false
     private var terminationCompletion: (() -> Void)?
-    private var stateURL: URL
+    private var stateURL: URL?
     private let locatorRoot: URL
     private var canPersist = true
     private var restoringModelPaths = false
@@ -166,34 +166,19 @@ final class AppStore: ObservableObject {
     }
 
     init() {
-        let fm = FileManager.default
         let root = ProcessInfo.processInfo.environment["LIGHTX2V_APP_STATE_DIR"].map { URL(fileURLWithPath: $0) }
             ?? WorkspaceStorage.applicationSupportRoot
         locatorRoot = root
-        stateURL = root.appendingPathComponent("workspace.json")
         var data = WorkspaceData()
         var readError: String?
         do {
             stateURL = try WorkspaceStorage.stateURL(locatorRoot: root)
-            if fm.fileExists(atPath: stateURL.path) { data = try JSONFile.read(WorkspaceData.self, from: stateURL) }
+            if let stateURL { data = try JSONFile.read(WorkspaceData.self, from: stateURL) }
         } catch {
             canPersist = false
             readError = L10n.english("Unable to read the previous workspace. Original files were preserved. %@", [String(describing: error.localizedDescription)])
         }
         data.recoverInterrupted()
-        // Existing complete HF folders can populate the inline directory controls.
-        for resource in [ModelResource.t2i, .i2i] {
-            let files = data.settings.promptEnhancement
-            let model = resource == .t2i ? files.t2iModel : files.i2iModel
-            let system = resource == .t2i ? files.t2iSystemPrompt : files.i2iSystemPrompt
-            let current = resource == .t2i ? files.t2iDirectory : files.i2iDirectory
-            let folder = URL(fileURLWithPath: model).deletingLastPathComponent().path
-            if current.isEmpty, model.hasPrefix("/"), URL(fileURLWithPath: system).deletingLastPathComponent().path == folder,
-               (try? resource.validate(directory: folder)) != nil {
-                if resource == .t2i { data.settings.promptEnhancement.t2iDirectory = folder }
-                else { data.settings.promptEnhancement.i2iDirectory = folder }
-            }
-        }
         BundledInferenceResources.configure(&data.settings)
         settings = data.settings; generations = data.generations
         modelDirectory = data.settings.model
@@ -204,7 +189,7 @@ final class AppStore: ObservableObject {
     }
 
     func persist() {
-        guard canPersist, !isPreparingWorkspace, !settings.workingDirectory.isEmpty else { return }
+        guard canPersist, !isPreparingWorkspace, !settings.workingDirectory.isEmpty, let stateURL else { return }
         do { try JSONFile.write(WorkspaceData(settings: settings, generations: generations, hasCompletedGeneralSetup: hasCompletedGeneralSetup), to: stateURL) }
         catch { errorMessage = L10n.english("Unable to save application state: %@", [String(describing: error.localizedDescription)]) }
     }
@@ -378,7 +363,7 @@ final class AppStore: ObservableObject {
             try WorkspaceStorage.save(snapshot, previousState: previous, locatorRoot: locator)
         }.value
         let keepEnvironmentReady = environmentReady && !needsGeneralSetup && saved.settings.hasGeneralPaths && saved.settings.python == path(settings.python)
-        let changedWorkspace = stateURL.standardizedFileURL.resolvingSymlinksInPath() != WorkspaceLayout(saved.settings.workingDirectory).state
+        let changedWorkspace = stateURL?.standardizedFileURL.resolvingSymlinksInPath() != WorkspaceLayout(saved.settings.workingDirectory).state
         restoringModelPaths = true
         var restored = saved
         restored.recoverInterrupted()

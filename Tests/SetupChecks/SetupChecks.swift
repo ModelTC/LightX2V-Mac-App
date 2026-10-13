@@ -60,6 +60,7 @@ func rejects(_ body: () throws -> Void) throws {
         }
         try setupGuide(root)
         print("PASS setup guide ordering, path validation, clearing and reopening")
+        try locatorOnlyStartup(root)
         try workspaceSwitching(root)
         print("PASS empty history on workspace switch, unchanged original data and macOS locator")
         try expect(PyTorchRequirements.summary.contains("modelscope"), "dependency hint must include modelscope")
@@ -145,6 +146,34 @@ func rejects(_ body: () throws -> Void) throws {
         try expect(GeneralSetupProgress(settings: settings).current == .python, "hidden source must not change Python validation")
     }
 
+    static func locatorOnlyStartup(_ root: URL) throws {
+        let support = root.appendingPathComponent("locator-only support")
+        let legacyState = support.appendingPathComponent("workspace.json")
+        let legacyLocation = support.appendingPathComponent("location.json")
+        let fm = FileManager.default
+        try fm.createDirectory(at: support, withIntermediateDirectories: true)
+        let broken = Data("invalid old configuration".utf8)
+        try broken.write(to: legacyState)
+        try broken.write(to: legacyLocation)
+        let invalidOldURL = try WorkspaceStorage.stateURL(locatorRoot: support)
+        try expect(invalidOldURL == nil, "missing locator read invalid old configuration")
+        let old = try JSONEncoder().encode(WorkspaceData(settings: AppSettings.defaults, hasCompletedGeneralSetup: true))
+        try old.write(to: legacyState)
+        let validOldURL = try WorkspaceStorage.stateURL(locatorRoot: support)
+        try expect(validOldURL == nil, "missing locator read valid old configuration")
+        var snapshot = WorkspaceData()
+        snapshot.settings.workingDirectory = root.appendingPathComponent("first configured workspace").path
+        let saved = try WorkspaceStorage.save(snapshot, previousState: nil, locatorRoot: support)
+        let url = try WorkspaceStorage.stateURL(locatorRoot: support)
+        try expect(url == WorkspaceLayout(saved.settings.workingDirectory).state, "first save did not create the current workspace locator")
+        let retainedState = try Data(contentsOf: legacyState)
+        let retainedLocation = try Data(contentsOf: legacyLocation)
+        try expect(retainedState == old && retainedLocation == broken, "first save changed ignored old configuration")
+        try Data("invalid locator".utf8).write(to: support.appendingPathComponent("workspace_location.json"))
+        try rejects { _ = try WorkspaceStorage.stateURL(locatorRoot: support) }
+        print("PASS locator-only startup ignores valid/corrupt old files, preserves them and saves a new workspace")
+    }
+
     static func workspaceSwitching(_ root: URL) throws {
         let fm = FileManager.default
         let support = root.appendingPathComponent("support")
@@ -152,19 +181,20 @@ func rejects(_ body: () throws -> Void) throws {
         try fm.createDirectory(at: oldOutput, withIntermediateDirectories: true)
         let image = Data([1,2,3,4]); try image.write(to: oldOutput.appendingPathComponent("image.png"))
         try Data("log".utf8).write(to: oldOutput.appendingPathComponent("inference.log"))
-        let previous = support.appendingPathComponent("workspace.json")
-        let legacyJSON = #"{"settings":{"repository":"/old/repo","model":"/old/model","config":"/old/config","python":"/old/python","outputDirectory":"/old/output"},"generations":[],"hasCompletedGeneralSetup":true}"#
-        let legacy = try JSONDecoder().decode(WorkspaceData.self, from: Data(legacyJSON.utf8))
-        try expect(legacy.settings.workingDirectory.isEmpty && !legacy.settings.hasGeneralPaths, "legacy failed to request a workspace")
-        var job = Generation(request: try InferenceRequest(settings: legacy.settings, prompt: "中文", width: 1024, height: 1024, seed: 7, output: oldOutput.appendingPathComponent("image.png").path))
+        let originalLayout = WorkspaceLayout(root.appendingPathComponent("original workspace").path)
+        try originalLayout.prepare()
+        let previous = originalLayout.state
+        var originalSettings = AppSettings.defaults
+        originalSettings.workingDirectory = originalLayout.root.path
+        var job = Generation(request: try InferenceRequest(settings: originalSettings, prompt: "中文", width: 1024, height: 1024, seed: 7, output: oldOutput.appendingPathComponent("image.png").path))
         job.status = .completed
-        var old = legacy; old.generations = [job]
+        let old = WorkspaceData(settings: originalSettings, generations: [job], hasCompletedGeneralSetup: true)
         try JSONFile.write(old, to: previous)
         var snapshot = old
         snapshot.settings.workingDirectory = root.appendingPathComponent("new workspace").path
         snapshot.hasCompletedGeneralSetup = true
         let saved = try WorkspaceStorage.save(snapshot, previousState: previous, locatorRoot: support)
-        let location = try WorkspaceStorage.stateURL(locatorRoot: support)
+        guard let location = try WorkspaceStorage.stateURL(locatorRoot: support) else { throw Failure(message: "saved locator missing") }
         let reopened = try JSONFile.read(WorkspaceData.self, from: location)
         try expect(reopened.settings.outputDirectory == saved.settings.workingDirectory + "/outputs", "outputs not derived")
         try expect(reopened.generations.isEmpty && saved.generations.isEmpty, "old history was imported into new workspace")
@@ -185,7 +215,7 @@ func rejects(_ body: () throws -> Void) throws {
         withHistory.generations = [job]
         let same = try WorkspaceStorage.save(withHistory, previousState: location, locatorRoot: support)
         try expect(same.generations.first?.id == job.id && same.generations.first?.request.output == job.request.output, "same-directory save changed history")
-        // A later workspace change also carries its downloaded source/config with it.
+        // Old manually downloaded source/runtime folders are not migrated to new workspaces.
         let managed = WorkspaceLayout(saved.settings.workingDirectory).code.appendingPathComponent("LightX2V-abc")
         try fm.createDirectory(at: managed, withIntermediateDirectories: true)
         try Data("{}".utf8).write(to: managed.appendingPathComponent("config.json"))
@@ -197,14 +227,10 @@ func rejects(_ body: () throws -> Void) throws {
         try JSONFile.write(next, to: location)
         next.settings.workingDirectory = root.appendingPathComponent("second workspace").path
         let moved = try WorkspaceStorage.save(next, previousState: location, locatorRoot: support)
-        try expect(moved.settings.repository.hasPrefix(next.settings.workingDirectory + "/code/"), "managed source not moved")
-        try expect(fm.fileExists(atPath: moved.settings.config), "config not rebased")
+        try expect(!fm.fileExists(atPath: WorkspaceLayout(moved.settings.workingDirectory).code.appendingPathComponent("LightX2V-abc").path), "old source was automatically copied")
         try expect(fm.fileExists(atPath: managed.path), "original source removed")
-        try expect(moved.settings.promptEnhancement.runtimeDirectory.hasPrefix(next.settings.workingDirectory + "/runtimes/"),
-                   "managed runtime path was not rebased to the new workspace")
-        try expect(fm.fileExists(atPath: moved.settings.promptEnhancement.runtimeDirectory + "/llama-completion")
-                   && fm.fileExists(atPath: runtime.appendingPathComponent("llama-completion").path),
-                   "workspace runtime copy lost the original or downloaded binary")
+        try expect(!fm.fileExists(atPath: WorkspaceLayout(moved.settings.workingDirectory).runtimes.appendingPathComponent("llama.cpp-b11564").path), "old runtime was automatically copied")
+        try expect(fm.fileExists(atPath: runtime.appendingPathComponent("llama-completion").path), "original runtime removed")
         try expect(moved.generations.isEmpty, "later workspace switch kept old records")
         let previousAfterSwitch = try JSONFile.read(WorkspaceData.self, from: location)
         try expect(previousAfterSwitch.generations.first?.id == job.id, "switch modified previous workspace history")
@@ -231,7 +257,7 @@ func rejects(_ body: () throws -> Void) throws {
         let bytes = try Data(contentsOf: layout.state)
         let support = root.appendingPathComponent("reconnect support")
         var incoming = WorkspaceData(); incoming.settings.workingDirectory = layout.root.path
-        let loaded = try WorkspaceStorage.save(incoming, previousState: support.appendingPathComponent("workspace.json"), locatorRoot: support)
+        let loaded = try WorkspaceStorage.save(incoming, previousState: nil, locatorRoot: support)
         try expect(loaded.settings == settings && loaded.generations.map(\.id) == [job.id], "reconnection lost settings or history")
         let retained = try Data(contentsOf: layout.state)
         try expect(retained == bytes, "reconnection rewrote original workspace")

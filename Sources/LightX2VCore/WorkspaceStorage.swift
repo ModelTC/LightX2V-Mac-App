@@ -57,7 +57,8 @@ public enum WorkspaceStorage {
             .appendingPathComponent("LightX2V APP")
     }
 
-    public static func stateURL(locatorRoot: URL) throws -> URL {
+    /// No locator means first launch. Only an explicitly selected workspace can provide state.
+    public static func stateURL(locatorRoot: URL) throws -> URL? {
         let locator = locatorRoot.appendingPathComponent("workspace_location.json")
         if FileManager.default.fileExists(atPath: locator.path) {
             let location = try JSONFile.read(WorkspaceLocation.self, from: locator)
@@ -68,14 +69,14 @@ public enum WorkspaceStorage {
             }
             return state
         }
-        return locatorRoot.appendingPathComponent("workspace.json")
+        return nil
     }
 
     /// Read an existing destination without changing its settings, history or files.
-    public static func existingWorkspace(at path: String, previousState: URL) throws -> WorkspaceData? {
+    public static func existingWorkspace(at path: String, previousState: URL?) throws -> WorkspaceData? {
         try WorkspaceLayout.validate(path)
         let layout = WorkspaceLayout(path)
-        guard previousState.standardizedFileURL.resolvingSymlinksInPath() != layout.state,
+        guard previousState?.standardizedFileURL.resolvingSymlinksInPath() != layout.state,
               FileManager.default.fileExists(atPath: layout.state.path) else { return nil }
         var data = try JSONFile.read(WorkspaceData.self, from: layout.state)
         data.settings.workingDirectory = layout.root.path
@@ -83,12 +84,12 @@ public enum WorkspaceStorage {
     }
 
     /// Reconnect existing workspaces; only a new destination starts with empty history.
-    public static func save(_ snapshot: WorkspaceData, previousState: URL, locatorRoot: URL) throws -> WorkspaceData {
+    public static func save(_ snapshot: WorkspaceData, previousState: URL?, locatorRoot: URL) throws -> WorkspaceData {
         let fm = FileManager.default
         var data = snapshot
         let layout = WorkspaceLayout(data.settings.workingDirectory)
         data.settings.workingDirectory = layout.root.path
-        let switching = previousState.standardizedFileURL.resolvingSymlinksInPath() != layout.state
+        let switching = previousState?.standardizedFileURL.resolvingSymlinksInPath() != layout.state
         if let existing = try existingWorkspace(at: layout.root.path, previousState: previousState) {
             // Decode successfully before updating the pointer. Never rewrite the destination.
             try JSONFile.write(WorkspaceLocation(workingDirectory: layout.root.path),
@@ -96,50 +97,13 @@ public enum WorkspaceStorage {
             return existing
         }
         try layout.prepare()
-        var created: [URL] = []
-        let originalState = switching ? nil : try? Data(contentsOf: previousState)
+        let originalState = switching ? nil : previousState.flatMap { try? Data(contentsOf: $0) }
         var wroteState = false
         do {
-            if switching {
-                if let previous = try? JSONFile.read(WorkspaceData.self, from: previousState),
-                   !previous.settings.workingDirectory.isEmpty {
-                    let old = WorkspaceLayout(previous.settings.workingDirectory)
-                    let repository = URL(fileURLWithPath: data.settings.repository).standardizedFileURL.resolvingSymlinksInPath()
-                    if repository.deletingLastPathComponent() == old.code {
-                        guard !layout.root.path.hasPrefix(repository.path + "/") else {
-                            throw AppError.message(L10n.english("Workspace cannot be inside the source directory being moved. Choose another directory."))
-                        }
-                        let target = layout.code.appendingPathComponent(repository.lastPathComponent)
-                        guard !fm.fileExists(atPath: target.path) else {
-                            throw AppError.message(L10n.english("New workspace already contains source with the same name. Select that source in settings or choose another workspace."))
-                        }
-                        // Track the destination before copying, so partial copies are removed on error.
-                        created.append(target)
-                        try fm.copyItem(at: repository, to: target)
-                        data.settings.repository = target.path
-                        if data.settings.config.hasPrefix(repository.path + "/") {
-                            data.settings.config = target.path + data.settings.config.dropFirst(repository.path.count)
-                        }
-                    }
-                    let runtime = URL(fileURLWithPath: data.settings.promptEnhancement.runtimeDirectory).standardizedFileURL.resolvingSymlinksInPath()
-                    let installation = runtime.lastPathComponent == "bin" ? runtime.deletingLastPathComponent() : runtime
-                    if installation.deletingLastPathComponent() == old.runtimes {
-                        guard !layout.root.path.hasPrefix(installation.path + "/") else {
-                            throw AppError.message(L10n.english("Workspace cannot be inside the llama.cpp directory being moved. Choose another directory."))
-                        }
-                        let target = layout.runtimes.appendingPathComponent(installation.lastPathComponent)
-                        guard !fm.fileExists(atPath: target.path) else { throw AppError.message(L10n.english("New workspace already contains llama.cpp with the same name. Choose another directory.")) }
-                        try fm.createDirectory(at: layout.runtimes, withIntermediateDirectories: true)
-                        created.append(target)
-                        try fm.copyItem(at: installation, to: target)
-                        data.settings.promptEnhancement.runtimeDirectory = (runtime == installation ? target : target.appendingPathComponent("bin")).path
-                    }
-                }
-            }
             if switching { data.generations = [] }
             try JSONFile.write(data, to: layout.state)
             wroteState = true
-            // Commit the pointer last. A failed migration leaves the previous workspace usable.
+            // Commit the pointer last. A failed save leaves the previous workspace usable.
             let locator = locatorRoot.appendingPathComponent("workspace_location.json")
             let current = try? JSONFile.read(WorkspaceLocation.self, from: locator)
             if current?.workingDirectory != layout.root.path {
@@ -151,7 +115,6 @@ public enum WorkspaceStorage {
                 if let originalState { try? originalState.write(to: layout.state, options: .atomic) }
                 else { try? fm.removeItem(at: layout.state) }
             }
-            for url in created { try? fm.removeItem(at: url) }
             throw error
         }
     }
