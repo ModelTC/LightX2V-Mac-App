@@ -16,10 +16,5 @@ func turboModelChecks() throws {
     try Data("{}".utf8).write(to: weights.appendingPathComponent("model_index.json"))
     try Data("{}".utf8).write(to: config)
     try expect(QwenImage21Turbo.suggestedConfig(repository: source.path) == config.path, "source preparation did not choose the Turbo config")
-    try expect(QwenImage21Turbo.suggestedModel(near: [source.path]) == weights.path, "Turbo weights beside the code folder were not discovered")
-    try expect(QwenImage21Turbo.suggestedModel(near: [root.appendingPathComponent("new-workspace").path]) == weights.path,
-               "Turbo discovery must work from a fresh workspace")
-    try fm.removeItem(at: weights)
-    try expect(QwenImage21Turbo.suggestedModel(near: [root.path]) == nil, "missing weights must not substitute another model")
     print("PASS Turbo-only model identity, eight-step progress and preparation paths")
 }

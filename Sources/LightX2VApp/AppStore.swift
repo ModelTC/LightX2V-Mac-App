@@ -297,16 +297,6 @@ final class AppStore: ObservableObject {
         showInspector = true
         modelPreparationExpanded = true
         generationParametersExpanded = true
-        if modelDirectory.isEmpty {
-            modelDirectory = QwenImage21Turbo.suggestedModel(near: [settings.repository, settings.workingDirectory]) ?? ""
-        }
-        for resource in [ModelResource.t2i, .i2i] {
-            let candidate = resource.destination(in: WorkspaceLayout(settings.workingDirectory)).path
-            if (try? resource.validate(directory: candidate)) != nil {
-                if resource == .t2i && t2iDirectory.isEmpty { t2iDirectory = candidate }
-                if resource == .i2i && i2iDirectory.isEmpty { i2iDirectory = candidate }
-            }
-        }
         refreshModelResources()
     }
 

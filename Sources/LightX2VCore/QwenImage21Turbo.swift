@@ -23,25 +23,4 @@ public enum QwenImage21Turbo {
         return FileManager.default.fileExists(atPath: path) ? path : nil
     }
 
-    /// Search a few conventional locations near paths explicitly selected by the user.
-    /// Never scan the disk or substitute another model family.
-    public static func suggestedModel(near paths: [String]) -> String? {
-        var roots: [URL] = []
-        for path in paths where path.hasPrefix("/") {
-            var root = URL(fileURLWithPath: path).standardizedFileURL
-            for _ in 0..<5 where root.path != "/" {
-                if !roots.contains(root) { roots.append(root) }
-                root.deleteLastPathComponent()
-            }
-        }
-        for root in roots {
-            for relative in ["models/Qwen/" + title, "models/" + title, title] {
-                let candidate = root.appendingPathComponent(relative)
-                if FileManager.default.fileExists(atPath: candidate.appendingPathComponent("model_index.json").path) {
-                    return candidate.path
-                }
-            }
-        }
-        return nil
-    }
 }
