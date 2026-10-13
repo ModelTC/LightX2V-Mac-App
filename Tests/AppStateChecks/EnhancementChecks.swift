@@ -50,7 +50,7 @@ func enhancementStateChecks() async throws {
     for step in range(1,9):
         emit('step', step=step); time.sleep(.01)
     shutil.copyfile(Path(__file__).with_name('fixture.png'),request['output'])
-    emit('done',status='completed',duration=.4)
+    emit('done',status='completed',width=32,height=32,duration=.4)
     """
     let python = try file("fixture-python", text: script, executable: true)
     _ = try file("source/lightx2v/infer.py")
@@ -106,6 +106,16 @@ func enhancementStateChecks() async throws {
     try check(store.logs.contains("Enhancing prompt") && store.logs.contains("Prompt enhancement completed"), "APP enhancement log stays English with French interface")
     try check(store.currentStep == 8 && !store.logs.contains("思考 🐈") && !store.logs.contains("Enhanced Original input"),
               "eight Turbo steps are handled without an explicit total or streaming reply text in the task log")
+    let savedWorkspace = try JSONSerialization.jsonObject(with: Data(contentsOf: layout.state)) as! [String: Any]
+    let savedFirst = (savedWorkspace["generations"] as! [[String: Any]])[0]
+    let caseRecord = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: first.directory + "/generation.json"))) as! [String: Any]
+    let caseRequest = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: first.directory + "/request.json"))) as! [String: Any]
+    try check(NSDictionary(dictionary: savedFirst).isEqual(to: caseRecord) && NSDictionary(dictionary: savedFirst).isEqual(to: caseRequest["generation"] as! [String: Any]),
+              "workspace, generation file and request file retain the same complete snapshot")
+    let snapshotPE = savedFirst["promptEnhancement"] as! [String: Any]
+    let snapshotParameters = savedFirst["parameters"] as! [String: Any]
+    try check(snapshotPE["output"] as? String == "Enhanced Original input" && snapshotPE["thinking"] as? String == "思考 🐈" && snapshotParameters["width"] as? Int == 32,
+              "completed PE output, original thinking and actual dimensions persist before relaunch")
     store.reference(first); store.reference(first)
     try await wait({ store.isImportingImages })
     store.prompt = "Reference input"; store.generate()

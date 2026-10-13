@@ -165,6 +165,10 @@ public struct Generation: Codable, Identifiable {
     public var duration: Double?
     public var error: String?
     public var enhancement: PromptEnhancementReply?
+    public var python: String = ""
+    public var actualWidth: Int?
+    public var actualHeight: Int?
+    public var finishedAt: Date?
     public var directory: String { URL(fileURLWithPath: request.output).deletingLastPathComponent().path }
     public var title: String { String(request.prompt.replacingOccurrences(of: "\n", with: " ").prefix(52)) }
     public init(id: UUID = UUID(), creationID: UUID? = nil, request: InferenceRequest) {
@@ -172,18 +176,13 @@ public struct Generation: Codable, Identifiable {
         self.createdAt = Date(); self.request = request; self.status = .running
         if request.promptEnhancement != nil { enhancement = PromptEnhancementReply(mode: request.inputImages.isEmpty ? .t2i : .i2i) }
     }
-    private enum CodingKeys: String, CodingKey { case id, creationID, createdAt, request, status, duration, error, enhancement }
     public init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        id = try values.decode(UUID.self, forKey: .id)
-        creationID = try values.decode(UUID.self, forKey: .creationID)
-        createdAt = try values.decode(Date.self, forKey: .createdAt)
-        request = try values.decode(InferenceRequest.self, forKey: .request)
-        status = try values.decode(GenerationStatus.self, forKey: .status)
-        duration = try values.decodeIfPresent(Double.self, forKey: .duration)
-        error = try values.decodeIfPresent(String.self, forKey: .error)
-        enhancement = try values.decodeIfPresent(PromptEnhancementReply.self, forKey: .enhancement)
+        self = try GenerationSnapshot(from: decoder).generation()
     }
+    public func encode(to encoder: Encoder) throws {
+        try GenerationSnapshot(self).encode(to: encoder)
+    }
+
 }
 
 public struct WorkspaceData: Codable {
@@ -204,7 +203,7 @@ public struct WorkspaceData: Codable {
     public func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encode(settings, forKey: .settings)
-        try values.encode(generations.map(WorkspaceGeneration.init), forKey: .generations)
+        try values.encode(generations, forKey: .generations)
         try values.encode(hasCompletedGeneralSetup, forKey: .hasCompletedGeneralSetup)
     }
     public mutating func recoverInterrupted() {
@@ -216,25 +215,13 @@ public struct WorkspaceData: Codable {
     }
 }
 
-/// Workspace history keeps folder selections; per-case request.json keeps exact resource files.
-private struct WorkspaceGeneration: Encodable {
-    var generation: Generation
-    init(_ generation: Generation) { self.generation = generation }
-    func encode(to encoder: Encoder) throws {
-        var record = generation
-        if let resources = record.request.promptEnhancement {
-            record.request.promptEnhancement = PromptEnhancementConfiguration(resources).resources
-        }
-        try record.encode(to: encoder)
-    }
-}
-
 public enum JSONFile {
     public static func write<T: Encodable>(_ value: T, to url: URL) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        try encoder.encode(value).write(to: url, options: .atomic)
+        encoder.outputFormatting = [.withoutEscapingSlashes]
+        let data = try ReadableJSON.format(encoder.encode(value))
+        try data.write(to: url, options: .atomic)
     }
     public static func read<T: Decodable>(_ type: T.Type, from url: URL) throws -> T {
         try JSONDecoder().decode(type, from: Data(contentsOf: url))

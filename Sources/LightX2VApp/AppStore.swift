@@ -603,8 +603,9 @@ final class AppStore: ObservableObject {
             request.config = try QwenImage21Turbo.writeConfig(in: directory)
             request.inputImages = try InputImages.snapshot(inputImages, in: directory)
             let requestURL = directory.appendingPathComponent("request.json")
-            try JSONFile.write(request, to: requestURL)
-            let generation = Generation(id: id, creationID: selected?.creationID ?? draftCreationID, request: request)
+            var generation = Generation(id: id, creationID: selected?.creationID ?? draftCreationID, request: request)
+            generation.python = settings.python
+            try JSONFile.write(GenerationRequestDocument(generation), to: requestURL)
             try JSONFile.write(generation, to: directory.appendingPathComponent("generation.json"))
             let logFile = try GenerationLog(directory: directory) { [weak self] message in self?.errorMessage = message }
             generations.insert(generation, at: 0)
@@ -682,6 +683,10 @@ final class AppStore: ObservableObject {
             // The bridge validates PNG decoding and dimensions before completion.
             let status = GenerationStatus(rawValue: event["status"] as? String ?? "failed") ?? .failed
             let message = event["message"] as? String
+            if let index = generations.firstIndex(where: { $0.id == id }) {
+                generations[index].actualWidth = event["width"] as? Int
+                generations[index].actualHeight = event["height"] as? Int
+            }
             markFinished(id, status: status, message: message, duration: event["duration"] as? Double)
         default: break
         }
@@ -696,6 +701,7 @@ final class AppStore: ObservableObject {
     private func markFinished(_ id: UUID, status: GenerationStatus, message: String?, duration: Double? = nil) {
         guard let index = generations.firstIndex(where: { $0.id == id }) else { return }
         generations[index].status = status
+        generations[index].finishedAt = Date()
         generations[index].error = message
         generations[index].duration = duration ?? startedAt.map { Date().timeIntervalSince($0) }
         if generations[index].enhancement?.status.isActive == true {
@@ -712,7 +718,11 @@ final class AppStore: ObservableObject {
     }
 
     private func saveGeneration(_ job: Generation) {
-        do { try JSONFile.write(job, to: URL(fileURLWithPath: job.directory).appendingPathComponent("generation.json")) }
+        do {
+            let directory = URL(fileURLWithPath: job.directory)
+            try JSONFile.write(job, to: directory.appendingPathComponent("generation.json"))
+            try JSONFile.write(GenerationRequestDocument(job), to: directory.appendingPathComponent("request.json"))
+        }
         catch { errorMessage = L10n.english("Unable to save task record: %@", [String(describing: error.localizedDescription)]) }
     }
 
