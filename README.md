@@ -21,6 +21,8 @@ Each channel keeps one APP package. Updating Stable replaces its previous packag
 - [Qwen-Image-2.1-PE-T2I-GGUF-Q8_0](https://huggingface.co/lightx2v/Qwen-Image-2.1-PE-T2I-GGUF-Q8_0)
 - [Qwen-Image-2.1-PE-I2I-GGUF-Q8_0](https://huggingface.co/lightx2v/Qwen-Image-2.1-PE-I2I-GGUF-Q8_0)
 
+Verified on an Apple M4 Pro with 24GB of unified memory.
+
 ## Build from source
 
 Install Apple's Command Line Tools, then run:
