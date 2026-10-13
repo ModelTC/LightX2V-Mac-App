@@ -19,6 +19,7 @@ struct SettingsView: View {
     @State private var operationID: UUID?
     @State private var showInstallInstructions = false
     @State private var showInstaller = false
+    @State private var installSource: EnvironmentInstallSource = .pypi
     @State private var installing = false
     @State private var installProgress = EnvironmentInstallProgress(.download)
     @State private var installLines: [String] = []
@@ -136,7 +137,7 @@ struct SettingsView: View {
         SettingsSection(step: .python, current: setupProgress.current, title: L10n.text("PyTorch environment"),
                         status: pythonStatus, statusColor: pythonCheckFailed ? Palette.accent : pythonMatchesSaved && store.environmentReady ? Palette.green : Palette.muted,
                         statusDetails: pythonCheckFailed ? store.environmentMessage : nil,
-                        statusAdvice: L10n.text("Search local environments first. Based on the results, choose manual installation or automatic installation."),
+                        statusAdvice: L10n.text("Search local environments first. Based on the results, choose a compatible environment or reinstall the environment."),
                         details: L10n.text("Search local environments first. If none qualify, follow the manual instructions or install automatically.")) {
             pathRow(L10n.text("PyTorch environment"), value: $settings.python, directory: false)
         } actions: {
@@ -217,7 +218,7 @@ struct SettingsView: View {
     private var environmentPicker: some View {
         EnvironmentSearchView(environments: environments, searching: searching, cancelled: searchCancelled,
                               checked: checkedCount, total: totalCount, error: searchError,
-                              managedInstallIssue: PyTorchEnvironmentInstaller.installationIssue(in: layout),
+                              managedInstallIssue: PyTorchEnvironmentInstaller.installationIssue(in: layout), installSource: $installSource,
                               onSelect: { environment in
                                   guard environment.isCompatible else { return }
                                   settings.python = environment.executable
@@ -229,7 +230,7 @@ struct SettingsView: View {
                 EnvironmentInstallInstructions(onClose: { showInstallInstructions = false })
             }
             .sheet(isPresented: $showInstaller, onDismiss: { if installing { store.setupTask?.cancel() } }) {
-                EnvironmentInstallView(workspace: layout, progress: installProgress, lines: installLines,
+                EnvironmentInstallView(workspace: layout, source: $installSource, progress: installProgress, lines: installLines,
                                        installing: installing, cancelled: installCancelled, error: installError,
                                        onCancel: { store.setupTask?.cancel() }, onRetry: startInstall,
                                        onSearch: { showInstaller = false; startSearch() },
@@ -276,11 +277,11 @@ struct SettingsView: View {
         guard let bundledRequirements else { searchError = L10n.english("The APP dependency file is missing. Download the APP again."); return }
         showInstaller = true; installing = true; installError = nil; installCancelled = false
         installLines = []; installProgress = .init(.download); store.isPreparingResources = true
-        let workspace = layout; let token = UUID(); operationID = token
+        let workspace = layout; let selectedSource = installSource; let token = UUID(); operationID = token
         store.setupTask = Task {
             defer { installing = false; operationID = nil; store.finishSetupTask() }
             do {
-                _ = try await PyTorchEnvironmentInstaller.install(workspace: workspace, requirements: bundledRequirements) { value in
+                _ = try await PyTorchEnvironmentInstaller.install(workspace: workspace, requirements: bundledRequirements, source: selectedSource) { value in
                     Task { @MainActor in
                         guard operationID == token else { return }
                         if value.stage.rawValue >= installProgress.stage.rawValue {

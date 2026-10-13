@@ -141,7 +141,7 @@ public enum PyTorchEnvironmentInstaller {
         }
         var finished = false
         defer { if !finished { try? log(L10n.english("Miniconda download incomplete or verification failed.")) } }
-        progress(.init(.download, detail: L10n.english("Connecting to the official Miniconda download server…")))
+        progress(.init(.download, detail: L10n.english("Connecting to the Miniconda download server…")))
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 60; configuration.timeoutIntervalForResource = 1800
         let temporary = workspace.temporary.appendingPathComponent("miniconda-\(UUID().uuidString).download")
@@ -166,8 +166,9 @@ public enum PyTorchEnvironmentInstaller {
         return file
     }
 
-    public static func install(workspace: WorkspaceLayout, requirements source: URL, distribution: MinicondaDistribution = .official,
+    public static func install(workspace: WorkspaceLayout, requirements source: URL, distribution override: MinicondaDistribution? = nil, source installSource: EnvironmentInstallSource = .pypi,
                                progress: @escaping @Sendable (EnvironmentInstallProgress) -> Void) async throws -> PythonEnvironment {
+        let distribution = override ?? installSource.distribution
         if distribution.requiresSpaceFreePrefix, let issue = installationIssue(in: workspace) { throw AppError.message(issue) }
         try workspace.prepare(); try Task.checkCancellation()
         let fm = FileManager.default
@@ -198,15 +199,17 @@ public enum PyTorchEnvironmentInstaller {
                          "CONDA_ENVS_PATH": prefix.appendingPathComponent("envs").path,
                          "CONDARC": folder.appendingPathComponent("condarc").path,
                          "PIP_CACHE_DIR": workspace.root.appendingPathComponent("cache/pip").path,
-                         "PIP_CONFIG_FILE": "/dev/null", "PIP_INDEX_URL": "https://pypi.org/simple",
+                         "PIP_CONFIG_FILE": "/dev/null", "PIP_INDEX_URL": installSource.pipIndex,
                          "PIP_DISABLE_PIP_VERSION_CHECK": "1", "PYTHONUNBUFFERED": "1"]
         overrides["CONDA_SUBDIR"] = "osx-arm64"
         try Data("channels:\n  - conda-forge\nchannel_priority: strict\nauto_activate_base: false\n".utf8)
             .write(to: URL(fileURLWithPath: overrides["CONDARC"]!), options: .atomic)
+        var commandNumber = 0
         func run(_ executable: String, _ arguments: [String], stage: EnvironmentInstallStage, timeout: TimeInterval = 3600) async throws {
             try Task.checkCancellation()
             progress(.init(stage))
-            let log = logs.appendingPathComponent("\(stage.rawValue)-\(stage).log")
+            commandNumber += 1
+            let log = logs.appendingPathComponent("\(stage.rawValue)-\(stage)-\(commandNumber).log")
             let result = try await SetupCommand.run(executable, arguments: arguments, workspace: workspace, timeout: timeout,
                                                     environment: overrides, logFile: log, logCommand: true) { line in
                 progress(.init(stage, logLine: line))
@@ -228,6 +231,12 @@ public enum PyTorchEnvironmentInstaller {
             if fm.fileExists(atPath: env.path) { try fm.removeItem(at: env) }
             try JSONFile.write(["prefix": env.path, "installer": distribution.sha256], to: envMarker)
             try await run(conda.path, ["create", "--yes", "--prefix", env.path, "--no-default-packages", "--override-channels", "--channel", "conda-forge", "python=3.11", "pip"], stage: .python)
+        }
+        let pipConfig = env.appendingPathComponent("pip.conf")
+        if installSource == .tsinghua || fm.fileExists(atPath: pipConfig.path) {
+            // Configure only the managed environment, preserving the user's global pip settings.
+            overrides["PIP_CONFIG_FILE"] = pipConfig.path
+            try await run(python.path, ["-I", "-B", "-m", "pip", "config", "--site", "set", "global.index-url", installSource.pipIndex], stage: .dependencies)
         }
         try await run(python.path, ["-I", "-B", "-m", "pip", "install", "--no-input", "--progress-bar", "off", "--no-compile", "-r", requirements.path], stage: .dependencies)
         try await run(python.path, ["-I", "-B", "-m", "pip", "check"], stage: .verify, timeout: 60)

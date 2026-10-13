@@ -393,4 +393,7 @@
 "Save" = "Save";
 "Check on save" = "Check on save";
 "Check failed · View reason" = "Check failed · View reason";
-"Search local environments first. Based on the results, choose manual installation or automatic installation." = "Search local environments first. Based on the results, choose manual installation or automatic installation.";
+"Search local environments first. Based on the results, choose a compatible environment or reinstall the environment." = "Search local environments first. Based on the results, choose a compatible environment or reinstall the environment.";
+
+"Installation source" = "Installation source";
+"Connecting to the Miniconda download server…" = "Connecting to the Miniconda download server…";

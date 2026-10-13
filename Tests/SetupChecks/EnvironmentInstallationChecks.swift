@@ -94,8 +94,13 @@ chmod +x "$prefix/bin/conda"
 #!/bin/bash
 set -eu
 if [ "${3:-}" = '-m' ]; then
+    if [ "${5:-}" = 'config' ]; then
+        printf '[global]\nindex-url = %s\n' "$PIP_INDEX_URL" > "$PIP_CONFIG_FILE"
+        exit 0
+    fi
     if [ "${5:-}" = 'install' ]; then
         printf '%s\n' 'installing dependencies'
+        printf '%s\n' "$PIP_INDEX_URL" > selected-index.txt
         if [ -f fail-install ]; then printf '%s\n' 'fixture dependency conflict'; exit 6; fi
         if [ -f slow-install ]; then
             sleep 30 &
@@ -129,9 +134,23 @@ printf '%s\n' 'LIGHTX2V_ENV:{"python":"3.11.14","architecture":"arm64","torch":"
         let copied = layout.root.appendingPathComponent("environments/requirements.txt")
         let copiedData = try Data(contentsOf: copied), expectedData = try Data(contentsOf: requirements)
         try expect(copiedData == expectedData, "requirements were changed or not copied")
+        let mirrorLogs = InstallationLogUpdates()
+        _ = try await PyTorchEnvironmentInstaller.install(workspace: layout, requirements: requirements, distribution: distribution, source: .tsinghua) { mirrorLogs.append($0) }
+        let pipConfig = PyTorchEnvironmentInstaller.environment(in: layout).appendingPathComponent("pip.conf")
+        let configText = try String(contentsOf: pipConfig)
+        let selectedIndex = try String(contentsOf: layout.root.appendingPathComponent("selected-index.txt")).trimmingCharacters(in: .whitespacesAndNewlines)
+        try expect(configText.contains(EnvironmentInstallSource.tsinghua.pipIndex) && selectedIndex == EnvironmentInstallSource.tsinghua.pipIndex,
+                   "mirror default must be written only to managed env and used by dependency installation")
+        try expect(mirrorLogs.lines.contains { $0.contains("'pip' 'config' '--site' 'set' 'global.index-url'") }, "mirror pip-config command is missing from streamed logs")
+        try expect(EnvironmentInstallSource.pypi.distribution.url == MinicondaDistribution.official.url
+                   && EnvironmentInstallSource.tsinghua.distribution.url.host == "mirrors.tuna.tsinghua.edu.cn"
+                   && EnvironmentInstallSource.tsinghua.distribution.sha256 == MinicondaDistribution.official.sha256,
+                   "installation sources must use a pinned, identical Miniconda distribution")
         let candidates = PythonEnvironmentSearch.candidates(home: root, path: "", repository: "", workspace: layout.root.path, selected: "")
         try expect(candidates.contains(installed.executable), "new managed environment not discovered")
         _ = try await PyTorchEnvironmentInstaller.install(workspace: layout, requirements: requirements, distribution: distribution) { _ in }
+        let restoredConfig = try String(contentsOf: pipConfig)
+        try expect(restoredConfig.contains(EnvironmentInstallSource.pypi.pipIndex) && !restoredConfig.contains("tsinghua"), "switching to official source must reset the managed default pip index")
         let managerInstalls = try String(contentsOf: layout.root.appendingPathComponent("manager-installs.txt"))
         let environmentCreates = try String(contentsOf: layout.root.appendingPathComponent("environment-creates.txt"))
         try expect(managerInstalls == "installed\n", "retry reinstalled Miniconda")

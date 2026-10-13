@@ -393,4 +393,7 @@
 "Save" = "Сохранить";
 "Check on save" = "Проверка при сохранении";
 "Check failed · View reason" = "Проверка не пройдена · Причина";
-"Search local environments first. Based on the results, choose manual installation or automatic installation." = "Сначала найдите локальные среды. По результатам поиска выберите ручную или автоматическую установку.";
+"Search local environments first. Based on the results, choose a compatible environment or reinstall the environment." = "Сначала найдите локальные среды. По результатам поиска выберите подходящую среду или переустановите её.";
+
+"Installation source" = "Источник установки";
+"Connecting to the Miniconda download server…" = "Подключение к серверу загрузки Miniconda…";

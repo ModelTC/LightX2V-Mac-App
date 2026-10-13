@@ -393,4 +393,7 @@
 "Save" = "Guardar";
 "Check on save" = "Se comprobará al guardar";
 "Check failed · View reason" = "Error · Ver motivo";
-"Search local environments first. Based on the results, choose manual installation or automatic installation." = "Busque primero los entornos locales. Según los resultados, elija la instalación manual o automática.";
+"Search local environments first. Based on the results, choose a compatible environment or reinstall the environment." = "Busque primero los entornos locales. Según los resultados, elija un entorno compatible o vuelva a instalarlo.";
+
+"Installation source" = "Fuente de instalación";
+"Connecting to the Miniconda download server…" = "Conectando al servidor de descarga de Miniconda…";

@@ -19,8 +19,8 @@ func environmentPresentationChecks() async throws {
                           styleMask: [.titled, .closable], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     defer { window.orderOut(nil); window.contentView = nil }
-    let snapshots = fm.homeDirectoryForCurrentUser.appendingPathComponent("Library/Caches/LightX2V-Environment-UI-Snapshots")
-    let capture = CommandLine.arguments.contains("--environment-snapshots")
+    let snapshots = ProcessInfo.processInfo.environment["LIGHTX2V_SETUP_SNAPSHOTS"].map { URL(fileURLWithPath: $0) } ?? fm.homeDirectoryForCurrentUser.appendingPathComponent("Library/Caches/LightX2V-Environment-UI-Snapshots")
+    let capture = CommandLine.arguments.contains("--environment-snapshots") || ProcessInfo.processInfo.environment["LIGHTX2V_SETUP_SNAPSHOTS"] != nil
     if capture { try fm.createDirectory(at: snapshots, withIntermediateDirectories: true) }
     func render<Content: View>(_ name: String, _ view: Content) async throws {
         let hosting = NSHostingView(rootView: view.environment(\.colorScheme, .light))
@@ -51,6 +51,41 @@ func environmentPresentationChecks() async throws {
     try await render("old-diffusers", search([oldDiffusers]))
     var missingPackage = ready; missingPackage.packageVersions["imageio_ffmpeg"] = ""
     try await render("missing-imageio-ffmpeg", search([missingPackage]))
+    var selectedSource = EnvironmentInstallSource.pypi
+    var installedSource: EnvironmentInstallSource?
+    let sourceBinding = Binding(get: { selectedSource }, set: { selectedSource = $0 })
+    let interactive = EnvironmentSearchView(environments: [ready], searching: false, cancelled: false, checked: 1, total: 1,
+        error: nil, installSource: sourceBinding, onSelect: { _ in }, onSearch: {}, onStop: {}, onInstructions: {},
+        onInstall: { installedSource = selectedSource }, onClose: {})
+    let hosting = NSHostingView(rootView: interactive.environment(\.colorScheme, .light))
+    window.contentView = hosting; window.setContentSize(hosting.fittingSize)
+    try await Task.sleep(for: .milliseconds(200))
+    func sourcePicker(_ view: NSView) -> NSSegmentedControl? {
+        if let control = view as? NSSegmentedControl { return control }
+        return view.subviews.compactMap(sourcePicker).first
+    }
+    guard let picker = sourcePicker(hosting), picker.segmentCount == 2,
+          picker.label(forSegment: 0) == "pypi.org", picker.label(forSegment: 1) == "pypi.tsinghua",
+          selectedSource == .pypi else { throw AppError.message("Install source options/default are incorrect") }
+    let originalSize = hosting.fittingSize
+    picker.selectedSegment = 1
+    guard let action = picker.action else { throw AppError.message("Install source picker action missing") }
+    NSApp.sendAction(action, to: picker.target, from: picker)
+    interactive.onInstall()
+    try await Task.sleep(for: .milliseconds(200))
+    guard selectedSource == .tsinghua && installedSource == .tsinghua && hosting.fittingSize == originalSize else {
+        throw AppError.message("Native mirror choice failed to reach installation or changed layout")
+    }
+    if capture, let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) {
+        hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+        try bitmap.representation(using: .png, properties: [:])!.write(to: snapshots.appendingPathComponent("source-selected.png"))
+    }
+    let busyHost = NSHostingView(rootView: EnvironmentInstallView(workspace: layout, source: sourceBinding, progress: .init(.download), lines: [],
+        installing: true, cancelled: false, error: nil, onCancel: {}, onRetry: {}, onSearch: {}, onClose: {}).environment(\.colorScheme, .light))
+    window.contentView = busyHost; window.setContentSize(busyHost.fittingSize)
+    try await Task.sleep(for: .milliseconds(200))
+    guard let locked = sourcePicker(busyHost), !locked.isEnabled else { throw AppError.message("Install source must be locked during installation") }
+    print("PASS native install source selection, official default, mirror callback, fixed layout and installation lock")
     try await render("manual-instructions", EnvironmentInstallInstructions(onClose: {}))
     for (name, progress, installing, cancelled, error) in [
         ("installing", EnvironmentInstallProgress(.dependencies), true, false, Optional<String>.none),

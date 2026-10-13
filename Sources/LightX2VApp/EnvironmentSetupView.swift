@@ -11,6 +11,7 @@ struct EnvironmentSearchView: View {
     let total: Int
     let error: String?
     var managedInstallIssue: String? = nil
+    var installSource: Binding<EnvironmentInstallSource> = .constant(.pypi)
     let onSelect: (PythonEnvironment) -> Void
     let onSearch: () -> Void
     let onStop: () -> Void
@@ -42,7 +43,7 @@ struct EnvironmentSearchView: View {
                         installationChoice(L10n.text("Manual installation"), symbol: "doc.text", detail: L10n.text("Follow the instructions, then search again."),
                                            button: L10n.text("View installation instructions"), action: onInstructions)
                         installationChoice(L10n.text("Install automatically in workspace"), symbol: "arrow.down.circle", detail: L10n.text("Install Miniconda, Python 3.11 and inference dependencies."),
-                                           button: L10n.text("Start automatic installation"), issue: managedInstallIssue, action: onInstall)
+                                           button: L10n.text("Start automatic installation"), issue: managedInstallIssue, sourceChoice: true, action: onInstall)
                     }
                     if environments.isEmpty && searching {
                         Text(L10n.text("Looking for Conda, venv, pyenv and other environments…"))
@@ -76,13 +77,22 @@ struct EnvironmentSearchView: View {
     }
 
     private func installationChoice(_ title: String, symbol: String, detail: String, button: String,
-                                    issue: String? = nil, action: @escaping () -> Void) -> some View {
+                                    issue: String? = nil, sourceChoice: Bool = false, action: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: 11) {
             Image(systemName: symbol).font(.system(size: 19, weight: .light)).foregroundStyle(Palette.muted)
             Text(L10n.render(title)).font(.system(size: 12, weight: .semibold))
             Text(L10n.render(detail)).font(.system(size: 11)).foregroundStyle(Palette.muted)
                 .fixedSize(horizontal: false, vertical: true).lineSpacing(3).frame(minHeight: 34, alignment: .topLeading)
-            Button(button, action: action).font(.system(size: 11)).disabled(issue != nil)
+            if sourceChoice {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(L10n.text("Installation source")).font(.system(size: 10)).foregroundStyle(Palette.muted)
+                    Picker(L10n.text("Installation source"), selection: installSource) {
+                        ForEach(EnvironmentInstallSource.allCases) { option in Text(option.title).tag(option) }
+                    }.labelsHidden().pickerStyle(.segmented).controlSize(.small).disabled(searching)
+                        .accessibilityLabel(L10n.text("Installation source"))
+                }
+            }
+            Button(button, action: action).font(.system(size: 11)).disabled(issue != nil || (sourceChoice && searching))
             if let issue {
                 Text(L10n.render(issue)).font(.system(size: 10)).foregroundStyle(Palette.muted)
                     .fixedSize(horizontal: false, vertical: true).lineSpacing(3)
@@ -169,6 +179,7 @@ struct EnvironmentInstallInstructions: View {
 struct EnvironmentInstallView: View {
     @ObservedObject private var language = LanguagePreferences.shared
     let workspace: WorkspaceLayout
+    var source: Binding<EnvironmentInstallSource> = .constant(.pypi)
     let progress: EnvironmentInstallProgress
     let lines: [String]
     let installing: Bool
@@ -186,6 +197,13 @@ struct EnvironmentInstallView: View {
             VStack(alignment: .leading, spacing: 7) {
                 Text(completed ? L10n.text("Environment ready") : L10n.text("Install PyTorch environment")).font(.system(size: 18, weight: .semibold))
                 Text("TorchLightX2V · Python 3.11").font(.system(size: 11)).foregroundStyle(Palette.muted)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L10n.text("Installation source")).font(.system(size: 11, weight: .medium)).foregroundStyle(Palette.muted)
+                Picker(L10n.text("Installation source"), selection: source) {
+                    ForEach(EnvironmentInstallSource.allCases) { option in Text(option.title).tag(option) }
+                }.labelsHidden().pickerStyle(.segmented).disabled(installing || completed)
+                    .accessibilityLabel(L10n.text("Installation source"))
             }
             Text(PyTorchEnvironmentInstaller.environment(in: workspace).path)
                 .font(.system(size: 10, design: .monospaced)).foregroundStyle(Palette.muted)
@@ -234,7 +252,7 @@ struct EnvironmentInstallView: View {
             }
             HStack {
                 if installing { Button(L10n.text("Cancel installation"), action: onCancel).keyboardShortcut(.cancelAction) }
-                else if !completed { Button(L10n.text("Resume installation"), action: onRetry) }
+                else if !completed { Button(L10n.text(cancelled || error != nil ? "Resume installation" : "Start automatic installation"), action: onRetry).buttonStyle(SettingsActionStyle(prominent: true)) }
                 Spacer()
                 if completed {
                     Button(L10n.text("Close"), action: onClose)

@@ -393,4 +393,7 @@
 "Save" = "保存";
 "Check on save" = "待保存时检查";
 "Check failed · View reason" = "检查失败，点击查看原因";
-"Search local environments first. Based on the results, choose manual installation or automatic installation." = "建议先搜索本机环境，根据搜索结果，选择手动安装或自动安装。";
+"Search local environments first. Based on the results, choose a compatible environment or reinstall the environment." = "建议先搜索本机环境，根据搜索结果，选择符合要求的环境或重新安装环境。";
+
+"Installation source" = "安装源";
+"Connecting to the Miniconda download server…" = "正在连接 Miniconda 下载服务器…";
