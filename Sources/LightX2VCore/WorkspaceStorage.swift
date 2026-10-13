@@ -71,17 +71,31 @@ public enum WorkspaceStorage {
         return locatorRoot.appendingPathComponent("workspace.json")
     }
 
-    /// A different workspace starts with empty history. Original records and outputs stay in place.
+    /// Read an existing destination without changing its settings, history or files.
+    public static func existingWorkspace(at path: String, previousState: URL) throws -> WorkspaceData? {
+        try WorkspaceLayout.validate(path)
+        let layout = WorkspaceLayout(path)
+        guard previousState.standardizedFileURL.resolvingSymlinksInPath() != layout.state,
+              FileManager.default.fileExists(atPath: layout.state.path) else { return nil }
+        var data = try JSONFile.read(WorkspaceData.self, from: layout.state)
+        data.settings.workingDirectory = layout.root.path
+        return data
+    }
+
+    /// Reconnect existing workspaces; only a new destination starts with empty history.
     public static func save(_ snapshot: WorkspaceData, previousState: URL, locatorRoot: URL) throws -> WorkspaceData {
         let fm = FileManager.default
         var data = snapshot
         let layout = WorkspaceLayout(data.settings.workingDirectory)
-        try layout.prepare()
         data.settings.workingDirectory = layout.root.path
         let switching = previousState.standardizedFileURL.resolvingSymlinksInPath() != layout.state
-        if switching, fm.fileExists(atPath: layout.state.path) {
-            throw AppError.message(L10n.english("This directory contains another workspace. Choose a different directory to preserve its settings and images."))
+        if let existing = try existingWorkspace(at: layout.root.path, previousState: previousState) {
+            // Decode successfully before updating the pointer. Never rewrite the destination.
+            try JSONFile.write(WorkspaceLocation(workingDirectory: layout.root.path),
+                               to: locatorRoot.appendingPathComponent("workspace_location.json"))
+            return existing
         }
+        try layout.prepare()
         var created: [URL] = []
         let originalState = switching ? nil : try? Data(contentsOf: previousState)
         var wroteState = false

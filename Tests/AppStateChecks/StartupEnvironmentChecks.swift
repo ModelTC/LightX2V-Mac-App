@@ -225,6 +225,47 @@ print('LIGHTX2V_ENV:' + (root / 'versions.json').read_text(), flush=True)
     retry.closeGeneralSettings()
     try check(!retry.showStartupSettings && retry.environmentReady, "closing repaired startup settings enters the workspace with a ready environment")
 
+    // Losing the locator must not make an existing workspace impossible to reopen.
+    var archivedSettings = settings
+    archivedSettings.model = root.appendingPathComponent("saved model").path
+    let output = layout.outputs.appendingPathComponent("saved.png")
+    try Data([1, 2, 3]).write(to: output)
+    var archivedJob = Generation(request: try InferenceRequest(settings: archivedSettings, prompt: "saved prompt", width: 1024, height: 1024, seed: 42, output: output.path))
+    archivedJob.status = .completed
+    try JSONFile.write(WorkspaceData(settings: archivedSettings, generations: [archivedJob], hasCompletedGeneralSetup: true), to: layout.state)
+    let archivedBytes = try Data(contentsOf: layout.state)
+    try fm.removeItem(at: support.appendingPathComponent("workspace_location.json"))
+    let disconnected = AppStore()
+    disconnected.start()
+    try check(disconnected.showStartupSettings && disconnected.generations.isEmpty, "missing locator starts setup without overwriting existing history")
+    let preview = try disconnected.existingWorkspaceSettings(at: layout.root.path)
+    try check(preview == archivedSettings, "selecting an existing workspace restores all configuration paths")
+    var incompleteDraft = AppSettings.defaults
+    incompleteDraft.workingDirectory = layout.root.path
+    try await disconnected.applyGeneralSettings(incompleteDraft)
+    try check(disconnected.settings == archivedSettings && disconnected.generations.map(\.id) == [archivedJob.id], "saving selection reconnects settings and completed images")
+    try check(disconnected.environmentReady && !disconnected.showStartupSettings, "reconnected workspace checks saved environment and enters the APP")
+    let retainedBytes = try Data(contentsOf: layout.state)
+    let retainedImage = try Data(contentsOf: output)
+    try check(retainedBytes == archivedBytes && retainedImage == Data([1, 2, 3]), "reconnection preserves workspace JSON and output bytes")
+    try await snapshot("workspace-reconnected", WorkspaceView().environmentObject(disconnected), size: NSSize(width: 1150, height: 840))
+    let afterReconnect = AppStore()
+    try check(afterReconnect.settings == archivedSettings && afterReconnect.generations.map(\.id) == [archivedJob.id], "relaunch follows restored locator and retains original history")
+
+    let incompleteLayout = WorkspaceLayout(root.appendingPathComponent("incomplete saved workspace").path)
+    try incompleteLayout.prepare()
+    var incompleteSettings = AppSettings.defaults
+    incompleteSettings.workingDirectory = incompleteLayout.root.path
+    try JSONFile.write(WorkspaceData(settings: incompleteSettings, generations: [archivedJob]), to: incompleteLayout.state)
+    let incompleteBytes = try Data(contentsOf: incompleteLayout.state)
+    var selection = AppSettings.defaults; selection.workingDirectory = incompleteLayout.root.path
+    afterReconnect.showSettings = true
+    try await afterReconnect.applyGeneralSettings(selection)
+    try check(afterReconnect.generations.map(\.id) == [archivedJob.id] && afterReconnect.needsGeneralSetup && afterReconnect.showSettings,
+              "incomplete saved workspace restores history and stays in settings for repair")
+    let incompleteRetained = try Data(contentsOf: incompleteLayout.state)
+    try check(incompleteRetained == incompleteBytes, "incomplete workspace restoration preserves original bytes")
+
     try Data().write(to: root.appendingPathComponent("slow-probe"))
     let cancelled = try savedStore()
     cancelled.start()

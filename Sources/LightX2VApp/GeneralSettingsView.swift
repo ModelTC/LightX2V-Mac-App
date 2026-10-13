@@ -28,6 +28,10 @@ struct SettingsView: View {
 
     private var layout: WorkspaceLayout { WorkspaceLayout(normalized(settings.workingDirectory)) }
     private var hasWorkDirectory: Bool { (try? WorkspaceLayout.validate(normalized(settings.workingDirectory))) != nil }
+    private var reconnectingWorkspace: Bool {
+        hasWorkDirectory && layout.root != WorkspaceLayout(store.settings.workingDirectory).root
+            && FileManager.default.fileExists(atPath: layout.state.path)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -46,7 +50,7 @@ struct SettingsView: View {
                     .disabled(store.isPreparingWorkspace)
                 Button(L10n.text("Save settings")) { save() }
                     .buttonStyle(SettingsActionStyle(prominent: true))
-                    .keyboardShortcut(.defaultAction).disabled(store.busy || !settings.hasGeneralPaths)
+                    .keyboardShortcut(.defaultAction).disabled(store.busy || (!settings.hasGeneralPaths && !reconnectingWorkspace))
             }.padding(.horizontal, 24).frame(height: 60)
         }.frame(width: 640).background(Palette.canvas).foregroundStyle(Palette.ink)
             .buttonStyle(SettingsActionStyle())
@@ -55,6 +59,16 @@ struct SettingsView: View {
             .defaultFocus($headerFocused, true, priority: .userInitiated)
             .onAppear { updateGuide() }
             .onChange(of: settings) { _, _ in saveError = nil }
+            .onChange(of: settings.workingDirectory) { _, directory in
+                let path = normalized(directory)
+                guard path.hasPrefix("/"), FileManager.default.fileExists(atPath: WorkspaceLayout(path).state.path) else { return }
+                do {
+                    if let restored = try store.existingWorkspaceSettings(at: path) {
+                        settings = restored
+                        updateGuide()
+                    }
+                } catch { saveError = error.localizedDescription }
+            }
             .alert(L10n.text("Settings operation failed"), isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
                 Button(L10n.text("Close"), role: .cancel) { saveError = nil }
             } message: {
@@ -114,7 +128,8 @@ struct SettingsView: View {
     }
 
     private var workspaceMessage: String {
-        if !store.generations.isEmpty && normalized(settings.workingDirectory) != store.settings.workingDirectory {
+        if !store.generations.isEmpty && normalized(settings.workingDirectory) != store.settings.workingDirectory,
+           !FileManager.default.fileExists(atPath: layout.state.path) {
             return L10n.text("Switching starts an empty history. Existing records and images stay in the previous workspace.")
         }
         return L10n.text("Settings, history, images, logs and caches are stored here.")

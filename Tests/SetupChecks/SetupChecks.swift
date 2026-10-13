@@ -63,6 +63,7 @@ func rejects(_ body: () throws -> Void) throws {
         try workspaceSwitching(root)
         print("PASS empty history on workspace switch, unchanged original data and macOS locator")
         try migrationFailure(root)
+        try workspaceReconnection(root)
         print("PASS destination collision and failed locator rollback")
         try archiveValidation()
         print("PASS SHA parsing, pinned archive paths, traversal/history rejection")
@@ -211,6 +212,46 @@ func rejects(_ body: () throws -> Void) throws {
         let unchanged = try WorkspaceStorage.save(moved, previousState: WorkspaceLayout(moved.settings.workingDirectory).state, locatorRoot: support)
         try expect(unchanged.generations.isEmpty, "empty history changed on repeated save")
         try expect(WorkspaceLayout(moved.settings.workingDirectory).environment.values.filter { $0 != "1" }.allSatisfy { $0.hasPrefix(moved.settings.workingDirectory + "/") }, "cache outside workspace")
+    }
+
+    static func workspaceReconnection(_ root: URL) throws {
+        let layout = WorkspaceLayout(root.appendingPathComponent("existing workspace").path)
+        try layout.prepare()
+        var settings = AppSettings.defaults
+        settings.workingDirectory = layout.root.path
+        settings.repository = "/original/source"; settings.python = "/original/python"
+        settings.model = "/original/model"
+        let image = layout.outputs.appendingPathComponent("retained.png")
+        try Data([1, 2, 3]).write(to: image)
+        var job = Generation(request: try InferenceRequest(settings: settings, prompt: "retained prompt", width: 1024, height: 1024, seed: 7, output: image.path))
+        job.status = .completed
+        let original = WorkspaceData(settings: settings, generations: [job], hasCompletedGeneralSetup: true)
+        try JSONFile.write(original, to: layout.state)
+        let bytes = try Data(contentsOf: layout.state)
+        let support = root.appendingPathComponent("reconnect support")
+        var incoming = WorkspaceData(); incoming.settings.workingDirectory = layout.root.path
+        let loaded = try WorkspaceStorage.save(incoming, previousState: support.appendingPathComponent("workspace.json"), locatorRoot: support)
+        try expect(loaded.settings == settings && loaded.generations.map(\.id) == [job.id], "reconnection lost settings or history")
+        let retained = try Data(contentsOf: layout.state)
+        try expect(retained == bytes, "reconnection rewrote original workspace")
+        let retainedImage = try Data(contentsOf: image)
+        try expect(retainedImage == Data([1, 2, 3]), "reconnection changed image")
+        let restoredURL = try WorkspaceStorage.stateURL(locatorRoot: support)
+        try expect(restoredURL == layout.state, "reconnection did not persist locator")
+        let before = try Data(contentsOf: support.appendingPathComponent("workspace_location.json"))
+        let invalid = WorkspaceLayout(root.appendingPathComponent("broken workspace").path)
+        try invalid.prepare(); try Data("broken".utf8).write(to: invalid.state)
+        incoming.settings.workingDirectory = invalid.root.path
+        try rejects { _ = try WorkspaceStorage.save(incoming, previousState: layout.state, locatorRoot: support) }
+        let after = try Data(contentsOf: support.appendingPathComponent("workspace_location.json"))
+        try expect(after == before, "invalid workspace changed locator")
+        let blocked = root.appendingPathComponent("blocked reconnect locator")
+        try Data().write(to: blocked)
+        incoming.settings.workingDirectory = layout.root.path
+        try rejects { _ = try WorkspaceStorage.save(incoming, previousState: invalid.state, locatorRoot: blocked) }
+        let afterFailure = try Data(contentsOf: layout.state)
+        try expect(afterFailure == bytes, "failed locator write changed workspace")
+        print("PASS existing workspace reconnection preserves settings, history, images and original bytes")
     }
 
     static func migrationFailure(_ root: URL) throws {

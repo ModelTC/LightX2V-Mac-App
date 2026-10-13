@@ -351,6 +351,10 @@ final class AppStore: ObservableObject {
         }
     }
 
+    func existingWorkspaceSettings(at path: String) throws -> AppSettings? {
+        try WorkspaceStorage.existingWorkspace(at: path, previousState: stateURL)?.settings
+    }
+
     func applyGeneralSettings(_ value: AppSettings) async throws {
         guard !busy else { throw AppError.message(L10n.english("Wait for the current task to finish before saving settings.")) }
         var updated = settings
@@ -361,8 +365,9 @@ final class AppStore: ObservableObject {
         updated.repository = path(value.repository)
         updated.python = path(value.python)
         updated.promptEnhancement.runtimeDirectory = path(value.promptEnhancement.runtimeDirectory)
-        try updated.validateGeneralPaths()
-        let keepEnvironmentReady = environmentReady && !needsGeneralSetup && updated.python == path(settings.python)
+        if try WorkspaceStorage.existingWorkspace(at: updated.workingDirectory, previousState: stateURL) == nil {
+            try updated.validateGeneralPaths()
+        }
         isPreparingWorkspace = true
         defer { isPreparingWorkspace = false; finishTerminationIfNeeded() }
         let snapshot = WorkspaceData(settings: updated, generations: generations, hasCompletedGeneralSetup: true)
@@ -370,17 +375,21 @@ final class AppStore: ObservableObject {
         let saved = try await Task.detached(priority: .userInitiated) {
             try WorkspaceStorage.save(snapshot, previousState: previous, locatorRoot: locator)
         }.value
+        let keepEnvironmentReady = environmentReady && !needsGeneralSetup && saved.settings.hasGeneralPaths && saved.settings.python == path(settings.python)
         let changedWorkspace = stateURL.standardizedFileURL.resolvingSymlinksInPath() != WorkspaceLayout(saved.settings.workingDirectory).state
         restoringModelPaths = true
-        settings = saved.settings; generations = saved.generations
-        if changedWorkspace { selectedID = nil; draftCreationID = UUID(); logs = ""; showLogs = false; clearInputImages() }
+        var restored = saved
+        restored.recoverInterrupted()
+        settings = restored.settings; generations = restored.generations
+        if changedWorkspace { selectedID = nil; draftCreationID = UUID(); prompt = ""; generationSize = GenerationSize(); logs = ""; showLogs = false; clearInputImages() }
         restoreModelPaths()
         stateURL = WorkspaceLayout(settings.workingDirectory).state
         restoringModelPaths = false
         refreshModelResources()
-        canPersist = true; hasCompletedGeneralSetup = true; environmentReady = keepEnvironmentReady
+        canPersist = true; hasCompletedGeneralSetup = saved.hasCompletedGeneralSetup; environmentReady = keepEnvironmentReady
         errorMessage = nil
         isPreparingWorkspace = false
+        guard !needsGeneralSetup else { return }
         if !keepEnvironmentReady {
             checkEnvironment()
             await setupTask?.value
