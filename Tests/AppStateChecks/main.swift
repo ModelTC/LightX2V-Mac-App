@@ -51,6 +51,7 @@ struct AppStateChecks {
             return
         }
         if CommandLine.arguments.dropFirst().first == "--enhancement-only" {
+            try await creationSettingsChecks()
             try await languageTaskChecks()
             try await enhancementStateChecks()
             return

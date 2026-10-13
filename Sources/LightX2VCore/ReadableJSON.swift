@@ -12,7 +12,11 @@ enum ReadableJSON {
         if object["creationID"] != nil {
             fields = ["id", "creationID", "createdAt", "status", "model", "parameters", "prompt", "promptEnhancement", "inputImages", "outputImages", "execution"]
         } else if object["generations"] != nil {
-            fields = ["settings", "hasCompletedGeneralSetup", "generations"]
+            fields = ["settings", "hasCompletedGeneralSetup", "activeCreationID", "creationSettings", "generations"]
+        } else if object["updatedAt"] != nil {
+            fields = ["modelName", "parameters", "promptEnhancement", "updatedAt"]
+        } else if object["aspectRatio"] != nil {
+            fields = ["resolution", "aspectRatio", "width", "height", "steps", "seed"]
         } else if object["startedAt"] != nil {
             fields = ["directory", "sourceDirectory", "python", "requestFile", "logFile", "startedAt", "finishedAt", "durationSeconds", "error"]
         } else if object["seed"] != nil && object["steps"] != nil {

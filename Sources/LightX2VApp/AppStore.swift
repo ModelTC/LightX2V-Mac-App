@@ -17,6 +17,7 @@ final class AppStore: ObservableObject {
     @Published var settings: AppSettings {
         didSet {
             if oldValue.promptEnhancement != settings.promptEnhancement { refreshEnhancementResources() }
+            if oldValue.promptEnhancement.enabled != settings.promptEnhancement.enabled { saveCreationParameters() }
         }
     }
     @Published var modelDirectory: String { didSet { if oldValue != modelDirectory { modelPathChanged(.turbo) } } }
@@ -34,7 +35,15 @@ final class AppStore: ObservableObject {
     private var modelResourceTask: Task<Void, Never>?
     @Published var generations: [Generation]
     @Published var selectedID: UUID? {
-        didSet { logGenerationID = selectedID; loadSelectedLog() }
+        didSet {
+            logGenerationID = selectedID; loadSelectedLog()
+            guard !restoringCreationParameters else { return }
+            let oldCreation = generations.first { $0.id == oldValue }?.creationID ?? draftCreationID
+            if oldCreation != currentCreationID {
+                restoreCreationParameters()
+                persist()
+            }
+        }
     }
     @Published private(set) var logGenerationID: UUID?
     @Published var prompt = ""
@@ -44,7 +53,10 @@ final class AppStore: ObservableObject {
     @Published private(set) var selectedModel: GenerationModel?
     @Published var modelPreparationExpanded = false
     @Published var generationParametersExpanded = false
-    @Published var generationSize = GenerationSize()
+    @Published var generationSize = GenerationSize() { didSet { saveCreationParameters() } }
+    private(set) var creationSettings: [String: CreationSettings] = [:]
+    private var restoringCreationParameters = false
+    var currentCreationID: UUID { selected?.creationID ?? draftCreationID }
     @Published var isRunning = false
     @Published var isChecking = false
     @Published var isStopping = false
@@ -180,24 +192,54 @@ final class AppStore: ObservableObject {
         data.recoverInterrupted()
         BundledInferenceResources.configure(&data.settings)
         settings = data.settings; generations = data.generations
+        creationSettings = data.creationSettings
         modelDirectory = data.settings.model
         t2iDirectory = data.settings.promptEnhancement.t2iDirectory; i2iDirectory = data.settings.promptEnhancement.i2iDirectory
         hasCompletedGeneralSetup = data.hasCompletedGeneralSetup
         errorMessage = readError
+        if let active = data.activeCreationID {
+            restoringCreationParameters = true
+            draftCreationID = active
+            selectedID = generations.first { $0.creationID == active }?.id
+            restoringCreationParameters = false
+            restoreCreationParameters()
+        }
         refreshEnhancementResources(); refreshModelResources()
     }
 
     func persist() {
         guard canPersist, !isPreparingWorkspace, !settings.workingDirectory.isEmpty, let stateURL else { return }
-        do { try JSONFile.write(WorkspaceData(settings: settings, generations: generations, hasCompletedGeneralSetup: hasCompletedGeneralSetup), to: stateURL) }
+        do { try JSONFile.write(WorkspaceData(settings: settings, generations: generations, hasCompletedGeneralSetup: hasCompletedGeneralSetup, creationSettings: creationSettings, activeCreationID: currentCreationID), to: stateURL) }
         catch { errorMessage = L10n.english("Unable to save application state: %@", [String(describing: error.localizedDescription)]) }
+    }
+
+    private func saveCreationParameters() {
+        guard !restoringCreationParameters, !restoringModelPaths, !isPreparingWorkspace else { return }
+        creationSettings[currentCreationID.uuidString] = CreationSettings(modelName: selectedModel?.title ?? QwenImage21Turbo.title,
+                                                                        size: generationSize, enhancementEnabled: settings.promptEnhancement.enabled)
+        persist()
+    }
+
+    private func restoreCreationParameters() {
+        restoringCreationParameters = true
+        defer { restoringCreationParameters = false }
+        let saved = creationSettings[currentCreationID.uuidString] ?? CreationSettings()
+        generationSize = saved.size
+        settings.promptEnhancement.enabled = saved.promptEnhancement.enabled
+        // Startup still requires explicit model selection. History switches retain
+        // the selected model when a model has already been chosen in this session.
+        if selectedModel != nil { selectedModel = GenerationModel.allCases.first { $0.title == saved.modelName } }
     }
 
     func newGeneration() {
         guard !isImportingImages else { return }
-        selectedID = nil; prompt = ""; showLogs = false; generationSize = GenerationSize()
+        restoringCreationParameters = true
+        selectedID = nil; prompt = ""; showLogs = false
         draftCreationID = UUID()
+        generationSize = GenerationSize(); settings.promptEnhancement.enabled = true
+        restoringCreationParameters = false
         clearInputImages()
+        saveCreationParameters()
     }
 
     func chooseInputImages() {
@@ -298,16 +340,18 @@ final class AppStore: ObservableObject {
         modelPreparationExpanded = true
         generationParametersExpanded = true
         refreshModelResources()
+        saveCreationParameters()
     }
 
     func reuse(_ generation: Generation) {
         guard !isImportingImages else { return }
+        selectedID = generation.id
         clearInputImages()
         inputImages = generation.request.inputImages
         prompt = generation.request.prompt
         generationSize = GenerationSize(width: generation.request.width, height: generation.request.height,
                                         automaticResolution: generation.request.resolution)
-        selectedID = generation.id
+        settings.promptEnhancement.enabled = generation.request.promptEnhancement != nil
     }
 
     func reference(_ generation: Generation) {
@@ -346,7 +390,7 @@ final class AppStore: ObservableObject {
         }
         isPreparingWorkspace = true
         defer { isPreparingWorkspace = false; finishTerminationIfNeeded() }
-        let snapshot = WorkspaceData(settings: updated, generations: generations, hasCompletedGeneralSetup: true)
+        let snapshot = WorkspaceData(settings: updated, generations: generations, hasCompletedGeneralSetup: true, creationSettings: creationSettings, activeCreationID: currentCreationID)
         let previous = stateURL; let locator = locatorRoot
         let saved = try await Task.detached(priority: .userInitiated) {
             try WorkspaceStorage.save(snapshot, previousState: previous, locatorRoot: locator)
@@ -357,8 +401,16 @@ final class AppStore: ObservableObject {
         var restored = saved
         restored.recoverInterrupted()
         BundledInferenceResources.configure(&restored.settings)
+        restoringCreationParameters = true
         settings = restored.settings; generations = restored.generations
-        if changedWorkspace { selectedID = nil; draftCreationID = UUID(); prompt = ""; generationSize = GenerationSize(); logs = ""; showLogs = false; clearInputImages() }
+        creationSettings = restored.creationSettings
+        if changedWorkspace {
+            draftCreationID = restored.activeCreationID ?? UUID()
+            selectedID = restored.activeCreationID.flatMap { active in generations.first { $0.creationID == active }?.id }
+            prompt = ""; logs = ""; showLogs = false; clearInputImages()
+        }
+        restoringCreationParameters = false
+        restoreCreationParameters()
         restoreModelPaths()
         stateURL = WorkspaceLayout(settings.workingDirectory).state
         restoringModelPaths = false
@@ -801,9 +853,10 @@ final class AppStore: ObservableObject {
         guard !generations.contains(where: { $0.creationID == job.creationID && $0.status == .running }) else { return }
         let removingSelected = selected?.creationID == job.creationID
         generations.removeAll { $0.creationID == job.creationID }
+        creationSettings.removeValue(forKey: job.creationID.uuidString)
         thinkingStreams = thinkingStreams.filter { id, _ in generations.contains { $0.id == id } }
         promptStreams = promptStreams.filter { id, _ in generations.contains { $0.id == id } }
-        if removingSelected { selectedID = nil; draftCreationID = UUID() }
+        if removingSelected { newGeneration() }
         persist()
     }
 }

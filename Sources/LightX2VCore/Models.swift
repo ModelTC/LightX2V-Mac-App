@@ -189,22 +189,29 @@ public struct WorkspaceData: Codable {
     public var settings: AppSettings
     public var generations: [Generation]
     public var hasCompletedGeneralSetup: Bool
-    public init(settings: AppSettings = .defaults, generations: [Generation] = [], hasCompletedGeneralSetup: Bool = false) {
+    public var creationSettings: [String: CreationSettings]
+    public var activeCreationID: UUID?
+    public init(settings: AppSettings = .defaults, generations: [Generation] = [], hasCompletedGeneralSetup: Bool = false, creationSettings: [String: CreationSettings] = [:], activeCreationID: UUID? = nil) {
         self.settings = settings; self.generations = generations
         self.hasCompletedGeneralSetup = hasCompletedGeneralSetup
+        self.creationSettings = creationSettings; self.activeCreationID = activeCreationID
     }
-    private enum CodingKeys: String, CodingKey { case settings, generations, hasCompletedGeneralSetup }
+    private enum CodingKeys: String, CodingKey { case settings, generations, hasCompletedGeneralSetup, creationSettings, activeCreationID }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         settings = try values.decode(AppSettings.self, forKey: .settings)
         generations = try values.decode([Generation].self, forKey: .generations)
         hasCompletedGeneralSetup = try values.decode(Bool.self, forKey: .hasCompletedGeneralSetup)
+        creationSettings = try values.decode([String: CreationSettings].self, forKey: .creationSettings)
+        activeCreationID = try values.decodeIfPresent(UUID.self, forKey: .activeCreationID)
     }
     public func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encode(settings, forKey: .settings)
         try values.encode(generations, forKey: .generations)
         try values.encode(hasCompletedGeneralSetup, forKey: .hasCompletedGeneralSetup)
+        try values.encode(creationSettings, forKey: .creationSettings)
+        try values.encodeIfPresent(activeCreationID, forKey: .activeCreationID)
     }
     public mutating func recoverInterrupted() {
         for index in generations.indices where generations[index].status == .running {

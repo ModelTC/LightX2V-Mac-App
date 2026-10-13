@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory(prefix='lightx2v-packaged-startup-') as folder:
         if old_state:
             (support / 'workspace.json').write_text(json.dumps({
                 'settings': {'repository': '', 'model': '', 'config': '', 'python': str(python), 'workingDirectory': str(workspace)},
-                'generations': [], 'hasCompletedGeneralSetup': True,
+                'generations': [], 'creationSettings': {}, 'hasCompletedGeneralSetup': True,
             }))
             (support / 'location.json').write_text('invalid old location')
         original_files = {p: p.read_bytes() for p in support.iterdir() if p.is_file()}
@@ -36,12 +36,12 @@ with tempfile.TemporaryDirectory(prefix='lightx2v-packaged-startup-') as folder:
             (support / 'workspace_location.json').write_text(json.dumps({'workingDirectory': str(workspace)}))
             (workspace / 'workspace.json').write_text(json.dumps({
                 'settings': {'python': str(python), 'workingDirectory': str(workspace), 'Qwen-Image-2.1-Turbo': {'modelDirectory': '', 'modelDownloadSource': 'huggingFace', 'promptEnhancement': {'enabled': True, 't2iDirectory': '', 'i2iDirectory': ''}}},
-                'generations': [], 'hasCompletedGeneralSetup': True,
+                'generations': [], 'creationSettings': {}, 'hasCompletedGeneralSetup': True,
             }))
             if old_schema:
                 (workspace / 'workspace.json').write_text(json.dumps({
                     'settings': {'repository': '', 'model': '', 'config': '', 'python': str(python), 'workingDirectory': str(workspace)},
-                    'generations': [], 'hasCompletedGeneralSetup': True,
+                    'generations': [], 'creationSettings': {}, 'hasCompletedGeneralSetup': True,
                 }))
         original_workspace = (workspace / 'workspace.json').read_bytes() if old_schema else None
         log = fixture / 'startup.log'
