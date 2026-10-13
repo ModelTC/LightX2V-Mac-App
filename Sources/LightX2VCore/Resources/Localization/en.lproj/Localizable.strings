@@ -397,3 +397,7 @@
 
 "Installation source" = "Installation source";
 "Connecting to the Miniconda download server…" = "Connecting to the Miniconda download server…";
+
+"Use your own Python environment" = "Use your own Python environment";
+
+"Wait for environment search to finish" = "Wait for environment search to finish";

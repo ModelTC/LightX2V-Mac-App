@@ -39,16 +39,15 @@ struct EnvironmentSearchView: View {
                 .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10))
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    HStack(alignment: .top, spacing: 12) {
-                        installationChoice(L10n.text("Manual installation"), symbol: "doc.text", detail: L10n.text("Follow the instructions, then search again."),
-                                           button: L10n.text("View installation instructions"), action: onInstructions)
-                        installationChoice(L10n.text("Install automatically in workspace"), symbol: "arrow.down.circle", detail: L10n.text("Install Miniconda, Python 3.11 and inference dependencies."),
-                                           button: L10n.text("Start automatic installation"), issue: managedInstallIssue, sourceChoice: true, action: onInstall)
-                    }
+                    installationChoices
+                    Text(L10n.render(managedInstallIssue ?? ""))
+                        .font(.system(size: 10)).foregroundStyle(Palette.muted)
+                        .lineLimit(2).frame(height: 28, alignment: .topLeading)
+                        .help(L10n.render(managedInstallIssue ?? ""))
                     if environments.isEmpty && searching {
                         Text(L10n.text("Looking for Conda, venv, pyenv and other environments…"))
                             .font(.system(size: 11)).foregroundStyle(Palette.muted)
-                            .frame(maxWidth: .infinity).padding(.vertical, 65)
+                            .frame(maxWidth: .infinity).padding(.vertical, 16)
                     }
                     if !environments.isEmpty {
                         if compatibleCount == 0 {
@@ -62,10 +61,10 @@ struct EnvironmentSearchView: View {
                     }
                 }.padding(.trailing, 2).subtleScrollbars()
             }.frame(height: 330)
-            if let error {
-                Text(L10n.render(error)).font(.system(size: 11)).foregroundStyle(Palette.accent)
-                    .lineLimit(3).help(L10n.render(error)).textSelection(.enabled)
-            }
+            Text(L10n.render(error ?? ""))
+                .font(.system(size: 11)).foregroundStyle(Palette.accent)
+                .lineLimit(2).frame(height: 30, alignment: .topLeading)
+                .help(L10n.render(error ?? "")).textSelection(.enabled)
             HStack {
                 if searching { Button(L10n.text("Stop search"), action: onStop) }
                 else { Button { onSearch() } label: { Label(L10n.text("Search local environments"), systemImage: "magnifyingglass") } }
@@ -76,31 +75,53 @@ struct EnvironmentSearchView: View {
             .buttonStyle(SettingsActionStyle()).tint(Palette.ink)
     }
 
-    private func installationChoice(_ title: String, symbol: String, detail: String, button: String,
-                                    issue: String? = nil, sourceChoice: Bool = false, action: @escaping () -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 11) {
-            Image(systemName: symbol).font(.system(size: 19, weight: .light)).foregroundStyle(Palette.muted)
-            Text(L10n.render(title)).font(.system(size: 12, weight: .semibold))
-            Text(L10n.render(detail)).font(.system(size: 11)).foregroundStyle(Palette.muted)
-                .fixedSize(horizontal: false, vertical: true).lineSpacing(3).frame(minHeight: 34, alignment: .topLeading)
-            if sourceChoice {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(L10n.text("Installation source")).font(.system(size: 10)).foregroundStyle(Palette.muted)
-                    Picker(L10n.text("Installation source"), selection: installSource) {
-                        ForEach(EnvironmentInstallSource.allCases) { option in Text(option.title).tag(option) }
-                    }.labelsHidden().pickerStyle(.segmented).controlSize(.small).disabled(searching)
-                        .accessibilityLabel(L10n.text("Installation source"))
-                }
+    // Grid rows share their intrinsic height, including translated wrapping.
+    // Both actions stay on the same baseline without flexible vertical spacers.
+    private var installationChoices: some View {
+        Grid(alignment: .topLeading, horizontalSpacing: 24, verticalSpacing: 14) {
+            GridRow {
+                installationHeader("Manual installation", symbol: "doc.text",
+                                   detail: "Follow the instructions, then search again.").frame(width: 262)
+                installationHeader("Install automatically in workspace", symbol: "arrow.down.circle",
+                                   detail: "Install Miniconda, Python 3.11 and inference dependencies.").frame(width: 262)
             }
-            Button(button, action: action).font(.system(size: 11)).disabled(issue != nil || (sourceChoice && searching))
-            if let issue {
-                Text(L10n.render(issue)).font(.system(size: 10)).foregroundStyle(Palette.muted)
-                    .fixedSize(horizontal: false, vertical: true).lineSpacing(3)
+            GridRow {
+                Text(L10n.text("Use your own Python environment"))
+                    .font(.system(size: 10)).foregroundStyle(Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                EnvironmentSourcePicker(selection: installSource, locked: searching)
             }
-        }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
+            GridRow {
+                Button(action: onInstructions) {
+                    Text(L10n.text("View installation instructions"))
+                        .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, minHeight: 28)
+                }.buttonStyle(SettingsActionStyle())
+                Button(action: onInstall) {
+                    Text(L10n.text("Start automatic installation"))
+                        .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, minHeight: 28)
+                }.buttonStyle(SettingsActionStyle(prominent: true))
+                    .disabled(managedInstallIssue != nil || searching)
+                    .help(L10n.render(managedInstallIssue ?? (searching ? "Wait for environment search to finish" : "Start automatic installation")))
+            }
+        }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
             .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Palette.line, lineWidth: 1))
     }
+
+    private func installationHeader(_ title: String, symbol: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: symbol).font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(Palette.muted).accessibilityHidden(true)
+                Text(L10n.text(title)).font(.system(size: 12, weight: .semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text(L10n.text(detail)).font(.system(size: 11)).foregroundStyle(Palette.muted)
+                .fixedSize(horizontal: false, vertical: true).lineSpacing(2)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+
 }
 
 private struct EnvironmentResultRow: View {
@@ -193,22 +214,16 @@ struct EnvironmentInstallView: View {
     private var completed: Bool { progress.stage == .completed && !installing }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 7) {
                 Text(completed ? L10n.text("Environment ready") : L10n.text("Install PyTorch environment")).font(.system(size: 18, weight: .semibold))
                 Text("TorchLightX2V · Python 3.11").font(.system(size: 11)).foregroundStyle(Palette.muted)
             }
-            VStack(alignment: .leading, spacing: 6) {
-                Text(L10n.text("Installation source")).font(.system(size: 11, weight: .medium)).foregroundStyle(Palette.muted)
-                Picker(L10n.text("Installation source"), selection: source) {
-                    ForEach(EnvironmentInstallSource.allCases) { option in Text(option.title).tag(option) }
-                }.labelsHidden().pickerStyle(.segmented).disabled(installing || completed)
-                    .accessibilityLabel(L10n.text("Installation source"))
-            }
+            EnvironmentSourcePicker(selection: source, locked: installing || completed)
             Text(PyTorchEnvironmentInstaller.environment(in: workspace).path)
                 .font(.system(size: 10, design: .monospaced)).foregroundStyle(Palette.muted)
                 .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-            VStack(alignment: .leading, spacing: 13) {
+            VStack(alignment: .leading, spacing: 10) {
                 ForEach(EnvironmentInstallStage.allCases.filter { $0 != .completed }, id: \.rawValue) { stage in
                     HStack(spacing: 10) {
                         Image(systemName: stage.rawValue < progress.stage.rawValue ? "checkmark.circle.fill" : "circle")
@@ -220,16 +235,16 @@ struct EnvironmentInstallView: View {
                     }
                 }
             }.padding(15).background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 12))
-            if progress.stage == .download && installing, let fraction = progress.fraction {
-                ProgressView(value: fraction).tint(Palette.ink)
-            }
-            if !progress.detail.isEmpty && (installing || completed) {
-                Text(L10n.render(progress.detail)).font(.system(size: 11)).foregroundStyle(Palette.muted)
-            }
-            if cancelled { Text(L10n.text("Installation cancelled. You can resume.")).font(.system(size: 11)).foregroundStyle(Palette.muted) }
-            if let error {
-                Text(L10n.render(error)).font(.system(size: 11)).foregroundStyle(Palette.accent).lineLimit(5).help(L10n.render(error)).textSelection(.enabled)
-            }
+            VStack(alignment: .leading, spacing: 6) {
+                ProgressView(value: progress.stage == .download ? (progress.fraction ?? 0) : completed ? 1 : 0)
+                    .tint(Palette.ink)
+                    .opacity(progress.stage == .download || completed ? 1 : 0)
+                    .accessibilityHidden(progress.stage != .download && !completed)
+                Text(L10n.render(error ?? (cancelled ? "Installation cancelled. You can resume." : progress.detail)))
+                    .font(.system(size: 11)).foregroundStyle(error == nil ? Palette.muted : Palette.accent)
+                    .lineLimit(3).frame(maxWidth: .infinity, alignment: .topLeading)
+                    .help(L10n.render(error ?? progress.detail)).textSelection(.enabled)
+            }.frame(height: 54, alignment: .top)
             Button { showLogs.toggle() } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "chevron.right").rotationEffect(.degrees(showLogs ? 90 : 0))
@@ -259,6 +274,24 @@ struct EnvironmentInstallView: View {
                     Button(L10n.text("Search local environments"), action: onSearch).buttonStyle(SettingsActionStyle(prominent: true)).keyboardShortcut(.defaultAction)
                 } else if !installing { Button(L10n.text("Close"), action: onClose).keyboardShortcut(.cancelAction) }
             }
+            .frame(height: 32)
         }.padding(24).frame(width: 610).background(Palette.canvas).foregroundStyle(Palette.ink).buttonStyle(SettingsActionStyle())
+    }
+}
+
+/// Keep the native segmented control and its keyboard/accessibility behavior.
+private struct EnvironmentSourcePicker: View {
+    let selection: Binding<EnvironmentInstallSource>
+    let locked: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L10n.text("Installation source"))
+                .font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.muted)
+            Picker(L10n.text("Installation source"), selection: selection) {
+                ForEach(EnvironmentInstallSource.allCases) { option in Text(option.title).tag(option) }
+            }.labelsHidden().pickerStyle(.segmented).controlSize(.small).disabled(locked)
+                .accessibilityLabel(L10n.text("Installation source"))
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }

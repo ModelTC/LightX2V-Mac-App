@@ -397,3 +397,7 @@
 
 "Installation source" = "インストール元";
 "Connecting to the Miniconda download server…" = "Miniconda ダウンロードサーバーに接続中…";
+
+"Use your own Python environment" = "既存の Python 環境を使用";
+
+"Wait for environment search to finish" = "環境の検索が完了するまでお待ちください";
