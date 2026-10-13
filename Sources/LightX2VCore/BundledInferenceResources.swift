@@ -18,10 +18,15 @@ public enum BundledInferenceResources {
         settings.promptEnhancement.runtimeDirectory = root.appendingPathComponent("llama-b11583").path
     }
     public static func resource(_ name: String) throws -> URL {
-        for bundle in [Bundle.main, Bundle.module] {
-            if let url = bundle.resourceURL?.appendingPathComponent("Bundled").appendingPathComponent(name),
-               FileManager.default.fileExists(atPath: url.path) { return url }
+        func find(in bundle: Bundle) -> URL? {
+            guard let url = bundle.resourceURL?.appendingPathComponent("Bundled").appendingPathComponent(name),
+                  FileManager.default.fileExists(atPath: url.path) else { return nil }
+            return url
         }
+        // Bundle.module traps when the development bundle is absent. A packaged
+        // APP uses native Resources and must never initialize that fallback.
+        if let url = find(in: Bundle.main) { return url }
+        if Bundle.main.bundleURL.pathExtension != "app", let url = find(in: Bundle.module) { return url }
         throw AppError.message("Bundled inference archive is missing: \(name)")
     }
     public static func prepare(in workspace: WorkspaceLayout) async throws {
