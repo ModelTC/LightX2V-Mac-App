@@ -6,7 +6,7 @@ A native macOS app for local image generation with [Qwen-Image-2.1-Turbo](https:
 
 | Channel | Apple Silicon · macOS 14+ | Commit | Updates |
 | --- | --- | --- | --- |
-| Latest | [Download Latest APP](https://github.com/ModelTC/LightX2V-Mac-App/releases/download/latest/LightX2V-APP-macOS-arm64.zip) | [`14cec1b`](https://github.com/ModelTC/LightX2V-Mac-App/commit/14cec1b73fd5aea8b77583604669af88d613acc6) | Every successful build |
+| Latest | [Download Latest APP](https://github.com/ModelTC/LightX2V-Mac-App/releases/download/latest/LightX2V-APP-macOS-arm64.zip) | [`2240c13`](https://github.com/ModelTC/LightX2V-Mac-App/commit/2240c136f3a62b829da63b4512321123b8c69569) | Every successful build |
 | Stable | [⬇️ Download Stable APP](https://github.com/ModelTC/LightX2V-Mac-App/releases/download/stable/LightX2V-APP-macOS-arm64.zip) · **⭐ Recommended** | [`8b2d283`](https://github.com/ModelTC/LightX2V-Mac-App/commit/8b2d28305924f520576a53030ba28adb2f97bbb1) | Manually promoted releases |
 
 Each channel keeps one APP package. Updating Stable replaces its previous package; ordinary builds only update Latest.
