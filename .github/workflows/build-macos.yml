@@ -41,7 +41,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: Sources/LightX2VCore/Resources/Bundled/*.tar.gz
-          key: bundled-inference-${{ hashFiles('Sources/LightX2VCore/Resources/Bundled/manifest.json') }}
+          key: bundled-inference-${{ hashFiles('Sources/LightX2VCore/Resources/Bundled/manifest.json', 'scripts/prepare-bundled-resources.py') }}
 
       - name: Build signed release app
         run: bash scripts/build.sh

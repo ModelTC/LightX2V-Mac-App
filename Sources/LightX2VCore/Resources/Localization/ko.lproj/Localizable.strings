@@ -384,3 +384,8 @@
 "Open ModelScope" = "ModelScope 열기";
 "modelscope was not found in the selected Python environment. Run python -m pip install modelscope there, or download manually using the guide." = "선택한 Python 환경에 modelscope가 없습니다. 해당 환경에서 python -m pip install modelscope를 실행하거나 가이드에 따라 수동으로 다운로드하세요.";
 "ModelScope download failed. Retry or download manually using the guide.\n" = "ModelScope 다운로드에 실패했습니다. 다시 시도하거나 가이드에 따라 수동으로 다운로드하세요.\n";
+
+"Download all models" = "모든 모델 다운로드";
+"Stop all downloads" = "모두 중지";
+"Waiting" = "대기 중";
+"Waiting for download" = "다운로드 대기 중";

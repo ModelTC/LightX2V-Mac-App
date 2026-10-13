@@ -15,6 +15,10 @@ func bundledResourceChecks() async throws {
     try expect(GeneralSetupStep.allCases == [.workspace, .python], "general settings must contain only the two user paths")
     BundledInferenceResources.configure(&settings)
     try await BundledInferenceResources.prepare(in: workspace)
+    for directory in ["assert", "assets", "dockerfiles", "docs", "examples", "lightx2v_ros", "lightx2v_train"] {
+        try expect(!fm.fileExists(atPath: settings.repository + "/" + directory), "Pruned source folder survived packaging")
+    }
+    try expect(fm.fileExists(atPath: settings.repository + "/LICENSE"), "Source license must be preserved")
     try settings.validateGeneralPath(.source)
     try settings.validateGeneralPath(.llama)
     try expect(!settings.promptEnhancement.runtimeDirectory.hasSuffix("/bin"), "llama runtime must retain its original archive layout")

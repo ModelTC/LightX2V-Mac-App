@@ -44,6 +44,14 @@ import LightX2VCore
     store.setModelDownloadSource(.huggingFace)
     guard !control.isEnabled, store.settings.modelDownloadSource == .modelScope, host.fittingSize == originalSize else { throw AppError.message("Download must lock source and retain card height") }
     try capture(host, "modelscope-downloading")
+    store.isDownloadingAllModels = true; store.queuedModelDownloads = [.turbo, .i2i]
+    try await Task.sleep(for: .milliseconds(250)); host.layoutSubtreeIfNeeded()
+    guard host.fittingSize == originalSize else { throw AppError.message("Batch waiting states changed card height") }
+    try capture(host, "batch-waiting")
+    store.queuedModelDownloads = [.i2i]; store.activeModelDownload = .turbo
+    try await Task.sleep(for: .milliseconds(250)); host.layoutSubtreeIfNeeded()
+    guard host.fittingSize == originalSize else { throw AppError.message("Batch transition changed card height") }
+    store.isDownloadingAllModels = false; store.queuedModelDownloads = []
     store.activeModelDownload = nil; store.isPreparingResources = false
     for source in ModelDownloadSource.allCases {
         for resource in ModelResource.allCases {

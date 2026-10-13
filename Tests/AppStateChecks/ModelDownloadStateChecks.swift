@@ -24,13 +24,14 @@ print('LIGHTX2V_DOWNLOAD_METADATA:{"totalBytes":1000000000,"revision":null}')
 import pathlib, sys, time
 p = pathlib.Path(sys.argv[4]); p.mkdir(parents=True, exist_ok=True)
 (p / 'partial').write_text('retained')
+with (p.parents[2] / 'download-order').open('a') as log: log.write(sys.argv[2] + '\n')
 control = p.parents[2] / 'behavior'
 behavior = control.read_text() if control.exists() else 'normal'
 if behavior != 'unknown': print('Fetching 32 files: 25%|██| 8/32 [00:01]', end='\r', flush=True)
 print('Downloading bytes: | 10.0MB 2.50MB/s', end='\r', flush=True)
 print('Reconstructing (incomplete total...): 50%|██| 250MB / 500MB 99MB/s', end='\r', flush=True)
 time.sleep(0.7 if behavior == 'normal' else 20 if behavior in ['cancel','unknown'] else 0.2)
-if behavior == 'fail': print('network failure', flush=True); sys.exit(3)
+if behavior == 'fail' or (behavior == 'fail-t2i' and 'PE-T2I' in sys.argv[2]): print('network failure', flush=True); sys.exit(3)
 if sys.argv[2].startswith('Qwen/'):
     (p / 'model_index.json').write_text('{}')
     for name in ['transformer','text_encoder','vae','scheduler','processor']: (p / name).mkdir(exist_ok=True)
@@ -94,4 +95,54 @@ print('Fetching 32 files: 100%|██| 32/32 [00:02]', flush=True)
     try check(store.modelDownloadProgress[.turbo]?.fraction == nil && store.modelDownloadProgress[.turbo]?.completedBytes == 250_000_000,
               "missing HF file counter preserves actual speed with an indeterminate bar")
     store.setupTask?.cancel(); try await wait { !store.isPreparingResources }
+    let orderFile = layout.root.appendingPathComponent("download-order")
+    func reset(_ behavior: String) throws {
+        try Data(behavior.utf8).write(to: control)
+        try Data().write(to: orderFile)
+    }
+    func order() -> [String] { (try? String(contentsOf: orderFile, encoding: .utf8).split(separator: "\n").map(String.init)) ?? [] }
+    try reset("normal")
+    store.settings.promptEnhancement.enabled = false
+    store.downloadAllModels()
+    try check(store.isDownloadingAllModels && store.activeModelDownload == .turbo && store.queuedModelDownloads == [.t2i, .i2i], "batch starts Turbo immediately and queues both PE models")
+    try await wait { store.activeModelDownload == .t2i && store.modelDownloadProgress[.t2i]?.percentage == "25%" }
+    try check(store.queuedModelDownloads == [.i2i] && store.modelDownloadProgress[.turbo] == nil && store.isPreparingResources, "batch transitions reuse per-model progress without releasing the busy state")
+    try await wait { !store.isPreparingResources }
+    try check(order() == [ModelResource.turbo.repository, ModelResource.t2i.repository, ModelResource.i2i.repository]
+              && !store.isDownloadingAllModels && store.queuedModelDownloads.isEmpty && !store.settings.promptEnhancement.enabled,
+              "batch downloads all three sequentially, saves paths and preserves the PE toggle")
+    try reset("normal")
+    store.downloadAllModels(); store.stopModelDownloads()
+    try await wait { !store.isPreparingResources }
+    try check(order().isEmpty && store.modelDownloadMessages[.turbo]?.contains("Stopped") == true,
+              "immediately stopping a batch starts no CLI and records stopped status")
+    try reset("cancel")
+    store.downloadAllModels()
+    try await wait { store.modelDownloadProgress[.turbo]?.percentage == "25%" }
+    store.stopModelDownloads()
+    try check(store.queuedModelDownloads.isEmpty, "stopping a batch immediately removes waiting states")
+    try await wait { !store.isPreparingResources }
+    try check(order().count == 1 && !store.isDownloadingAllModels && store.activeModelDownload == nil, "cancelled batch never starts queued model commands")
+    try reset("fail-t2i")
+    store.downloadAllModels()
+    try await wait { !store.isPreparingResources }
+    try check(order() == [ModelResource.turbo.repository, ModelResource.t2i.repository]
+              && store.modelDownloadErrors.contains(.t2i) && store.queuedModelDownloads.isEmpty && !store.isDownloadingAllModels,
+              "a middle-model failure stops the queue and restores the failing model icon")
+    try reset("normal")
+    store.downloadAllModels()
+    try await wait { !store.isPreparingResources }
+    try check(order().count == 3 && store.modelDownloadErrors.isEmpty, "batch retry resumes cached files and clears errors")
+
+    let modelscope = bin.appendingPathComponent("modelscope")
+    try Data(("#!/usr/bin/python3\nimport os, sys\nos.execv(" + String(reflecting: hf.path) + ", [" + String(reflecting: hf.path) + ", 'download', sys.argv[3], '--local-dir', sys.argv[5]])\n").utf8).write(to: modelscope)
+    try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: modelscope.path)
+    try reset("normal")
+    store.setModelDownloadSource(.modelScope)
+    store.downloadAllModels()
+    try await wait { !store.isPreparingResources }
+    try check(order() == [ModelResource.turbo.repository, ModelResource.t2i.repository, ModelResource.i2i.repository]
+              && store.modelDownloadErrors.isEmpty && store.settings.modelDownloadSource == .modelScope,
+              "ModelScope batch uses the selected-environment CLI for all three repositories")
+
 }

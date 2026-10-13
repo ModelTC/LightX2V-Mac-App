@@ -9,7 +9,18 @@ struct ModelPreparationView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(L10n.text("Download source")).font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.muted)
+                HStack {
+                    Text(L10n.text("Download source")).font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.muted)
+                    Spacer(minLength: 4)
+                    Button {
+                        if store.isDownloadingAllModels { store.stopModelDownloads() } else { store.downloadAllModels() }
+                    } label: {
+                        Label(L10n.text(store.isDownloadingAllModels ? "Stop all downloads" : "Download all models"),
+                              systemImage: store.isDownloadingAllModels ? "stop" : "arrow.down.to.line")
+                            .font(.system(size: 10)).lineLimit(1)
+                    }.buttonStyle(HoverButtonStyle(radius: 6))
+                        .disabled(!store.isDownloadingAllModels && (store.busy || store.needsGeneralSetup))
+                }.frame(height: 20)
                 Picker(L10n.text("Download source"), selection: Binding(get: { store.settings.modelDownloadSource }, set: store.setModelDownloadSource)) {
                     ForEach(ModelDownloadSource.allCases) { source in Text(source.title).tag(source) }
                 }.pickerStyle(.segmented).labelsHidden().controlSize(.small)
@@ -44,10 +55,12 @@ private struct ModelDownloadCard: View {
     @State private var statusPinned = false
     @State private var statusHovered = false
     private var showsStatus: Bool { statusPinned || statusHovered }
-    private var optionalDisabled: Bool { resource != .turbo && !store.settings.promptEnhancement.enabled }
+    private var queued: Bool { store.queuedModelDownloads.contains(resource) }
+    private var optionalDisabled: Bool { resource != .turbo && !store.settings.promptEnhancement.enabled && !downloading && !queued }
     private var downloading: Bool { store.activeModelDownload == resource }
     private var ready: Bool { store.readyModelResources.contains(resource) && !store.modelDownloadErrors.contains(resource) && !downloading }
     private var status: String {
+        if queued { return L10n.text("Waiting for download") }
         if optionalDisabled { return L10n.text("Prompt enhancement is off; no model configuration needed") }
         if downloading {
             let progress = store.modelDownloadProgress[resource] ?? ModelDownloadProgress()
@@ -59,7 +72,7 @@ private struct ModelDownloadCard: View {
         return path.isEmpty ? L10n.text("No model directory selected") : concise(store.modelResourceMessages[resource] ?? L10n.text("Checking model files…"))
     }
     private var statusColor: Color {
-        optionalDisabled || downloading ? Palette.muted : ready ? Palette.green : Palette.accent
+        optionalDisabled || downloading || queued ? Palette.muted : ready ? Palette.green : Palette.accent
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -82,27 +95,27 @@ private struct ModelDownloadCard: View {
                 .disabled(optionalDisabled || store.configurationBusy)
             HStack(spacing: 6) {
                 Button {
-                    if downloading { store.setupTask?.cancel() } else { store.downloadModel(resource) }
+                    if downloading { store.stopModelDownloads() } else { store.downloadModel(resource) }
                 } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: downloading ? "stop" : "arrow.down.to.line")
-                        Text(downloading ? L10n.text("Stop") : L10n.text("Download")).lineLimit(1).minimumScaleFactor(0.8)
+                        Image(systemName: downloading ? "stop" : queued ? "clock" : "arrow.down.to.line")
+                        Text(downloading ? L10n.text("Stop") : queued ? L10n.text("Waiting") : L10n.text("Download")).lineLimit(1).minimumScaleFactor(0.8)
                     }.frame(width: 68, alignment: .leading)
                 }.disabled(optionalDisabled || (store.busy && !downloading))
-                    .accessibilityLabel((downloading ? L10n.text("Stop download") : L10n.text("Download automatically")) + " " + L10n.render(resource.title))
+                    .accessibilityLabel((downloading ? L10n.text("Stop download") : queued ? L10n.text("Waiting for download") : L10n.text("Download automatically")) + " " + L10n.render(resource.title))
                 if downloading {
                     ModelDownloadFeedback(resource: resource, progress: store.modelDownloadProgress[resource] ?? ModelDownloadProgress())
                 } else { Spacer(minLength: 0) }
                 Button { statusPinned.toggle() } label: {
                     Group {
                         if downloading { ProgressView().controlSize(.mini).tint(statusColor) }
-                        else { Image(systemName: optionalDisabled ? "minus.circle" : ready ? "checkmark.circle.fill" : "xmark.circle.fill").font(.system(size: 13)) }
+                        else { Image(systemName: queued ? "clock" : optionalDisabled ? "minus.circle" : ready ? "checkmark.circle.fill" : "xmark.circle.fill").font(.system(size: 13)) }
                     }.foregroundStyle(statusColor).frame(width: 20, height: 22).contentShape(Rectangle())
-                }.buttonStyle(HoverButtonStyle(radius: 6)).disabled(downloading)
+                }.buttonStyle(HoverButtonStyle(radius: 6)).disabled(downloading || queued)
                     .accessibilityLabel(L10n.render(resource.title) + " " + L10n.text("File status")).accessibilityValue(L10n.render(status))
                     .onHover { statusHovered = $0 }
                     .overlay(alignment: .bottomTrailing) {
-                        if showsStatus && !downloading {
+                        if showsStatus && !downloading && !queued {
                             ModelStatusBubble(message: status).offset(y: -24).allowsHitTesting(false).accessibilityHidden(true)
                         }
                     }

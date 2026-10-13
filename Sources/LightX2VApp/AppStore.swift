@@ -22,6 +22,8 @@ final class AppStore: ObservableObject {
     @Published var modelDirectory: String { didSet { if oldValue != modelDirectory { modelPathChanged(.turbo) } } }
     @Published var t2iDirectory: String { didSet { if oldValue != t2iDirectory { modelPathChanged(.t2i) } } }
     @Published var i2iDirectory: String { didSet { if oldValue != i2iDirectory { modelPathChanged(.i2i) } } }
+    @Published var queuedModelDownloads: [ModelResource] = []
+    @Published var isDownloadingAllModels = false
     @Published var activeModelDownload: ModelResource?
     @Published var modelDownloadMessages: [ModelResource: String] = [:]
     @Published var modelDownloadProgress: [ModelResource: ModelDownloadProgress] = [:]
@@ -461,42 +463,77 @@ final class AppStore: ObservableObject {
     }
 
     func downloadModel(_ resource: ModelResource) {
-        guard !busy, !needsGeneralSetup else { return }
-        let downloadID = UUID(); modelDownloadID = downloadID
-        activeModelDownload = resource; isPreparingResources = true
-        modelDownloadErrors.remove(resource); modelDownloadMessages[resource] = L10n.english("Fetching model information…")
+        downloadModels([resource], all: false)
+    }
+
+    func downloadAllModels() {
+        downloadModels([.turbo, .t2i, .i2i], all: true)
+    }
+
+    func stopModelDownloads() {
+        queuedModelDownloads = []
+        setupTask?.cancel()
+    }
+
+    private func beginModelDownload(_ resource: ModelResource) -> UUID {
+        let id = UUID(); modelDownloadID = id; activeModelDownload = resource
+        modelDownloadErrors.remove(resource)
+        modelDownloadMessages[resource] = L10n.english("Fetching model information…")
         modelDownloadProgress[resource] = ModelDownloadProgress()
+        return id
+    }
+
+    private func downloadModels(_ resources: [ModelResource], all: Bool) {
+        guard !busy, !needsGeneralSetup, let first = resources.first else { return }
+        isPreparingResources = true; isDownloadingAllModels = all
+        queuedModelDownloads = Array(resources.dropFirst())
+        let firstID = beginModelDownload(first)
         let python = settings.python; let layout = WorkspaceLayout(settings.workingDirectory)
         let source = settings.modelDownloadSource
         setupTask = Task { [weak self] in
             guard let self else { return }
             defer {
+                if let active = self.activeModelDownload { self.modelDownloadProgress.removeValue(forKey: active) }
                 self.modelDownloadID = nil; self.activeModelDownload = nil
-                self.modelDownloadProgress.removeValue(forKey: resource); self.finishSetupTask()
+                self.queuedModelDownloads = []; self.isDownloadingAllModels = false
+                self.finishSetupTask()
             }
-            do {
-                let path = try await ModelDownloader.download(resource, python: python, workspace: layout, source: source, onProgress: { [weak self] progress in
-                    Task { @MainActor [weak self] in
-                        guard let self, self.modelDownloadID == downloadID,
-                              progress.sequence > (self.modelDownloadProgress[resource]?.sequence ?? -1) else { return }
-                        self.modelDownloadProgress[resource] = progress
-                    }
-                }) { [weak self] line in
-                    let text = line.replacingOccurrences(of: "\u{1B}\\[[0-9;]*[A-Za-z]", with: "", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !text.isEmpty else { return }
-                    Task { @MainActor [weak self] in
-                        guard let self, self.modelDownloadID == downloadID else { return }
-                        self.modelDownloadMessages[resource] = String(text.suffix(500))
-                    }
+            for (index, resource) in resources.enumerated() {
+                guard !Task.isCancelled else {
+                    if index == 0 { self.modelDownloadMessages[resource] = L10n.english("Stopped · Download again to resume") }
+                    break
                 }
-                try Task.checkCancellation()
-                switch resource { case .turbo: self.modelDirectory = path; case .t2i: self.t2iDirectory = path; case .i2i: self.i2iDirectory = path }
-                self.modelDownloadMessages[resource] = L10n.english("Download complete · Saved automatically")
-                self.refreshModelResources()
-                self.refreshEnhancementResources()
-            } catch {
-                if Task.isCancelled { self.modelDownloadMessages[resource] = L10n.english("Stopped · Download again to resume") }
-                else { self.modelDownloadErrors.insert(resource); self.modelDownloadMessages[resource] = error.localizedDescription }
+                let downloadID: UUID
+                if index == 0 { downloadID = firstID }
+                else {
+                    self.queuedModelDownloads.removeAll { $0 == resource }
+                    downloadID = self.beginModelDownload(resource)
+                }
+                do {
+                    let path = try await ModelDownloader.download(resource, python: python, workspace: layout, source: source, onProgress: { [weak self] progress in
+                        Task { @MainActor [weak self] in
+                            guard let self, self.modelDownloadID == downloadID,
+                                  progress.sequence > (self.modelDownloadProgress[resource]?.sequence ?? -1) else { return }
+                            self.modelDownloadProgress[resource] = progress
+                        }
+                    }) { [weak self] line in
+                        let text = line.replacingOccurrences(of: "\u{1B}\\[[0-9;]*[A-Za-z]", with: "", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !text.isEmpty else { return }
+                        Task { @MainActor [weak self] in
+                            guard let self, self.modelDownloadID == downloadID else { return }
+                            self.modelDownloadMessages[resource] = String(text.suffix(500))
+                        }
+                    }
+                    try Task.checkCancellation()
+                    switch resource { case .turbo: self.modelDirectory = path; case .t2i: self.t2iDirectory = path; case .i2i: self.i2iDirectory = path }
+                    self.modelDownloadMessages[resource] = L10n.english("Download complete · Saved automatically")
+                    self.refreshModelResources(); self.refreshEnhancementResources()
+                    self.modelDownloadProgress.removeValue(forKey: resource); self.modelDownloadID = nil
+                } catch {
+                    if Task.isCancelled { self.modelDownloadMessages[resource] = L10n.english("Stopped · Download again to resume") }
+                    else { self.modelDownloadErrors.insert(resource); self.modelDownloadMessages[resource] = error.localizedDescription }
+                    break
+                }
             }
         }
     }

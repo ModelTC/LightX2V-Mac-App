@@ -2,14 +2,14 @@ import Foundation
 
 /// Offline, versioned resources. Never replace user-managed source or runtime folders.
 public enum BundledInferenceResources {
-    public static let sourceArchive = "LightX2V-0.6.0.tar.gz"
+    public static let sourceArchive = "LightX2V-0.6.0-minimal.tar.gz"
     public static let runtimeArchive = "llama-b11583-bin-macos-arm64.tar.gz"
     public static let hashes = [
-        sourceArchive: "2c070a2ee55248a4294572f9271f051e3b00129d24de83eb94352636a7d48cb6",
+        sourceArchive: "fbb8256d037e98c317b0ad95c041cb6f88b1ccad9c2e6e9ce17946957d287a29",
         runtimeArchive: "d23832f4b847a722a64c9bf57e518c3df81dfab325942182ff17792d5d33351f"
     ]
     public static func directory(in workspace: WorkspaceLayout) -> URL {
-        workspace.runtimes.appendingPathComponent("bundled-LightX2V-0.6.0-llama-b11583")
+        workspace.runtimes.appendingPathComponent("bundled-LightX2V-0.6.0-minimal-v1-llama-b11583")
     }
     public static func configure(_ settings: inout AppSettings) {
         guard !settings.workingDirectory.isEmpty else { return }

@@ -384,3 +384,8 @@
 "Open ModelScope" = "Ouvrir ModelScope";
 "modelscope was not found in the selected Python environment. Run python -m pip install modelscope there, or download manually using the guide." = "modelscope est introuvable dans cet environnement Python. Exécutez python -m pip install modelscope ou suivez le guide de téléchargement manuel.";
 "ModelScope download failed. Retry or download manually using the guide.\n" = "Échec du téléchargement ModelScope. Réessayez ou suivez le guide manuel.\n";
+
+"Download all models" = "Tout télécharger";
+"Stop all downloads" = "Arrêter les téléchargements";
+"Waiting" = "En attente";
+"Waiting for download" = "En attente de téléchargement";
