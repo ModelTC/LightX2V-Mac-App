@@ -13,8 +13,8 @@ func realInferenceChecks(_ arguments: [String]) async throws {
                                config: arguments[0] + "/configs/platforms/mps/qwen_image_21_turbo.json",
                                python: arguments[2], workingDirectory: root.appendingPathComponent("workspace, 中文").path)
     settings.promptEnhancement.enabled = false // This check runs image inference without enhancement resources.
-    settings.promptEnhancement.discover(near: [settings.model, settings.repository])
-    try LlamaRuntimeDownloader.validateRuntime(settings.promptEnhancement.runtimeDirectory)
+    BundledInferenceResources.configure(&settings)
+    try await BundledInferenceResources.prepare(in: WorkspaceLayout(settings.workingDirectory))
     let support = root.appendingPathComponent("support")
     setenv("LIGHTX2V_APP_STATE_DIR", support.path, 1)
     let layout = WorkspaceLayout(settings.workingDirectory)

@@ -12,16 +12,14 @@ func enhancementChecks() throws {
         if executable { try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path) }
         return url.path
     }
-    let source = try file("code/LightX2V-commit/lightx2v/infer.py")
-    let model = try file("models/Qwen/Qwen-Image-2.1-Turbo/model_index.json")
     let binary = try file(".qwen-image-pe-t2i/build/bin/llama-completion", executable: true)
     _ = try file(".qwen-image-pe-t2i/build/bin/llama-mtmd-cli", executable: true)
     for mode in ["T2I", "I2I"] {
         let name = "Qwen-Image-2.1-PE-" + mode
-        _ = try file("models/Qwen/\(name)/system_prompt.txt")
-        _ = try file("models/Qwen/\(name)-GGUF/\(name)-Q8_0.gguf")
+        _ = try file("models/lightx2v/\(name)-GGUF-Q8_0/system_prompt.txt")
+        _ = try file("models/lightx2v/\(name)-GGUF-Q8_0/\(name)-Q8_0.gguf")
     }
-    let projector = try file("models/Qwen/Qwen-Image-2.1-PE-I2I-GGUF/mmproj-Qwen-Image-2.1-PE-I2I-F16.gguf")
+    let projector = try file("models/lightx2v/Qwen-Image-2.1-PE-I2I-GGUF-Q8_0/mmproj-Qwen-Image-2.1-PE-I2I-F16.gguf")
     var settings = AppSettings.defaults
     try expect(settings.promptEnhancement.enabled, "new configuration enables prompt enhancement by default")
     let defaultRequest = try InferenceRequest(settings: settings, prompt: "Original 中文", width: 512, height: 512, seed: 42, output: "/tmp/image.png")
@@ -33,14 +31,13 @@ func enhancementChecks() throws {
     try expect(offJSON["promptEnhancement"] == nil && !settings.promptEnhancement.enabled, "off requests must preserve the existing protocol")
     let disabled = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
     try expect(!disabled.promptEnhancement.enabled, "an explicitly disabled enhancement stays disabled after restoring settings")
-    settings.promptEnhancement.discover(near: [URL(fileURLWithPath: model).deletingLastPathComponent().path, source])
-    try expect(settings.promptEnhancement.runtimeDirectory == URL(fileURLWithPath: binary).deletingLastPathComponent().path, "nested source/model should discover script resource layout")
+    settings.promptEnhancement.runtimeDirectory = URL(fileURLWithPath: binary).deletingLastPathComponent().path
+    settings.promptEnhancement.t2iDirectory = root.appendingPathComponent("models/lightx2v/Qwen-Image-2.1-PE-T2I-GGUF-Q8_0").path
+    settings.promptEnhancement.i2iDirectory = root.appendingPathComponent("models/lightx2v/Qwen-Image-2.1-PE-I2I-GGUF-Q8_0").path
     try settings.promptEnhancement.validate(for: .t2i)
     try settings.promptEnhancement.validate(for: .i2i)
-    let explicit = try file("custom.gguf")
-    settings.promptEnhancement.t2iModel = explicit
-    settings.promptEnhancement.discover(near: [root.path])
-    try expect(settings.promptEnhancement.t2iModel == explicit, "discovery must not replace explicit custom paths")
+    let resources = try settings.promptEnhancement.resolvedResources()
+    try expect(resources.t2iSystemPrompt == settings.promptEnhancement.t2iDirectory + "/system_prompt.txt", "selected folder did not resolve its system prompt")
     try fm.removeItem(atPath: projector)
     try settings.promptEnhancement.validate(for: .t2i)
     var rejected = false
@@ -55,9 +52,9 @@ func enhancementChecks() throws {
     let decoded = try JSONDecoder().decode(Generation.self, from: JSONEncoder().encode(job))
     try expect(decoded.request.prompt == "Original 中文" && decoded.enhancement == job.enhancement && decoded.title == "Original 中文", "original title and both enhancement outputs must round-trip")
     let restored = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
-    try expect(restored.promptEnhancement == settings.promptEnhancement, "enhancement preference/resources must persist")
+    try expect(PromptEnhancementConfiguration(restored.promptEnhancement) == PromptEnhancementConfiguration(settings.promptEnhancement) && restored.promptEnhancement.t2iModel.isEmpty, "only enhancement folder configuration must persist")
     var workspace = WorkspaceData(generations: [Generation(request: request), job])
     workspace.recoverInterrupted()
     try expect(workspace.generations[0].enhancement?.status == .interrupted && workspace.generations[1].enhancement?.status == .completed, "crash recovery preserves a completed enhancement and interrupts pending thinking")
-    print("PASS enhancement configuration discovery, validation, request snapshots, persistence and recovery")
+    print("PASS PE folder validation, request snapshots, compact preferences and recovery")
 }

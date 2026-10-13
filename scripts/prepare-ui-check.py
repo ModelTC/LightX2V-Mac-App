@@ -76,15 +76,21 @@ def prepare(source, sample, root=None):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text('{}' if name.endswith('.json') else 'UI fixture', encoding='utf-8')
         if name.startswith('bin/'): path.chmod(0o755)
-    pe = dict(enabled=True, runtimeDirectory=str(root / 'bin'),
-              t2iModel=str(root / 't2i.gguf'), t2iSystemPrompt=str(root / 't2i.txt'),
-              i2iModel=str(root / 'i2i.gguf'), i2iSystemPrompt=str(root / 'i2i.txt'),
-              visionProjector=str(root / 'mmproj.gguf'))
+    t2i = root / 'PE-T2I'
+    i2i = root / 'PE-I2I'
+    for mode, folder in [('T2I', t2i), ('I2I', i2i)]:
+        folder.mkdir(exist_ok=True)
+        (folder / 'system_prompt.txt').write_text('UI fixture', encoding='utf-8')
+        (folder / ('Qwen-Image-2.1-PE-' + mode + '-Q8_0.gguf')).write_text('UI fixture', encoding='utf-8')
+    (i2i / 'mmproj-Qwen-Image-2.1-PE-I2I-BF16.gguf').write_text('UI fixture', encoding='utf-8')
+    pe = dict(enabled=True, t2iDirectory=str(t2i), i2iDirectory=str(i2i))
     settings = dict(repository=str(root / 'source'), model=str(root / 'Qwen-Image-2.1-Turbo'), config=str(root / 'qwen_image_21_turbo.json'),
                     python=str(executable), workingDirectory=str(root / 'workspace'), promptEnhancement=pe)
     workspace = root / 'workspace'
     for name in ['code', 'outputs', 'logs', 'cache', 'tmp']:
         (workspace / name).mkdir(parents=True, exist_ok=True)
+    persisted_settings = dict(python=str(executable), workingDirectory=str(workspace),
+        **{'Qwen-Image-2.1-Turbo': dict(modelDirectory=settings['model'], modelDownloadSource='huggingFace', promptEnhancement=pe)})
     state_path = workspace / 'workspace.json'
     if not state_path.exists():
         job_id = str(uuid.uuid4()).upper()
@@ -99,10 +105,10 @@ def prepare(source, sample, root=None):
                                     prompt='A quiet glass house in a misty forest, with soft morning light and natural textures.',
                                     whRatio='1:1', ratioFollow='', duration=12))
         write_json(output.parent / 'generation.json', job)
-        write_json(state_path, dict(settings=settings, generations=[job], hasCompletedGeneralSetup=True))
+        write_json(state_path, dict(settings=persisted_settings, generations=[job], hasCompletedGeneralSetup=True))
     else:
         state = json.loads(state_path.read_text(encoding='utf-8'))
-        state['settings'] = settings
+        state['settings'] = persisted_settings
         write_json(state_path, state)
     write_json(root / 'support/workspace_location.json', dict(workingDirectory=str(workspace)))
     subprocess.run(['codesign', '--force', '--deep', '--sign', '-', str(app)], check=True)

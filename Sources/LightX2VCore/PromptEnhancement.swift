@@ -24,7 +24,7 @@ public struct PromptEnhancementSettings: Codable, Equatable {
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
-        enabled = try values.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        enabled = try values.decode(Bool.self, forKey: .enabled)
         runtimeDirectory = try values.decodeIfPresent(String.self, forKey: .runtimeDirectory) ?? ""
         t2iDirectory = try values.decodeIfPresent(String.self, forKey: .t2iDirectory) ?? ""
         i2iDirectory = try values.decodeIfPresent(String.self, forKey: .i2iDirectory) ?? ""
@@ -41,12 +41,20 @@ public struct PromptEnhancementSettings: Codable, Equatable {
         for mode in [PromptEnhancementMode.t2i, .i2i] {
             if let selectedMode, mode != selectedMode { continue }
             let directory = mode == .t2i ? t2iDirectory : i2iDirectory
-            guard !directory.isEmpty else { continue }
             let files = try ModelResource.enhancementFiles(in: directory, mode: mode)
             if mode == .t2i { value.t2iModel = files.model; value.t2iSystemPrompt = files.system }
             else { value.i2iModel = files.model; value.i2iSystemPrompt = files.system; value.visionProjector = files.projector! }
         }
         return value
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(enabled, forKey: .enabled)
+        for (key, path) in [(CodingKeys.runtimeDirectory, runtimeDirectory), (.t2iDirectory, t2iDirectory), (.i2iDirectory, i2iDirectory),
+                            (.t2iModel, t2iModel), (.t2iSystemPrompt, t2iSystemPrompt), (.i2iModel, i2iModel), (.i2iSystemPrompt, i2iSystemPrompt), (.visionProjector, visionProjector)] where !path.isEmpty {
+            try values.encode(path, forKey: key)
+        }
     }
 
     public func validate(for mode: PromptEnhancementMode) throws {
@@ -72,47 +80,7 @@ public struct PromptEnhancementSettings: Codable, Equatable {
         }
     }
 
-    /// The supplied PE scripts' layout, discovered near the selected source/model.
-    /// Existing explicit selections always win.
-    public mutating func discover(near paths: [String], includeRuntime: Bool = true) {
-        let fm = FileManager.default
-        var roots: [URL] = []
-        for path in paths where path.hasPrefix("/") {
-            var root = URL(fileURLWithPath: path).standardizedFileURL
-            for _ in 0..<5 where root.path != "/" {
-                if !roots.contains(root) { roots.append(root) }
-                root.deleteLastPathComponent()
-            }
-        }
-        func first(_ candidates: [String], executable: Bool = false) -> String? {
-            candidates.first { path in
-                var directory: ObjCBool = false
-                return fm.fileExists(atPath: path, isDirectory: &directory) && !directory.boolValue
-                    && (executable ? fm.isExecutableFile(atPath: path) : fm.isReadableFile(atPath: path))
-            }
-        }
-        if includeRuntime, runtimeDirectory.isEmpty,
-           let binary = first(roots.flatMap { root in
-               [".qwen-image-pe-t2i/build/bin", ".qwen-image-pe-i2i/build/bin", "llama.cpp/build/bin", "bin"].flatMap { folder in
-                   ["llama-completion", "llama-mtmd-cli"].map { root.appendingPathComponent(folder + "/" + $0).path }
-               }
-           }, executable: true) { runtimeDirectory = URL(fileURLWithPath: binary).deletingLastPathComponent().path }
-        for mode in ["T2I", "I2I"] {
-            let name = "Qwen-Image-2.1-PE-" + mode
-            let model = first(roots.map { $0.appendingPathComponent("models/Qwen/\(name)-GGUF/\(name)-Q8_0.gguf").path })
-            let system = first(roots.map { $0.appendingPathComponent("models/Qwen/\(name)/system_prompt.txt").path })
-            if mode == "T2I" {
-                if t2iModel.isEmpty { t2iModel = model ?? "" }
-                if t2iSystemPrompt.isEmpty { t2iSystemPrompt = system ?? "" }
-            } else {
-                if i2iModel.isEmpty { i2iModel = model ?? "" }
-                if i2iSystemPrompt.isEmpty { i2iSystemPrompt = system ?? "" }
-                if visionProjector.isEmpty {
-                    visionProjector = first(roots.map { $0.appendingPathComponent("models/Qwen/\(name)-GGUF/mmproj-\(name)-F16.gguf").path }) ?? ""
-                }
-            }
-        }
-    }
+
 }
 
 public enum PromptEnhancementStatus: String, Codable {

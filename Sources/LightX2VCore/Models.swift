@@ -2,34 +2,52 @@ import Foundation
 
 public struct AppSettings: Codable, Equatable {
     public var repository: String
-    public var model: String
     public var config: String
     public var python: String
     public var workingDirectory: String
-    public var modelDownloadSource: ModelDownloadSource
-    public var promptEnhancement: PromptEnhancementSettings
+    public var qwenImage21Turbo: QwenImage21TurboSettings
+    public var model: String {
+        get { qwenImage21Turbo.modelDirectory }
+        set { qwenImage21Turbo.modelDirectory = newValue }
+    }
+    public var modelDownloadSource: ModelDownloadSource {
+        get { qwenImage21Turbo.modelDownloadSource }
+        set { qwenImage21Turbo.modelDownloadSource = newValue }
+    }
+    public var promptEnhancement: PromptEnhancementSettings {
+        get { qwenImage21Turbo.promptEnhancement }
+        set { qwenImage21Turbo.promptEnhancement = newValue }
+    }
     public var outputDirectory: String { workingDirectory.isEmpty ? "" : WorkspaceLayout(workingDirectory).outputs.path }
 
     public init(repository: String, model: String, config: String, python: String, workingDirectory: String = "", promptEnhancement: PromptEnhancementSettings = .init(), modelDownloadSource: ModelDownloadSource = .huggingFace) {
-        self.repository = repository; self.model = model; self.config = config
+        self.repository = repository; self.config = config
         self.python = python; self.workingDirectory = workingDirectory
-        self.promptEnhancement = promptEnhancement; self.modelDownloadSource = modelDownloadSource
+        qwenImage21Turbo = .init(modelDirectory: model, modelDownloadSource: modelDownloadSource, promptEnhancement: promptEnhancement)
     }
 
     public static var defaults: AppSettings {
         AppSettings(repository: "", model: "", config: "", python: "")
     }
 
-    private enum CodingKeys: String, CodingKey { case repository, model, config, python, workingDirectory, promptEnhancement, modelDownloadSource }
+    private enum CodingKeys: String, CodingKey {
+        case python, workingDirectory
+        case qwenImage21Turbo = "Qwen-Image-2.1-Turbo"
+    }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
-        self.init(repository: try values.decode(String.self, forKey: .repository),
-                  model: try values.decode(String.self, forKey: .model),
-                  config: try values.decode(String.self, forKey: .config),
-                  python: try values.decode(String.self, forKey: .python),
-                  workingDirectory: try values.decodeIfPresent(String.self, forKey: .workingDirectory) ?? "",
-                  promptEnhancement: try values.decodeIfPresent(PromptEnhancementSettings.self, forKey: .promptEnhancement) ?? .init(),
-                  modelDownloadSource: try values.decodeIfPresent(ModelDownloadSource.self, forKey: .modelDownloadSource) ?? .huggingFace)
+        python = try values.decode(String.self, forKey: .python)
+        workingDirectory = try values.decode(String.self, forKey: .workingDirectory)
+        qwenImage21Turbo = try values.decode(QwenImage21TurboSettings.self, forKey: .qwenImage21Turbo)
+        repository = ""; config = ""
+        BundledInferenceResources.configure(&self)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(python, forKey: .python)
+        try values.encode(workingDirectory, forKey: .workingDirectory)
+        try values.encode(qwenImage21Turbo, forKey: .qwenImage21Turbo)
     }
 
     public var hasGeneralPaths: Bool {
@@ -120,7 +138,7 @@ public struct InferenceRequest: Codable {
         resolution = try values.decodeIfPresent(Int.self, forKey: .resolution)
         seed = try values.decode(Int64.self, forKey: .seed)
         output = try values.decode(String.self, forKey: .output)
-        inputImages = try values.decodeIfPresent([InputImage].self, forKey: .inputImages) ?? []
+        inputImages = try values.decode([InputImage].self, forKey: .inputImages)
         promptEnhancement = try values.decodeIfPresent(PromptEnhancementSettings.self, forKey: .promptEnhancement)
     }
 }
@@ -158,8 +176,7 @@ public struct Generation: Codable, Identifiable {
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         id = try values.decode(UUID.self, forKey: .id)
-        // Existing records are independent creations until a user continues one.
-        creationID = try values.decodeIfPresent(UUID.self, forKey: .creationID) ?? id
+        creationID = try values.decode(UUID.self, forKey: .creationID)
         createdAt = try values.decode(Date.self, forKey: .createdAt)
         request = try values.decode(InferenceRequest.self, forKey: .request)
         status = try values.decode(GenerationStatus.self, forKey: .status)
@@ -182,8 +199,13 @@ public struct WorkspaceData: Codable {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         settings = try values.decode(AppSettings.self, forKey: .settings)
         generations = try values.decode([Generation].self, forKey: .generations)
-        // Existing installations predate the setup flag. Preserve their saved paths.
-        hasCompletedGeneralSetup = try values.decodeIfPresent(Bool.self, forKey: .hasCompletedGeneralSetup) ?? settings.hasGeneralPaths
+        hasCompletedGeneralSetup = try values.decode(Bool.self, forKey: .hasCompletedGeneralSetup)
+    }
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(settings, forKey: .settings)
+        try values.encode(generations.map(WorkspaceGeneration.init), forKey: .generations)
+        try values.encode(hasCompletedGeneralSetup, forKey: .hasCompletedGeneralSetup)
     }
     public mutating func recoverInterrupted() {
         for index in generations.indices where generations[index].status == .running {
@@ -191,6 +213,19 @@ public struct WorkspaceData: Codable {
             generations[index].error = L10n.english("The APP exited before generation finished. Reuse the settings to generate again.")
             if generations[index].enhancement?.status.isActive == true { generations[index].enhancement?.status = .interrupted }
         }
+    }
+}
+
+/// Workspace history keeps folder selections; per-case request.json keeps exact resource files.
+private struct WorkspaceGeneration: Encodable {
+    var generation: Generation
+    init(_ generation: Generation) { self.generation = generation }
+    func encode(to encoder: Encoder) throws {
+        var record = generation
+        if let resources = record.request.promptEnhancement {
+            record.request.promptEnhancement = PromptEnhancementConfiguration(resources).resources
+        }
+        try record.encode(to: encoder)
     }
 }
 

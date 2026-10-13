@@ -29,20 +29,20 @@ func generalRuntimeChecks() async throws {
     settings.promptEnhancement.runtimeDirectory = try runtimeFixture(in: root)
     try fm.createDirectory(atPath: settings.repository + "/lightx2v", withIntermediateDirectories: true)
     try Data().write(to: URL(fileURLWithPath: settings.repository + "/lightx2v/infer.py"))
-    store.settings.promptEnhancement.t2iModel = "/existing/pe-model.gguf"
+    store.settings.promptEnhancement.t2iDirectory = "/existing/PE-T2I"
     try await store.applyGeneralSettings(settings)
     while store.isChecking { try await Task.sleep(for: .milliseconds(20)) }
     guard !store.needsGeneralSetup,
-          store.settings.promptEnhancement.runtimeDirectory == settings.promptEnhancement.runtimeDirectory,
-          store.settings.promptEnhancement.t2iModel == "/existing/pe-model.gguf" else {
+          store.settings.promptEnhancement.runtimeDirectory == BundledInferenceResources.directory(in: WorkspaceLayout(settings.workingDirectory)).appendingPathComponent("llama-b11583").path,
+          store.settings.promptEnhancement.t2iDirectory == "/existing/PE-T2I" else {
         throw AppError.message("General settings did not save the shared runtime independently of PE models")
     }
     var enhancement = store.settings.promptEnhancement
-    enhancement.runtimeDirectory = "/stale/hidden-runtime"; enhancement.t2iModel = "/new/model.gguf"
+    enhancement.runtimeDirectory = "/stale/hidden-runtime"; enhancement.t2iDirectory = "/new/PE-T2I"
     store.applyEnhancementSettings(enhancement)
     let reopened = AppStore()
-    guard reopened.settings.promptEnhancement.runtimeDirectory == settings.promptEnhancement.runtimeDirectory,
-          reopened.settings.promptEnhancement.t2iModel == "/new/model.gguf" else {
+    guard reopened.settings.promptEnhancement.runtimeDirectory == store.settings.promptEnhancement.runtimeDirectory,
+          reopened.settings.promptEnhancement.t2iDirectory == "/new/PE-T2I" else {
         throw AppError.message("PE model edits overwrote the runtime owned by general settings")
     }
     print("PASS general settings owns the persisted runtime and PE model edits preserve it")

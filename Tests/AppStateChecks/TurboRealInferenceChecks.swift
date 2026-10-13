@@ -4,10 +4,10 @@ import LightX2VCore
 
 /// Optional real MPS integration. All state, inputs and outputs use a NEW results
 /// directory; the user's normal workspace and App Support locator are untouched.
-/// --turbo-real <source> <Turbo weights> <python> <new results> <boat> <cat>
+/// --turbo-real <source> <Turbo weights> <python> <new results> <boat> <cat> <PE-T2I folder> <PE-I2I folder>
 @MainActor
 func turboRealInferenceChecks(_ arguments: [String]) async throws {
-    guard arguments.count == 6 else { throw AppError.message("Expected source, Turbo weights, Python, new results directory, boat and cat") }
+    guard arguments.count == 8 else { throw AppError.message("Expected source, Turbo weights, Python, new results directory, boat, cat and two PE repository folders") }
     let fm = FileManager.default
     let root = URL(fileURLWithPath: arguments[3])
     guard !fm.fileExists(atPath: root.path) else { throw AppError.message("Turbo integration needs a NEW results directory") }
@@ -16,7 +16,10 @@ func turboRealInferenceChecks(_ arguments: [String]) async throws {
     var settings = AppSettings(repository: arguments[0], model: arguments[1],
                                config: arguments[0] + "/" + QwenImage21Turbo.configRelativePath,
                                python: arguments[2], workingDirectory: layout.root.path)
-    settings.promptEnhancement.discover(near: [settings.model, settings.repository])
+    settings.promptEnhancement.t2iDirectory = arguments[6]
+    settings.promptEnhancement.i2iDirectory = arguments[7]
+    BundledInferenceResources.configure(&settings)
+    try await BundledInferenceResources.prepare(in: layout)
     try settings.promptEnhancement.validate(for: .t2i)
     try settings.promptEnhancement.validate(for: .i2i)
     settings.promptEnhancement.enabled = false

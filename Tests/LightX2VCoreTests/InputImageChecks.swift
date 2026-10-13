@@ -62,8 +62,12 @@ func inputImageChecks() throws {
     try expect(restored.inputImages == snapshots, "history lost input order")
     var textOnly = try JSONSerialization.jsonObject(with: data) as! [String: Any]
     textOnly.removeValue(forKey: "inputImages")
+    var rejected = false
+    do { _ = try JSONDecoder().decode(InferenceRequest.self, from: JSONSerialization.data(withJSONObject: textOnly)) } catch { rejected = true }
+    try expect(rejected, "old requests without an explicit inputImages field were accepted")
+    textOnly["inputImages"] = [Any]()
     let original = try JSONDecoder().decode(InferenceRequest.self, from: JSONSerialization.data(withJSONObject: textOnly))
-    try expect(original.inputImages.isEmpty, "text-only history no longer loads")
+    try expect(original.inputImages.isEmpty, "current text-only request no longer loads")
     let bad = root.appendingPathComponent("bad.png"); try Data("not an image".utf8).write(to: bad)
     let oversized = root.appendingPathComponent("oversized.png")
     try Data().write(to: oversized)

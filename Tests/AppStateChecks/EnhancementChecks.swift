@@ -65,14 +65,17 @@ func enhancementStateChecks() async throws {
     settings.promptEnhancement.runtimeDirectory = root.appendingPathComponent("bin").path
     _ = try file("bin/llama-completion", executable: true)
     _ = try file("bin/llama-mtmd-cli", executable: true)
-    settings.promptEnhancement.t2iModel = try file("t2i.gguf")
-    settings.promptEnhancement.t2iSystemPrompt = try file("t2i.txt")
-    settings.promptEnhancement.i2iModel = try file("i2i.gguf")
-    settings.promptEnhancement.i2iSystemPrompt = try file("i2i.txt")
-    settings.promptEnhancement.visionProjector = try file("mmproj.gguf")
+    _ = try file("PE-T2I/Qwen-Image-2.1-PE-T2I-Q8_0.gguf")
+    _ = try file("PE-T2I/system_prompt.txt")
+    _ = try file("PE-I2I/Qwen-Image-2.1-PE-I2I-Q8_0.gguf")
+    _ = try file("PE-I2I/system_prompt.txt")
+    _ = try file("PE-I2I/mmproj-Qwen-Image-2.1-PE-I2I-BF16.gguf")
+    settings.promptEnhancement.t2iDirectory = root.appendingPathComponent("PE-T2I").path
+    settings.promptEnhancement.i2iDirectory = root.appendingPathComponent("PE-I2I").path
     let support = root.appendingPathComponent("support")
     setenv("LIGHTX2V_APP_STATE_DIR", support.path, 1)
-    let layout = WorkspaceLayout(settings.workingDirectory); try layout.prepare()
+    let layout = WorkspaceLayout(settings.workingDirectory)
+    try await BundledInferenceResources.prepare(in: layout)
     try JSONFile.write(WorkspaceData(settings: settings, hasCompletedGeneralSetup: true), to: layout.state)
     try JSONFile.write(WorkspaceLocation(workingDirectory: settings.workingDirectory), to: support.appendingPathComponent("workspace_location.json"))
     let store = AppStore(); store.selectModel(.qwenImage21Turbo)
@@ -139,7 +142,7 @@ func enhancementStateChecks() async throws {
     let reopenedOff = AppStore()
     try check(!reopenedOff.settings.promptEnhancement.enabled, "relaunch preserves an explicitly disabled enhancement")
     store.setPromptEnhancementEnabled(true)
-    store.settings.promptEnhancement.t2iModel = "/missing/model.gguf"
+    store.t2iDirectory = "/missing/PE-T2I"
     store.prompt = "Keep draft"; let count = store.generations.count; store.generate()
     try check(store.modelPreparationExpanded && store.showInspector && !store.isRunning && store.prompt == "Keep draft" && store.generations.count == count, "missing resources opens inline model preparation and preserves unsubmitted draft")
 }

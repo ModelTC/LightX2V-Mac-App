@@ -222,6 +222,8 @@ print('LIGHTX2V_ENV:' + (root / 'versions.json').read_text(), flush=True)
     // Losing the locator must not make an existing workspace impossible to reopen.
     var archivedSettings = settings
     archivedSettings.model = root.appendingPathComponent("saved model").path
+    archivedSettings.config = ""
+    BundledInferenceResources.configure(&archivedSettings)
     let output = layout.outputs.appendingPathComponent("saved.png")
     try Data([1, 2, 3]).write(to: output)
     var archivedJob = Generation(request: try InferenceRequest(settings: archivedSettings, prompt: "saved prompt", width: 1024, height: 1024, seed: 42, output: output.path))

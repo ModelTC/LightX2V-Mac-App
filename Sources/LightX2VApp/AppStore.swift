@@ -110,7 +110,6 @@ final class AppStore: ObservableObject {
     func setPromptEnhancementEnabled(_ enabled: Bool) {
         guard !configurationBusy else { return }
         var value = settings.promptEnhancement
-        if enabled { value.discover(near: [settings.model, settings.repository, settings.workingDirectory], includeRuntime: false) }
         value.enabled = enabled
         settings.promptEnhancement = value
         persist()

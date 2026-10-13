@@ -248,6 +248,7 @@ func rejects(_ body: () throws -> Void) throws {
         settings.workingDirectory = layout.root.path
         settings.repository = "/original/source"; settings.python = "/original/python"
         settings.model = "/original/model"
+        BundledInferenceResources.configure(&settings)
         let image = layout.outputs.appendingPathComponent("retained.png")
         try Data([1, 2, 3]).write(to: image)
         var job = Generation(request: try InferenceRequest(settings: settings, prompt: "retained prompt", width: 1024, height: 1024, seed: 7, output: image.path))
