@@ -389,3 +389,8 @@
 "Stop all downloads" = "모두 중지";
 "Waiting" = "대기 중";
 "Waiting for download" = "다운로드 대기 중";
+
+"Save" = "저장";
+"Check on save" = "저장 시 확인";
+"Check failed · View reason" = "확인 실패 · 원인 보기";
+"Search local environments first. Based on the results, choose manual installation or automatic installation." = "먼저 로컬 환경을 검색한 다음 결과에 따라 수동 설치 또는 자동 설치를 선택하세요.";

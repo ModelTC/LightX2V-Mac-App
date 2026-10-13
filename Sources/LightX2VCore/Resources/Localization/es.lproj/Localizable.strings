@@ -389,3 +389,8 @@
 "Stop all downloads" = "Detener descargas";
 "Waiting" = "En espera";
 "Waiting for download" = "Esperando descarga";
+
+"Save" = "Guardar";
+"Check on save" = "Se comprobará al guardar";
+"Check failed · View reason" = "Error · Ver motivo";
+"Search local environments first. Based on the results, choose manual installation or automatic installation." = "Busque primero los entornos locales. Según los resultados, elija la instalación manual o automática.";

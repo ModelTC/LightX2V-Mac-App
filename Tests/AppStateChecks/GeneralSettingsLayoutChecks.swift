@@ -111,6 +111,25 @@ func generalSettingsLayoutChecks() async throws {
     app.isChecking = false; app.environmentReady = false
     app.environmentMessage = "缺少 loguru；" + String(repeating: "依赖无法导入：详细错误信息。\n", count: 20)
     try await sample("environment-failed")
+    guard let pythonField = fields(host).first(where: { $0.stringValue == settings.python }) else {
+        throw AppError.message("Python path field is missing")
+    }
+    let fieldFrame = pythonField.convert(pythonField.bounds, to: host)
+    let point = NSPoint(x: host.bounds.maxX - 90, y: host.isFlipped ? fieldFrame.minY - 21 : fieldFrame.maxY + 21)
+    let location = host.convert(point, to: nil)
+    let oldWindows = Set(NSApplication.shared.windows.map(\.windowNumber))
+    for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+        let event = NSEvent.mouseEvent(with: type, location: location, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                      windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1)!
+        window.sendEvent(event)
+    }
+    try await Task.sleep(for: .milliseconds(250))
+    guard let popup = NSApplication.shared.windows.first(where: { $0.isVisible && !oldWindows.contains($0.windowNumber) }), let view = popup.contentView else {
+        throw AppError.message("Clicking the failure status did not open its popover at \(point); Python field: \(fieldFrame)")
+    }
+    try snapshot("failure-popover", view)
+    try check(view.fittingSize.width <= 400 && view.fittingSize.height <= 440, "clicking failure opens a compact scrollable reason/advice popover")
+    popup.performClose(nil)
     app.environmentReady = true; app.environmentMessage = "环境依赖符合要求。"
     try await sample("environment-ready")
     app.isPreparingWorkspace = true

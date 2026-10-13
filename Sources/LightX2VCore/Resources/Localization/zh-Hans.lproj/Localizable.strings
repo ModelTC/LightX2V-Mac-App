@@ -389,3 +389,8 @@
 "Stop all downloads" = "停止全部下载";
 "Waiting" = "等待";
 "Waiting for download" = "等待下载";
+
+"Save" = "保存";
+"Check on save" = "待保存时检查";
+"Check failed · View reason" = "检查失败，点击查看原因";
+"Search local environments first. Based on the results, choose manual installation or automatic installation." = "建议先搜索本机环境，根据搜索结果，选择手动安装或自动安装。";

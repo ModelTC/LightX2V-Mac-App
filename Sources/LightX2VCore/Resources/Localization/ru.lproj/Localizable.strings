@@ -389,3 +389,8 @@
 "Stop all downloads" = "Остановить загрузки";
 "Waiting" = "Ожидание";
 "Waiting for download" = "Ожидание загрузки";
+
+"Save" = "Сохранить";
+"Check on save" = "Проверка при сохранении";
+"Check failed · View reason" = "Проверка не пройдена · Причина";
+"Search local environments first. Based on the results, choose manual installation or automatic installation." = "Сначала найдите локальные среды. По результатам поиска выберите ручную или автоматическую установку.";

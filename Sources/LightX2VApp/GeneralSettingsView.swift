@@ -45,7 +45,7 @@ struct SettingsView: View {
                 Spacer()
                 Button(L10n.text("Close")) { store.closeGeneralSettings() }.keyboardShortcut(.cancelAction)
                     .disabled(store.isPreparingWorkspace)
-                Button(L10n.text("Save settings")) { save() }
+                Button(L10n.text("Save")) { save() }
                     .buttonStyle(SettingsActionStyle(prominent: true))
                     .keyboardShortcut(.defaultAction).disabled(store.busy || (!settings.hasGeneralPaths && !reconnectingWorkspace))
             }.padding(.horizontal, 24).frame(height: 60)
@@ -134,13 +134,15 @@ struct SettingsView: View {
 
     private var pythonCard: some View {
         SettingsSection(step: .python, current: setupProgress.current, title: L10n.text("PyTorch environment"),
-                        status: pythonStatus, statusColor: pythonMatchesSaved && store.environmentReady ? Palette.green : Palette.muted,
+                        status: pythonStatus, statusColor: pythonCheckFailed ? Palette.accent : pythonMatchesSaved && store.environmentReady ? Palette.green : Palette.muted,
+                        statusDetails: pythonCheckFailed ? store.environmentMessage : nil,
+                        statusAdvice: L10n.text("Search local environments first. Based on the results, choose manual installation or automatic installation."),
                         details: L10n.text("Search local environments first. If none qualify, follow the manual instructions or install automatically.")) {
             pathRow(L10n.text("PyTorch environment"), value: $settings.python, directory: false)
         } actions: {
             Button { startSearch() } label: { Label(L10n.text("Search local environments"), systemImage: "magnifyingglass").fixedSize() }
                 .disabled(store.busy || !hasWorkDirectory)
-            SettingsStatusLine(message: pythonMatchesSaved && !store.environmentReady && store.environmentMessage != "Environment has not been checked" ? pythonMessage : "",
+            SettingsStatusLine(message: pythonMatchesSaved && store.isChecking ? L10n.text("Checking") : "",
                                running: pythonMatchesSaved && store.isChecking,
                                color: pythonMatchesSaved && store.environmentReady ? Palette.green : Palette.muted)
         }
@@ -151,16 +153,18 @@ struct SettingsView: View {
             && normalized(settings.workingDirectory) == store.settings.workingDirectory
     }
 
-    private var pythonStatus: String {
-        guard setupProgress.completed.contains(.python) else { return pathStatus(.python) }
-        guard pythonMatchesSaved else { return L10n.text("Not checked") }
-        if store.isChecking { return L10n.text("Checking") }
-        if store.environmentReady { return L10n.text("Check passed") }
-        return store.environmentMessage == "Environment has not been checked" ? L10n.text("Not checked") : L10n.text("Check failed")
+    private var pythonCheckFailed: Bool {
+        pythonMatchesSaved && !store.isChecking && !store.environmentReady
+            && store.environmentMessage != "Environment has not been checked"
     }
 
-    private var pythonMessage: String {
-        pythonMatchesSaved ? store.environmentMessage : L10n.text("Saving settings checks dependencies and MPS automatically.")
+    private var pythonStatus: String {
+        if pythonCheckFailed { return L10n.text("Check failed · View reason") }
+        guard setupProgress.completed.contains(.python) else { return pathStatus(.python) }
+        guard pythonMatchesSaved else { return L10n.text("Check on save") }
+        if store.isChecking { return L10n.text("Checking") }
+        if store.environmentReady { return L10n.text("Check passed") }
+        return store.environmentMessage == "Environment has not been checked" ? L10n.text("Check on save") : L10n.text("Check failed")
     }
 
     private func pathStatus(_ step: GeneralSetupStep) -> String {
@@ -315,6 +319,8 @@ private struct SettingsSection<Content: View, Actions: View>: View {
     let title: String
     let status: String
     var statusColor: Color = Palette.muted
+    var statusDetails: String?
+    var statusAdvice: String?
     let details: String
     var command: String?
     var linkTitle: String?
@@ -323,6 +329,7 @@ private struct SettingsSection<Content: View, Actions: View>: View {
     @ViewBuilder let content: Content
     @ViewBuilder let actions: Actions
     @State private var showsDetails = false
+    @State private var showsStatusDetails = false
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
@@ -334,8 +341,18 @@ private struct SettingsSection<Content: View, Actions: View>: View {
                     .help(L10n.text("View instructions and full status"))
                     .popover(isPresented: $showsDetails) { SettingsDetails(title: title, message: details, command: command, linkTitle: linkTitle, linkURL: linkURL) }
                 Spacer(minLength: 4)
-                Text(L10n.render(status)).font(.system(size: 11, weight: .medium)).foregroundStyle(statusColor)
-                    .frame(width: 112, alignment: .trailing).lineLimit(1)
+                Group {
+                    if let statusDetails {
+                        Button { showsStatusDetails = true } label: {
+                            Text(L10n.render(status)).lineLimit(1).minimumScaleFactor(0.8).padding(.horizontal, 5).padding(.vertical, 4)
+                        }.buttonStyle(HoverButtonStyle(radius: 5))
+                            .accessibilityLabel(L10n.render(status))
+                            .popover(isPresented: $showsStatusDetails) {
+                                SettingsDetails(title: L10n.text("Check failed"), message: statusDetails, advice: statusAdvice)
+                            }
+                    } else { Text(L10n.render(status)).lineLimit(1).minimumScaleFactor(0.8) }
+                }.font(.system(size: 11, weight: .medium)).foregroundStyle(statusColor)
+                    .frame(width: step == .python ? 208 : 112, alignment: .trailing)
             }.frame(height: 24)
             content.padding(.top, 4).frame(height: 48)
             if hasActions {
@@ -380,6 +397,7 @@ private struct SettingsDetails: View {
     var command: String?
     var linkTitle: String?
     var linkURL: URL?
+    var advice: String?
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L10n.render(title)).font(.system(size: 13, weight: .semibold))
@@ -397,6 +415,10 @@ private struct SettingsDetails: View {
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }.frame(maxHeight: 220)
+            if let advice {
+                Text(L10n.render(advice)).font(.system(size: 11)).foregroundStyle(Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if let linkTitle, let linkURL {
                 Link(destination: linkURL) { Text(L10n.render(linkTitle)).underline().padding(.trailing, 6).padding(.vertical, 5) }
                     .font(.system(size: 11)).buttonStyle(HoverButtonStyle(radius: 6))
@@ -405,7 +427,7 @@ private struct SettingsDetails: View {
     }
 }
 
-/// All five cards share the same typography and badge geometry.
+/// All setting cards share the same typography and badge geometry.
 private struct SettingsCardTitle: View {
     @ObservedObject private var language = LanguagePreferences.shared
     let title: String
