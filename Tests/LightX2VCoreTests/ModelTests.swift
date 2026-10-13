@@ -8,7 +8,8 @@ func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {
 
 @main
 struct CoreChecks {
-    static func main() throws {
+    static func main() async throws {
+        try await bundledResourceChecks()
         try localizationChecks()
         try invalidRequests()
         print("PASS invalid request validation")
@@ -32,7 +33,7 @@ struct CoreChecks {
         try inputImageChecks()
         try enhancementChecks()
         try turboModelChecks()
-        print("13 core checks passed")
+        print("14 core checks passed")
     }
     static func invalidRequests() throws {
         for (prompt, width, height, seed) in [("", 1024, 1024, Int64(42)), ("test", 720, 1280, 42),
@@ -140,7 +141,7 @@ struct CoreChecks {
             (\.python, repo.appendingPathComponent("lightx2v/infer.py").path),
             (\.workingDirectory, python.path), (\.workingDirectory, python.appendingPathComponent("images").path)
         ]
-        for (key, value) in invalid {
+        for (key, value) in invalid where key != \.repository && key != \.promptEnhancement.runtimeDirectory {
             var settings = valid; settings[keyPath: key] = value
             var rejected = false
             do { try settings.validateGeneralPaths() } catch { rejected = true }

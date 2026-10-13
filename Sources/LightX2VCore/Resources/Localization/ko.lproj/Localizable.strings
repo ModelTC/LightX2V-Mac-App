@@ -12,7 +12,7 @@
 "%@ s" = "%@초";
 "%@ × %@ pixels" = "%@ × %@ 픽셀";
 "%@-step generation" = "%@단계 생성";
-"5 settings · Change the language anytime" = "설정 5개 · 언어는 언제든 변경 가능";
+"3 settings · Change the language anytime" = "설정 3개 · 언어는 언제든 변경 가능";
 "A frame of light" = "빛";
 "A little wonder" = "경이";
 "A touch of nature" = "자연";
@@ -75,7 +75,7 @@
 "Completed files " = "완료 파일 ";
 "Configure complete enhancement model directories in model preparation, or turn off prompt enhancement." = "전체 강화 모델 폴더를 설정하거나 프롬프트 강화를 끄세요.";
 "Configured" = "설정됨";
-"Configured %@ / 5" = "설정됨 %@ / 5";
+"Configured %@ / 3" = "설정됨 %@ / 3";
 "Connecting to GitHub · %@…" = "GitHub에 연결 중 · %@…";
 "Connecting to GitHub · b11564…" = "GitHub에 연결 중 · b11564…";
 "Connecting to GitHub…" = "GitHub에 연결 중…";
@@ -149,7 +149,7 @@
 "Found %@ compatible environments" = "호환 환경 %@개 발견";
 "GGUF model" = "GGUF 모델";
 "General settings" = "일반 설정";
-"General settings: %@ of 5 settings configured" = "일반 설정: 5개 중 %@개 설정됨";
+"General settings: %@ of 3 settings configured" = "일반 설정: 3개 중 %@개 설정됨";
 "Generate" = "생성";
 "Generate image" = "이미지 생성";
 "Generated" = "생성됨";

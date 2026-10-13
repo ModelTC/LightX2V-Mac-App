@@ -12,7 +12,7 @@
 "%@ s" = "%@ s";
 "%@ × %@ pixels" = "%@ × %@ Pixel";
 "%@-step generation" = "Generierung in %@ Schritten";
-"5 settings · Change the language anytime" = "5 Einstellungen · Sprache jederzeit ändern";
+"3 settings · Change the language anytime" = "3 Einstellungen · Sprache jederzeit ändern";
 "A frame of light" = "Licht";
 "A little wonder" = "Wunder";
 "A touch of nature" = "Natur";
@@ -75,7 +75,7 @@
 "Completed files " = "Fertige Dateien ";
 "Configure complete enhancement model directories in model preparation, or turn off prompt enhancement." = "Vollständige Verbesserungsmodelle konfigurieren oder Prompt-Verbesserung ausschalten.";
 "Configured" = "Konfiguriert";
-"Configured %@ / 5" = "Konfiguriert %@ / 5";
+"Configured %@ / 3" = "Konfiguriert %@ / 3";
 "Connecting to GitHub · %@…" = "Verbindung zu GitHub · %@…";
 "Connecting to GitHub · b11564…" = "Verbindung zu GitHub · b11564…";
 "Connecting to GitHub…" = "Verbindung zu GitHub…";
@@ -149,7 +149,7 @@
 "Found %@ compatible environments" = "%@ passende Umgebungen gefunden";
 "GGUF model" = "GGUF-Modell";
 "General settings" = "Allgemeine Einstellungen";
-"General settings: %@ of 5 settings configured" = "Allgemeine Einstellungen: %@ von 5 konfiguriert";
+"General settings: %@ of 3 settings configured" = "Allgemeine Einstellungen: %@ von 3 konfiguriert";
 "Generate" = "Generieren";
 "Generate image" = "Bild generieren";
 "Generated" = "Generiert";

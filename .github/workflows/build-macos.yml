@@ -37,6 +37,12 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Restore pinned inference archives
+        uses: actions/cache@v4
+        with:
+          path: Sources/LightX2VCore/Resources/Bundled/*.tar.gz
+          key: bundled-inference-${{ hashFiles('Sources/LightX2VCore/Resources/Bundled/manifest.json') }}
+
       - name: Build signed release app
         run: bash scripts/build.sh
 
@@ -61,6 +67,6 @@ jobs:
             printf -- '- Signing: ad-hoc (not notarized)\n'
             printf -- '- Retention: no expiry; one APP package per Latest / Stable channel\n'
             printf -- '- This fixed Latest URL always serves the latest package, including from older run summaries\n'
-            printf -- '- Requires a local LightX2V checkout, model weights and Python inference environment\n\n'
+            printf -- '- Includes LightX2V source and llama.cpp binaries; requires model weights and a Python inference environment\n\n'
             printf 'See the [latest release](https://github.com/%s/releases/tag/latest) for its commit and SHA-256.\n' "$GITHUB_REPOSITORY"
           } >> "$GITHUB_STEP_SUMMARY"

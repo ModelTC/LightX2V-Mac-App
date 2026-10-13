@@ -12,7 +12,7 @@
 "%@ s" = "%@ с";
 "%@ × %@ pixels" = "%@ × %@ пикселей";
 "%@-step generation" = "Генерация за %@ шагов";
-"5 settings · Change the language anytime" = "5 настроек · Язык можно менять в любое время";
+"3 settings · Change the language anytime" = "3 настроек · Язык можно менять в любое время";
 "A frame of light" = "Свет";
 "A little wonder" = "Чудо";
 "A touch of nature" = "Природа";
@@ -75,7 +75,7 @@
 "Completed files " = "Готовые файлы ";
 "Configure complete enhancement model directories in model preparation, or turn off prompt enhancement." = "Укажите полные папки моделей улучшения или отключите улучшение запроса.";
 "Configured" = "Настроено";
-"Configured %@ / 5" = "Настроено %@ / 5";
+"Configured %@ / 3" = "Настроено %@ / 3";
 "Connecting to GitHub · %@…" = "Подключение к GitHub · %@…";
 "Connecting to GitHub · b11564…" = "Подключение к GitHub · b11564…";
 "Connecting to GitHub…" = "Подключение к GitHub…";
@@ -149,7 +149,7 @@
 "Found %@ compatible environments" = "Найдено подходящих сред: %@";
 "GGUF model" = "Модель GGUF";
 "General settings" = "Общие настройки";
-"General settings: %@ of 5 settings configured" = "Общие настройки: настроено %@ из 5";
+"General settings: %@ of 3 settings configured" = "Общие настройки: настроено %@ из 3";
 "Generate" = "Генерация";
 "Generate image" = "Создать изображение";
 "Generated" = "Создано";

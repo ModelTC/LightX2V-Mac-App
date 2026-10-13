@@ -1,7 +1,8 @@
 import Foundation
 
 public enum GeneralSetupStep: Int, CaseIterable {
-    case workspace = 1, source, llama, python
+    case workspace = 1, python = 2, source = 3, llama = 4
+    public static let allCases: [GeneralSetupStep] = [.workspace, .python]
 }
 
 /// A snapshot of committed input. The UI refreshes this after editing finishes,

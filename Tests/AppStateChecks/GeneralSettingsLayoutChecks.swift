@@ -37,15 +37,7 @@ func generalSettingsLayoutChecks() async throws {
     func geometry(_ host: NSView) throws -> [String: NSRect] {
         host.layoutSubtreeIfNeeded()
         let inputs = fields(host).filter(\.isEditable).sorted { $0.convert($0.bounds, to: host).minY < $1.convert($1.bounds, to: host).minY }
-        guard inputs.count == 4 else { throw AppError.message("All four setting paths must exist without scrolling") }
-        if let runtime = inputs.first(where: { $0.stringValue == settings.promptEnhancement.runtimeDirectory }),
-           let python = inputs.first(where: { $0.stringValue == settings.python }) {
-            let runtimeY = runtime.convert(runtime.bounds, to: host).midY
-            let pythonY = python.convert(python.bounds, to: host).midY
-            guard host.isFlipped ? runtimeY < pythonY : runtimeY > pythonY else {
-                throw AppError.message("llama.cpp must appear before PyTorch in general settings")
-            }
-        }
+        guard inputs.count == 2 else { throw AppError.message("Both setting paths must exist without scrolling") }
         var frames: [String: NSRect] = [:]
         for (index, input) in inputs.enumerated() {
             let frame = input.convert(input.bounds, to: host)
@@ -81,13 +73,12 @@ func generalSettingsLayoutChecks() async throws {
         window.makeKeyAndOrderFront(nil)
         window.makeKey()
         try await Task.sleep(for: .milliseconds(150))
-        try check(host.fittingSize.height <= 680, "\(name) five-item general settings fits the default sheet: \(host.fittingSize)")
+        try check(host.fittingSize.height <= 680, "\(name) three-item general settings fits the default sheet: \(host.fittingSize)")
         _ = try geometry(host)
         try snapshot(name, host)
     }
     let app = try store(settings)
-    let downloads = GeneralSettingsDownloads()
-    let host = NSHostingView(rootView: SettingsView(settings: settings, downloads: downloads).environmentObject(app).preferredColorScheme(.light))
+    let host = NSHostingView(rootView: SettingsView(settings: settings).environmentObject(app).preferredColorScheme(.light))
     window.contentView = host; window.setContentSize(host.fittingSize)
     try await Task.sleep(for: .milliseconds(200))
     let initial = try geometry(host)
@@ -113,20 +104,8 @@ func generalSettingsLayoutChecks() async throws {
         print("PASS fixed field and window geometry during " + name)
     }
     app.isPreparingResources = true
-    downloads.sourceRunning = true; downloads.sourceMessage = "正在连接 GitHub…"
-    try await sample("source-connecting")
-    downloads.sourceMessage = "正在下载源码 · 128.3 / 256.8 MB"
-    try await sample("source-downloading")
-    downloads.sourceRunning = false; downloads.sourceMessage = "已就绪 · main · cdf29633"; app.isPreparingResources = false
-    try await sample("source-completed")
-    downloads.runtimeRunning = true; downloads.runtimeMessage = "正在下载 llama.cpp · 0.3 / 12.1 MB"; app.isPreparingResources = true
-    try await sample("runtime-downloading")
-    downloads.runtimeMessage = "正在校验并解压 llama.cpp…"
-    try await sample("runtime-extracting")
-    downloads.runtimeRunning = false; downloads.runtimeMessage = "下载已取消，可随时重试。"; app.isPreparingResources = false
-    try await sample("runtime-cancelled")
-    downloads.runtimeMessage = "下载失败：" + String(repeating: "网络连接中断，请检查网络后重试。\n", count: 20)
-    try await sample("runtime-long-error")
+    try await sample("bundled-preparation")
+    app.isPreparingResources = false
     app.isChecking = true; app.environmentMessage = "正在检查环境依赖与 MPS…"
     try await sample("environment-checking")
     app.isChecking = false; app.environmentReady = false
@@ -144,7 +123,7 @@ func generalSettingsLayoutChecks() async throws {
     let firstHost = NSHostingView(rootView: FirstLaunchSetupView().environmentObject(first).preferredColorScheme(.light))
     window.contentView = firstHost; window.setContentSize(NSSize(width: 688, height: 740))
     try await Task.sleep(for: .milliseconds(200))
-    try check(firstHost.fittingSize.height <= 740, "five-item first-launch card fits a compact laptop window")
+    try check(firstHost.fittingSize.height <= 740, "three-item first-launch card fits a compact laptop window")
     _ = try geometry(firstHost)
     try snapshot("first-launch", firstHost)
 }

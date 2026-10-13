@@ -33,7 +33,7 @@ public struct AppSettings: Codable, Equatable {
     }
 
     public var hasGeneralPaths: Bool {
-        [workingDirectory, repository, python, promptEnhancement.runtimeDirectory].allSatisfy { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        [workingDirectory, python].allSatisfy { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
     public func validateGeneralPaths() throws {

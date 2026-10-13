@@ -4,3 +4,7 @@ dist/
 .DS_Store
 __pycache__/
 *.pyc
+
+# Pinned archives are fetched and verified at build time, never committed.
+Sources/LightX2VCore/Resources/Bundled/*.tar.gz
+Sources/LightX2VCore/Resources/Bundled/.download-*

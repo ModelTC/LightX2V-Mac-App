@@ -192,6 +192,7 @@ final class AppStore: ObservableObject {
                 else { data.settings.promptEnhancement.i2iDirectory = folder }
             }
         }
+        BundledInferenceResources.configure(&data.settings)
         settings = data.settings; generations = data.generations
         modelDirectory = data.settings.model
         t2iDirectory = data.settings.promptEnhancement.t2iDirectory; i2iDirectory = data.settings.promptEnhancement.i2iDirectory
@@ -362,9 +363,8 @@ final class AppStore: ObservableObject {
             (value.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath
         }
         updated.workingDirectory = path(value.workingDirectory)
-        updated.repository = path(value.repository)
         updated.python = path(value.python)
-        updated.promptEnhancement.runtimeDirectory = path(value.promptEnhancement.runtimeDirectory)
+        BundledInferenceResources.configure(&updated)
         if try WorkspaceStorage.existingWorkspace(at: updated.workingDirectory, previousState: stateURL) == nil {
             try updated.validateGeneralPaths()
         }
@@ -380,6 +380,7 @@ final class AppStore: ObservableObject {
         restoringModelPaths = true
         var restored = saved
         restored.recoverInterrupted()
+        BundledInferenceResources.configure(&restored.settings)
         settings = restored.settings; generations = restored.generations
         if changedWorkspace { selectedID = nil; draftCreationID = UUID(); prompt = ""; generationSize = GenerationSize(); logs = ""; showLogs = false; clearInputImages() }
         restoreModelPaths()
@@ -390,11 +391,9 @@ final class AppStore: ObservableObject {
         errorMessage = nil
         isPreparingWorkspace = false
         guard !needsGeneralSetup else { return }
-        if !keepEnvironmentReady {
-            checkEnvironment()
-            await setupTask?.value
-            guard environmentReady else { return }
-        }
+        checkEnvironment(reuseVerifiedEnvironment: keepEnvironmentReady)
+        await setupTask?.value
+        guard environmentReady else { return }
         showStartupSettings = false; showSettings = false
     }
 
@@ -522,7 +521,7 @@ final class AppStore: ObservableObject {
         showStartupSettings = false; showSettings = false
     }
 
-    func checkEnvironment(enterWorkspaceOnSuccess: Bool = false) {
+    func checkEnvironment(enterWorkspaceOnSuccess: Bool = false, reuseVerifiedEnvironment: Bool = false) {
         guard !busy, terminationCompletion == nil else { return }
         guard !needsGeneralSetup else {
             environmentReady = false
@@ -533,6 +532,7 @@ final class AppStore: ObservableObject {
             try settings.validateGeneralPaths()
             let layout = WorkspaceLayout(settings.workingDirectory)
             try layout.prepare()
+            let verifiedMessage = environmentMessage
             isChecking = true; environmentReady = false; environmentMessage = L10n.english("Checking dependencies and MPS…")
             let python = settings.python
             setupTask = Task {
@@ -540,6 +540,15 @@ final class AppStore: ObservableObject {
                 do {
                     // Startup and the general-settings picker share one policy.
                     // Environment readiness is independent of model selection.
+                    try await BundledInferenceResources.prepare(in: layout)
+                    BundledInferenceResources.configure(&settings)
+                    refreshEnhancementResources()
+                    if reuseVerifiedEnvironment {
+                        environmentMessage = verifiedMessage
+                        environmentReady = true
+                        if enterWorkspaceOnSuccess { showStartupSettings = false }
+                        return
+                    }
                     let environment = try await PythonEnvironmentSearch.probe(python, workspace: layout)
                     try Task.checkCancellation()
                     environmentReady = environment.isCompatible

@@ -12,7 +12,7 @@
 "%@ s" = "%@ 秒";
 "%@ × %@ pixels" = "%@ × %@ ピクセル";
 "%@-step generation" = "%@ステップ生成";
-"5 settings · Change the language anytime" = "5項目の設定 · 言語はいつでも変更可能";
+"3 settings · Change the language anytime" = "3項目の設定 · 言語はいつでも変更可能";
 "A frame of light" = "光";
 "A little wonder" = "不思議";
 "A touch of nature" = "自然";
@@ -75,7 +75,7 @@
 "Completed files " = "完了ファイル ";
 "Configure complete enhancement model directories in model preparation, or turn off prompt enhancement." = "完全な強化モデルフォルダを設定するか、プロンプト強化をオフにしてください。";
 "Configured" = "設定済み";
-"Configured %@ / 5" = "設定済み %@ / 5";
+"Configured %@ / 3" = "設定済み %@ / 3";
 "Connecting to GitHub · %@…" = "GitHubに接続中 · %@…";
 "Connecting to GitHub · b11564…" = "GitHubに接続中 · b11564…";
 "Connecting to GitHub…" = "GitHubに接続中…";
@@ -149,7 +149,7 @@
 "Found %@ compatible environments" = "適切な環境が%@個見つかりました";
 "GGUF model" = "GGUFモデル";
 "General settings" = "一般設定";
-"General settings: %@ of 5 settings configured" = "一般設定：5項目中%@項目を設定済み";
+"General settings: %@ of 3 settings configured" = "一般設定：3項目中%@項目を設定済み";
 "Generate" = "生成";
 "Generate image" = "画像を生成";
 "Generated" = "生成済み";

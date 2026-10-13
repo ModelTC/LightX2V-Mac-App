@@ -12,7 +12,7 @@
 "%@ s" = "%@ 秒";
 "%@ × %@ pixels" = "%@ × %@ 像素";
 "%@-step generation" = "%@ 步生成";
-"5 settings · Change the language anytime" = "共 5 项配置，语言可随时切换。";
+"3 settings · Change the language anytime" = "共 3 项配置，语言可随时切换。";
 "A frame of light" = "一帧光影";
 "A little wonder" = "一点奇想";
 "A touch of nature" = "一处自然";
@@ -75,7 +75,7 @@
 "Completed files " = "已完成文件 ";
 "Configure complete enhancement model directories in model preparation, or turn off prompt enhancement." = "请在模型准备中配置完整的增强模型文件夹，或关闭 Prompt 增强。";
 "Configured" = "已配置";
-"Configured %@ / 5" = "已配置 %@ / 5";
+"Configured %@ / 3" = "已配置 %@ / 3";
 "Connecting to GitHub · %@…" = "正在连接 GitHub · %@…";
 "Connecting to GitHub · b11564…" = "正在连接 GitHub · b11564…";
 "Connecting to GitHub…" = "正在连接 GitHub…";
@@ -149,7 +149,7 @@
 "Found %@ compatible environments" = "找到 %@ 个符合要求的环境";
 "GGUF model" = "GGUF 模型";
 "General settings" = "通用设置";
-"General settings: %@ of 5 settings configured" = "通用设置已配置 %@ 项，共 5 项";
+"General settings: %@ of 3 settings configured" = "通用设置已配置 %@ 项，共 3 项";
 "Generate" = "生成";
 "Generate image" = "生成图片";
 "Generated" = "已生成";

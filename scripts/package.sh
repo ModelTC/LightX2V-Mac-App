@@ -10,6 +10,9 @@ test -f "$APP/Contents/Resources/bridge.py"
 test -f "$APP/Contents/Resources/prompt_enhancement.py"
 test -s "$APP/Contents/Resources/requirements.txt"
 test -s "$APP/Contents/Resources/qwen_image_21_turbo.json"
+for archive in LightX2V-0.6.0.tar.gz llama-b11583-bin-macos-arm64.tar.gz; do
+    cmp "$ROOT/Sources/LightX2VCore/Resources/Bundled/$archive" "$APP/Contents/Resources/Bundled/$archive"
+done
 test "$(lipo -archs "$APP/Contents/MacOS/LightX2VApp")" = arm64
 plutil -lint "$APP/Contents/Info.plist"
 codesign --verify --deep --strict "$APP"
@@ -28,6 +31,10 @@ codesign --verify --deep --strict "$RESTORED_APP"
 cmp "$APP/Contents/MacOS/LightX2VApp" "$RESTORED_APP/Contents/MacOS/LightX2VApp"
 for resource in bridge.py prompt_enhancement.py requirements.txt qwen_image_21_turbo.json; do
     cmp "$APP/Contents/Resources/$resource" "$RESTORED_APP/Contents/Resources/$resource"
+done
+
+for archive in LightX2V-0.6.0.tar.gz llama-b11583-bin-macos-arm64.tar.gz; do
+    cmp "$APP/Contents/Resources/Bundled/$archive" "$RESTORED_APP/Contents/Resources/Bundled/$archive"
 done
 
 (

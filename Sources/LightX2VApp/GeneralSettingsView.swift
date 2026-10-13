@@ -9,7 +9,6 @@ struct SettingsView: View {
     @State var settings: AppSettings
     @State private var setupProgress = GeneralSetupProgress()
     @State private var saveError: String?
-    @StateObject var downloads = GeneralSettingsDownloads()
     @State private var showEnvironments = false
     @State private var searching = false
     @State private var environments: [PythonEnvironment] = []
@@ -39,8 +38,6 @@ struct SettingsView: View {
             VStack(spacing: 8) {
                 languageCard
                 workspaceCard
-                sourceCard
-                runtimeCard
                 pythonCard
             }.padding(.horizontal, 24).padding(.bottom, 12)
             Rectangle().fill(Palette.line).frame(height: 1)
@@ -77,7 +74,7 @@ struct SettingsView: View {
             // Resource transfers belong to this page. The post-save dependency
             // check belongs to the workspace and must survive its dismissal.
             .onDisappear {
-                if downloads.sourceRunning || downloads.runtimeRunning || installing || searching { store.setupTask?.cancel() }
+                if installing || searching { store.setupTask?.cancel() }
             }
             .sheet(isPresented: $showEnvironments, onDismiss: { if searching { store.setupTask?.cancel() } }) {
                 environmentPicker
@@ -90,12 +87,12 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(store.needsGeneralSetup ? L10n.text("Welcome to LightX2V") : L10n.text("General settings"))
                     .font(.system(size: 18, weight: .semibold))
-                Text(L10n.text("5 settings · Change the language anytime")).font(.system(size: 11)).foregroundStyle(Palette.muted)
+                Text(L10n.text("3 settings · Change the language anytime")).font(.system(size: 11)).foregroundStyle(Palette.muted)
             }
             Spacer()
-            Text(L10n.text("Configured %@ / 5", [String(describing: setupProgress.completed.count + 1)]))
+            Text(L10n.text("Configured %@ / 3", [String(describing: setupProgress.completed.count + 1)]))
                 .font(.system(size: 11, weight: .medium)).monospacedDigit().foregroundStyle(Palette.muted)
-                .accessibilityLabel(L10n.text("General settings: %@ of 5 settings configured", [String(describing: setupProgress.completed.count + 1)]))
+                .accessibilityLabel(L10n.text("General settings: %@ of 3 settings configured", [String(describing: setupProgress.completed.count + 1)]))
         }.padding(.horizontal, 24).frame(height: 64)
             .focusable().focusEffectDisabled().focused($headerFocused)
     }
@@ -135,21 +132,6 @@ struct SettingsView: View {
         return L10n.text("Settings, history, images, logs and caches are stored here.")
     }
 
-    private var sourceCard: some View {
-        SettingsSection(step: .source, current: setupProgress.current, title: L10n.text("LightX2V source directory"),
-                        status: pathStatus(.source),
-                        details: L10n.text("Download the source automatically or choose a manual download"),
-                        command: SourceDownloader.manualCommand,
-                        linkTitle: L10n.text("Open LightX2V GitHub"), linkURL: URL(string: "https://github.com/ModelTC/LightX2V")) {
-            pathRow(L10n.text("LightX2V source directory"), value: $settings.repository, directory: true,
-                    placeholder: L10n.text("Choose an existing source directory or download it"))
-        } actions: {
-            downloadButton(L10n.text("Download LightX2V source automatically"), action: downloadSource)
-            SettingsStatusLine(message: downloads.sourceMessage,
-                               running: downloads.sourceRunning, cancel: { store.setupTask?.cancel() })
-        }
-    }
-
     private var pythonCard: some View {
         SettingsSection(step: .python, current: setupProgress.current, title: L10n.text("PyTorch environment"),
                         status: pythonStatus, statusColor: pythonMatchesSaved && store.environmentReady ? Palette.green : Palette.muted,
@@ -166,7 +148,6 @@ struct SettingsView: View {
 
     private var pythonMatchesSaved: Bool {
         !store.needsGeneralSetup && normalized(settings.python) == store.settings.python
-            && normalized(settings.repository) == store.settings.repository
             && normalized(settings.workingDirectory) == store.settings.workingDirectory
     }
 
@@ -180,25 +161,6 @@ struct SettingsView: View {
 
     private var pythonMessage: String {
         pythonMatchesSaved ? store.environmentMessage : L10n.text("Saving settings checks dependencies and MPS automatically.")
-    }
-
-    private var runtimeCard: some View {
-        SettingsSection(step: .llama, current: setupProgress.current, title: L10n.text("llama.cpp binaries directory"),
-                        status: pathStatus(.llama),
-                        details: L10n.text("Download automatically or choose a manual download"),
-                        linkTitle: L10n.text("Open llama.cpp releases"), linkURL: URL(string: "https://github.com/ggml-org/llama.cpp/releases")) {
-            pathRow(L10n.text("llama.cpp binaries directory"), value: $settings.promptEnhancement.runtimeDirectory, directory: true,
-                    placeholder: L10n.text("Choose the binaries directory or download it"))
-        } actions: {
-            downloadButton(L10n.text("Download llama.cpp automatically"), action: downloadRuntime)
-            SettingsStatusLine(message: downloads.runtimeMessage,
-                               running: downloads.runtimeRunning, cancel: { store.setupTask?.cancel() })
-        }
-    }
-
-    private func downloadButton(_ label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Label(L10n.text("Download automatically"), systemImage: "arrow.down.to.line") }
-            .disabled(store.busy || !hasWorkDirectory).accessibilityLabel(label)
     }
 
     private func pathStatus(_ step: GeneralSetupStep) -> String {
@@ -281,26 +243,6 @@ struct SettingsView: View {
         setupProgress = progress
     }
 
-    private func downloadSource() {
-        guard !store.busy else { return }
-        saveError = nil; downloads.sourceMessage = L10n.english("Connecting to GitHub…"); downloads.sourceRunning = true; store.isPreparingResources = true
-        let workspace = layout; let token = UUID(); operationID = token
-        store.setupTask = Task {
-            defer { downloads.sourceRunning = false; operationID = nil; store.finishSetupTask() }
-            do {
-                let result = try await SourceDownloader.download(workspace: workspace) { message in
-                    Task { @MainActor in if operationID == token { downloads.sourceMessage = message } }
-                }
-                settings.repository = result.directory
-                updateGuide()
-                downloads.sourceMessage = L10n.english("Ready · LightX2V %@", [String(describing: SourceDownloader.version)])
-            } catch {
-                if Task.isCancelled { downloads.sourceMessage = L10n.english("Download cancelled. You can retry anytime.") }
-                else { downloads.sourceMessage = L10n.english("Download failed: %@", [String(describing: error.localizedDescription)]) }
-            }
-        }
-    }
-
     private func startSearch() {
         guard !store.busy else { return }
         saveError = nil; searchError = nil; environments = []; checkedCount = 0; totalCount = 0
@@ -316,26 +258,6 @@ struct SettingsView: View {
             } catch {
                 if Task.isCancelled { searchCancelled = true }
                 else { searchError = error.localizedDescription }
-            }
-        }
-    }
-
-    private func downloadRuntime() {
-        guard !store.busy, hasWorkDirectory else { return }
-        saveError = nil; downloads.runtimeMessage = L10n.english("Connecting to GitHub · b11564…"); downloads.runtimeRunning = true; store.isPreparingResources = true
-        let workspace = layout; let token = UUID(); operationID = token
-        store.setupTask = Task {
-            defer { downloads.runtimeRunning = false; operationID = nil; store.finishSetupTask() }
-            do {
-                let result = try await LlamaRuntimeDownloader.download(workspace: workspace) { message in
-                    Task { @MainActor in if operationID == token { downloads.runtimeMessage = message } }
-                }
-                settings.promptEnhancement.runtimeDirectory = result.directory
-                updateGuide()
-                downloads.runtimeMessage = L10n.english("Ready · %@", [String(describing: result.version)])
-            } catch {
-                if Task.isCancelled { downloads.runtimeMessage = L10n.english("Download cancelled. You can retry anytime.") }
-                else { downloads.runtimeMessage = L10n.english("llama.cpp download failed: %@", [String(describing: error.localizedDescription)]) }
             }
         }
     }
@@ -384,14 +306,6 @@ struct SettingsView: View {
             } catch { saveError = error.localizedDescription }
         }
     }
-}
-
-/// Shared live transfer state also lets native layout checks sample real redraws.
-final class GeneralSettingsDownloads: ObservableObject {
-    @Published var sourceMessage = ""
-    @Published var sourceRunning = false
-    @Published var runtimeMessage = ""
-    @Published var runtimeRunning = false
 }
 
 private struct SettingsSection<Content: View, Actions: View>: View {

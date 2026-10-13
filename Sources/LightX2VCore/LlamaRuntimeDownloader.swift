@@ -33,8 +33,8 @@ public enum LlamaRuntimeDownloader {
         }
     }
 
-    public static func validateArchive(paths: String, details: String, version: String) throws {
-        let expected = "llama-\(version)"
+    public static func validateArchive(paths: String, details: String, version: String, expectedRoot: String? = nil) throws {
+        let expected = expectedRoot ?? "llama-\(version)"
         let entries = paths.split(separator: "\n")
         guard !entries.isEmpty, entries.allSatisfy({ entry in
             let parts = entry.split(separator: "/")

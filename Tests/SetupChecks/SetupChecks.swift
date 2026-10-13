@@ -102,31 +102,31 @@ func rejects(_ body: () throws -> Void) throws {
         // Taking a snapshot on commit keeps partially typed input from moving the guide.
         try expect(progress.current == .workspace, "draft text changed committed progress")
         progress = GeneralSetupProgress(settings: settings)
-        try expect(progress.current == .source && progress.completed == [.workspace], "workspace should advance to source")
+        try expect(progress.current == .python && progress.completed == [.workspace], "workspace should advance to Python")
         try expect(!fm.fileExists(atPath: workspace.path), "guide must not create folders")
         settings.repository = root.path
-        try expect(GeneralSetupProgress(settings: settings).current == .source, "unrelated folder accepted as source")
+        try expect(GeneralSetupProgress(settings: settings).current == .python, "hidden source must not change setup progress")
         settings.repository = source.path
         progress = GeneralSetupProgress(settings: settings)
-        try expect(progress.current == .llama && progress.completed.count == 2, "source should advance to llama.cpp")
+        try expect(progress.current == .python && progress.completed.count == 1, "bundled source must not count as a user setting")
         let runtime = root.appendingPathComponent("guide bin")
         try fm.createDirectory(at: runtime, withIntermediateDirectories: true)
         for name in ["llama-completion", "llama-mtmd-cli"] { try fm.copyItem(at: python, to: runtime.appendingPathComponent(name)) }
         settings.promptEnhancement.runtimeDirectory = runtime.path
         progress = GeneralSetupProgress(settings: settings)
-        try expect(progress.current == .python && progress.completed.count == 3 && !settings.hasGeneralPaths,
+        try expect(progress.current == .python && progress.completed.count == 1 && !settings.hasGeneralPaths,
                    "llama.cpp should advance to the final PyTorch setting")
         settings.python = source.path
         try expect(GeneralSetupProgress(settings: settings).current == .python, "directory accepted as Python")
         settings.python = python.path
         try settings.validateGeneralPaths()
         let complete = GeneralSetupProgress(settings: settings)
-        try expect(complete.current == nil && complete.completed.count == 4, "four complete settings should end guide")
+        try expect(complete.current == nil && complete.completed.count == 2, "two complete paths should end guide")
         let reopened = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
         try expect(GeneralSetupProgress(settings: reopened) == complete, "reopening must not replay completed steps")
         settings.repository = ""
         progress = GeneralSetupProgress(settings: settings)
-        try expect(progress.current == .source && progress.completed == [.workspace, .python, .llama], "clearing source should retain Python and llama.cpp")
+        try expect(progress.current == nil && progress.completed == [.workspace, .python], "clearing source should retain Python and llama.cpp")
         settings.workingDirectory = ""
         try expect(GeneralSetupProgress(settings: settings).current == .workspace, "out-of-order entries should still guide to earliest missing step")
         settings.repository = source.path
@@ -142,7 +142,7 @@ func rejects(_ body: () throws -> Void) throws {
         try fm.setAttributes([.posixPermissions: 0o644], ofItemAtPath: python.path)
         try expect(GeneralSetupProgress(settings: settings).current == .python, "non-executable Python accepted")
         try fm.removeItem(at: source.appendingPathComponent("lightx2v/infer.py"))
-        try expect(GeneralSetupProgress(settings: settings).current == .source, "missing source after reopening should return to step 2")
+        try expect(GeneralSetupProgress(settings: settings).current == .python, "hidden source must not change Python validation")
     }
 
     static func workspaceSwitching(_ root: URL) throws {

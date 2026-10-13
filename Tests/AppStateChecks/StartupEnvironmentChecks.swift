@@ -93,12 +93,6 @@ print('LIGHTX2V_ENV:' + (root / 'versions.json').read_text(), flush=True)
               "closing incomplete setup allows the workspace but keeps generation unavailable")
 
     var missing = minimum; missing["loguru"] = ""
-    var missingRuntime = settings; missingRuntime.promptEnhancement.runtimeDirectory = ""
-    let fourth = try savedStore(missingRuntime)
-    fourth.start()
-    try check(fourth.needsGeneralSetup && fourth.showStartupSettings && !fourth.isChecking && count() == 0,
-              "missing fourth runtime setting opens general setup without probing Python")
-    fourth.closeGeneralSettings()
     try write(missing)
     let store = try savedStore()
     store.start()
@@ -243,14 +237,16 @@ print('LIGHTX2V_ENV:' + (root / 'versions.json').read_text(), flush=True)
     var incompleteDraft = AppSettings.defaults
     incompleteDraft.workingDirectory = layout.root.path
     try await disconnected.applyGeneralSettings(incompleteDraft)
-    try check(disconnected.settings == archivedSettings && disconnected.generations.map(\.id) == [archivedJob.id], "saving selection reconnects settings and completed images")
+    var bundledSettings = archivedSettings
+    BundledInferenceResources.configure(&bundledSettings)
+    try check(disconnected.settings == bundledSettings && disconnected.generations.map(\.id) == [archivedJob.id], "saving selection reconnects settings and completed images")
     try check(disconnected.environmentReady && !disconnected.showStartupSettings, "reconnected workspace checks saved environment and enters the APP")
     let retainedBytes = try Data(contentsOf: layout.state)
     let retainedImage = try Data(contentsOf: output)
     try check(retainedBytes == archivedBytes && retainedImage == Data([1, 2, 3]), "reconnection preserves workspace JSON and output bytes")
     try await snapshot("workspace-reconnected", WorkspaceView().environmentObject(disconnected), size: NSSize(width: 1150, height: 840))
     let afterReconnect = AppStore()
-    try check(afterReconnect.settings == archivedSettings && afterReconnect.generations.map(\.id) == [archivedJob.id], "relaunch follows restored locator and retains original history")
+    try check(afterReconnect.settings == bundledSettings && afterReconnect.generations.map(\.id) == [archivedJob.id], "relaunch follows restored locator and retains original history")
 
     let incompleteLayout = WorkspaceLayout(root.appendingPathComponent("incomplete saved workspace").path)
     try incompleteLayout.prepare()

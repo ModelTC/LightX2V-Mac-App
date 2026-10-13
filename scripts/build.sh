@@ -4,6 +4,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="${1:-$ROOT/dist/LightX2V APP.app}"
 SCRATCH="${LIGHTX2V_BUILD_DIR:-$ROOT/.build}"
 
+python3 "$ROOT/scripts/prepare-bundled-resources.py"
+
 swift build --package-path "$ROOT" --scratch-path "$SCRATCH" -c release --arch arm64 --product LightX2VApp
 BIN="$(swift build --package-path "$ROOT" --scratch-path "$SCRATCH" -c release --arch arm64 --show-bin-path)"
 mkdir -p "$APP/Contents/MacOS"
@@ -16,6 +18,8 @@ for resource in bridge.py prompt_enhancement.py requirements.txt; do
     cp "$BIN/LightX2VAPP_LightX2VApp.bundle/$resource" "$APP/Contents/Resources/$resource"
 done
 cp "$BIN/LightX2VAPP_LightX2VCore.bundle/qwen_image_21_turbo.json" "$APP/Contents/Resources/qwen_image_21_turbo.json"
+
+cp -R "$BIN/LightX2VAPP_LightX2VCore.bundle/Bundled" "$APP/Contents/Resources/Bundled"
 
 for locale in "$BIN/LightX2VAPP_LightX2VCore.bundle/"*.lproj; do
     cp -R "$locale" "$APP/Contents/Resources/"
