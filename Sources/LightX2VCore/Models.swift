@@ -6,20 +6,21 @@ public struct AppSettings: Codable, Equatable {
     public var config: String
     public var python: String
     public var workingDirectory: String
+    public var modelDownloadSource: ModelDownloadSource
     public var promptEnhancement: PromptEnhancementSettings
     public var outputDirectory: String { workingDirectory.isEmpty ? "" : WorkspaceLayout(workingDirectory).outputs.path }
 
-    public init(repository: String, model: String, config: String, python: String, workingDirectory: String = "", promptEnhancement: PromptEnhancementSettings = .init()) {
+    public init(repository: String, model: String, config: String, python: String, workingDirectory: String = "", promptEnhancement: PromptEnhancementSettings = .init(), modelDownloadSource: ModelDownloadSource = .huggingFace) {
         self.repository = repository; self.model = model; self.config = config
         self.python = python; self.workingDirectory = workingDirectory
-        self.promptEnhancement = promptEnhancement
+        self.promptEnhancement = promptEnhancement; self.modelDownloadSource = modelDownloadSource
     }
 
     public static var defaults: AppSettings {
         AppSettings(repository: "", model: "", config: "", python: "")
     }
 
-    private enum CodingKeys: String, CodingKey { case repository, model, config, python, workingDirectory, promptEnhancement }
+    private enum CodingKeys: String, CodingKey { case repository, model, config, python, workingDirectory, promptEnhancement, modelDownloadSource }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         self.init(repository: try values.decode(String.self, forKey: .repository),
@@ -27,7 +28,8 @@ public struct AppSettings: Codable, Equatable {
                   config: try values.decode(String.self, forKey: .config),
                   python: try values.decode(String.self, forKey: .python),
                   workingDirectory: try values.decodeIfPresent(String.self, forKey: .workingDirectory) ?? "",
-                  promptEnhancement: try values.decodeIfPresent(PromptEnhancementSettings.self, forKey: .promptEnhancement) ?? .init())
+                  promptEnhancement: try values.decodeIfPresent(PromptEnhancementSettings.self, forKey: .promptEnhancement) ?? .init(),
+                  modelDownloadSource: try values.decodeIfPresent(ModelDownloadSource.self, forKey: .modelDownloadSource) ?? .huggingFace)
     }
 
     public var hasGeneralPaths: Bool {

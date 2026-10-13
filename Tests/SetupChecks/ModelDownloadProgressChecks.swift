@@ -36,5 +36,17 @@ extension SetupChecks {
         let derived = buffered.consume("Downloading bytes: | 3.00MB", at: now.addingTimeInterval(2))!
         try expect(derived.bytesPerSecond == 1_500_000, "missing network rate must use measured bytes over elapsed time")
         print("PASS HF completed-file counts, 26/32 regression, independent network speed, cached files, malformed output, stalls and buffered frames")
+        var ms = ModelDownloadProgressParser(source: .modelScope)
+        _ = ms.begin(totalBytes: nil)
+        let start = Date(timeIntervalSince1970: 100)
+        _ = ms.consume("Downloading: 81%|██| 26/32 [00:01<00:02, 2.0file/s]", at: start)
+        try expect(ms.progress.completedFiles == 26 && ms.progress.totalFiles == 32 && ms.progress.percentage == "81%", "ModelScope file-count progress was not parsed")
+        _ = ms.consume("Downloading [first.gguf]: 50%|██| 50MB/100MB [00:01, 2MB/s]", at: start)
+        _ = ms.consume("Downloading [second.gguf]: 50%|██| 50MB/100MB [00:01, 3MB/s]", at: start)
+        try expect(ms.progress.bytesPerSecond == 5_000_000, "ModelScope concurrent transfer speed was not aggregated")
+        _ = ms.consume("Downloading [first.gguf]: 100%|██| 100MB/100MB [00:01, 2MB/s]", at: start)
+        try expect(ms.progress.bytesPerSecond == 3_000_000, "completed ModelScope file kept inflating speed")
+        _ = ms.consume("third.gguf: 50%|██| 50MB/100MB [00:01, 1MB/s]", at: start.addingTimeInterval(6))
+        try expect(ms.progress.bytesPerSecond == 1_000_000, "stale ModelScope file kept inflating speed")
     }
 }

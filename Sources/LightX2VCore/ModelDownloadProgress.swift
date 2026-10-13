@@ -52,10 +52,12 @@ public struct ModelDownloadProgress: Equatable, Sendable {
     }
 }
 
-/// Repository progress follows HF's completed-file count. Xet separates network
+/// Repository progress follows each CLI's completed-file count. Xet separates network
 /// bytes from reconstructed file bytes: only network bytes supply download speed.
 public struct ModelDownloadProgressParser: Sendable {
     public private(set) var progress = ModelDownloadProgress()
+    private let source: ModelDownloadSource
+    private var fileRates: [String: (Double, Date)] = [:]
     private var expectedBytes: Double?
     private var lastCompletedAt: Date?
     private var lastCompleted: Double = 0
@@ -64,7 +66,7 @@ public struct ModelDownloadProgressParser: Sendable {
     private var networkAt: Date?
     private static let quantity = #"([0-9]+(?:\.[0-9]+)?)\s*([kKMGTPE]?i?B|[kKMGTPE])?"#
 
-    public init() {}
+    public init(source: ModelDownloadSource = .huggingFace) { self.source = source }
     public mutating func begin(totalBytes: Double?) -> ModelDownloadProgress {
         expectedBytes = totalBytes.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
         progress.stage = .downloading; progress.totalBytes = expectedBytes
@@ -82,11 +84,26 @@ public struct ModelDownloadProgressParser: Sendable {
         guard let separator = text.firstIndex(of: ":") else { return nil }
         let title = String(text[..<separator]).lowercased()
         let payload = String(text[(text.lastIndex(of: "|") ?? separator)...].dropFirst())
-        if title.hasPrefix("fetching ") {
+        if title.hasPrefix("fetching ") || (source == .modelScope && ["downloading", "processing files", "processing"].contains(title)) {
             guard let counts = Self.captures(#"^\s*([0-9]+)\s*/\s*([0-9]+)(?:\s|\[|$)"#, in: payload),
                   let completed = Int(counts[0]), let total = Int(counts[1]), completed <= total else { return nil }
             progress.stage = .downloading
             progress.completedFiles = completed; progress.totalFiles = total
+            progress.sequence += 1
+            return progress
+        }
+        if source == .modelScope, text.contains("|"),
+           Self.captures(#"^\s*[0-9]+%"#, in: String(text[separator...].dropFirst())) != nil {
+            guard let rate = Self.rate(in: payload) else { return nil }
+            // File bars report actual transfer speed. Sum active concurrent files;
+            // completed or stale workers must not keep inflating the displayed rate.
+            if Self.captures(#"^\s*100%"#, in: String(text[separator...].dropFirst())) != nil {
+                fileRates.removeValue(forKey: title)
+            } else { fileRates[title] = (rate, date) }
+            fileRates = fileRates.filter { date.timeIntervalSince($0.value.1) < 5 }
+            progress.stage = .downloading
+            progress.bytesPerSecond = fileRates.values.reduce(0) { $0 + $1.0 }
+            progress.speedUpdatedAt = date
             progress.sequence += 1
             return progress
         }

@@ -77,7 +77,7 @@ print('Fetching 32 files: 100%|██| 32/32 [00:02]', flush=True)
     try await wait { store.modelDownloadProgress[.t2i]?.percentage == "25%" }
     store.setupTask?.cancel(); try await wait { !store.isPreparingResources }
     try check(store.modelDownloadProgress[.t2i] == nil && !store.modelDownloadErrors.contains(.t2i)
-              && store.modelDownloadMessages[.t2i]?.contains("已停止") == true
+              && store.modelDownloadMessages[.t2i]?.contains("Stopped") == true
               && fm.fileExists(atPath: ModelResource.t2i.destination(in: layout).path + "/partial"), "stopping clears telemetry and retains downloaded files")
     try Data("normal".utf8).write(to: control)
     store.downloadModel(.t2i)

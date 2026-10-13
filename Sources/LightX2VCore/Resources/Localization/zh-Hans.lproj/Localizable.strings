@@ -380,3 +380,7 @@
 "llama.cpp shared-library link points outside its directory. Download it again." = "llama.cpp 动态库链接超出运行目录，请重新下载。";
 "llama.cpp verification failed. Download it again." = "llama.cpp 文件校验失败，请重新下载。";
 "· %@ s" = "· %@ 秒";
+"Download source" = "下载来源";
+"Open ModelScope" = "打开 ModelScope";
+"modelscope was not found in the selected Python environment. Run python -m pip install modelscope there, or download manually using the guide." = "所选 Python 环境中没有 modelscope。请在该环境运行 python -m pip install modelscope，或按指南手动下载。";
+"ModelScope download failed. Retry or download manually using the guide.\n" = "ModelScope 下载失败。请重试或按指南手动下载。\n";

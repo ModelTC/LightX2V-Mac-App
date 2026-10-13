@@ -380,3 +380,7 @@
 "llama.cpp shared-library link points outside its directory. Download it again." = "A ligação llama.cpp aponta fora da pasta. Transfira novamente.";
 "llama.cpp verification failed. Download it again." = "Verificação llama.cpp falhou. Transfira novamente.";
 "· %@ s" = "· %@ s";
+"Download source" = "Fonte de transferência";
+"Open ModelScope" = "Abrir ModelScope";
+"modelscope was not found in the selected Python environment. Run python -m pip install modelscope there, or download manually using the guide." = "modelscope não foi encontrado no ambiente Python selecionado. Execute python -m pip install modelscope ou siga o guia de transferência manual.";
+"ModelScope download failed. Retry or download manually using the guide.\n" = "A transferência do ModelScope falhou. Tente novamente ou siga o guia manual.\n";

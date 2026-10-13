@@ -454,6 +454,13 @@ final class AppStore: ObservableObject {
         (value.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath
     }
 
+    func setModelDownloadSource(_ source: ModelDownloadSource) {
+        guard !busy, settings.modelDownloadSource != source else { return }
+        modelDownloadMessages.removeAll(); modelDownloadErrors.removeAll(); modelDownloadProgress.removeAll()
+        settings.modelDownloadSource = source
+        persist()
+    }
+
     func downloadModel(_ resource: ModelResource) {
         guard !busy, !needsGeneralSetup else { return }
         let downloadID = UUID(); modelDownloadID = downloadID
@@ -461,6 +468,7 @@ final class AppStore: ObservableObject {
         modelDownloadErrors.remove(resource); modelDownloadMessages[resource] = L10n.english("Fetching model information…")
         modelDownloadProgress[resource] = ModelDownloadProgress()
         let python = settings.python; let layout = WorkspaceLayout(settings.workingDirectory)
+        let source = settings.modelDownloadSource
         setupTask = Task { [weak self] in
             guard let self else { return }
             defer {
@@ -468,7 +476,7 @@ final class AppStore: ObservableObject {
                 self.modelDownloadProgress.removeValue(forKey: resource); self.finishSetupTask()
             }
             do {
-                let path = try await HuggingFaceModelDownloader.download(resource, python: python, workspace: layout, onProgress: { [weak self] progress in
+                let path = try await ModelDownloader.download(resource, python: python, workspace: layout, source: source, onProgress: { [weak self] progress in
                     Task { @MainActor [weak self] in
                         guard let self, self.modelDownloadID == downloadID,
                               progress.sequence > (self.modelDownloadProgress[resource]?.sequence ?? -1) else { return }

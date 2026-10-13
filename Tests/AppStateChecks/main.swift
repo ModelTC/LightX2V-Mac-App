@@ -18,6 +18,11 @@ struct AppStateChecks {
             try await turboPreparationChecks()
             return
         }
+        if CommandLine.arguments.dropFirst().first == "--download-source-only" {
+            try await modelDownloadSourceChecks()
+            try await modelDownloadStateChecks()
+            return
+        }
         if CommandLine.arguments.dropFirst().first == "--resolution-only" {
             try await imageResolutionChecks()
             return

@@ -380,3 +380,7 @@
 "llama.cpp shared-library link points outside its directory. Download it again." = "llama.cpp shared-library link points outside its directory. Download it again.";
 "llama.cpp verification failed. Download it again." = "llama.cpp verification failed. Download it again.";
 "· %@ s" = "· %@ s";
+"Download source" = "Download source";
+"Open ModelScope" = "Open ModelScope";
+"modelscope was not found in the selected Python environment. Run python -m pip install modelscope there, or download manually using the guide." = "modelscope was not found in the selected Python environment. Run python -m pip install modelscope there, or download manually using the guide.";
+"ModelScope download failed. Retry or download manually using the guide.\n" = "ModelScope download failed. Retry or download manually using the guide.\n";

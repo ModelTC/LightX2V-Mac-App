@@ -8,6 +8,13 @@ struct ModelPreparationView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L10n.text("Download source")).font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.muted)
+                Picker(L10n.text("Download source"), selection: Binding(get: { store.settings.modelDownloadSource }, set: store.setModelDownloadSource)) {
+                    ForEach(ModelDownloadSource.allCases) { source in Text(source.title).tag(source) }
+                }.pickerStyle(.segmented).labelsHidden().controlSize(.small)
+                    .disabled(store.busy).accessibilityLabel(L10n.text("Download source"))
+            }
             ModelDownloadCard(resource: .turbo, path: $store.modelDirectory)
             HStack(spacing: 8) {
                 Image(systemName: "sparkles").foregroundStyle(Palette.muted)
@@ -34,7 +41,6 @@ private struct ModelDownloadCard: View {
     let resource: ModelResource
     @Binding var path: String
     @State private var showsGuide = false
-    @State private var copied = false
     @State private var statusPinned = false
     @State private var statusHovered = false
     private var showsStatus: Bool { statusPinned || statusHovered }
@@ -60,10 +66,10 @@ private struct ModelDownloadCard: View {
             HStack(spacing: 6) {
                 Text(resource == .turbo ? QwenImage21Turbo.title : resource.title).font(.system(size: 12, weight: .semibold)).lineLimit(1).help(resource.modelName)
                 Spacer(minLength: 0)
-                Button { showsGuide = true; copied = false } label: { Text(L10n.text("Download guide")) }
+                Button { showsGuide = true } label: { Text(L10n.text("Download guide")) }
                     .font(.system(size: 10)).buttonStyle(HoverButtonStyle(radius: 6))
                     .accessibilityLabel(L10n.render(resource.title) + " " + L10n.text("Download guide"))
-                    .popover(isPresented: $showsGuide, arrowEdge: .leading) { guide }
+                    .popover(isPresented: $showsGuide, arrowEdge: .leading) { ModelDownloadGuide(resource: resource, source: store.settings.modelDownloadSource) }
             }.frame(height: 20)
             HStack(spacing: 0) {
                 PathInputField(title: L10n.render(resource.title) + " " + L10n.text("Directory"), placeholder: L10n.text("Local model directory"), symbol: nil, text: $path, minimumHeight: 36)
@@ -110,25 +116,6 @@ private struct ModelDownloadCard: View {
             }
     }
 
-    private var guide: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(resource.repository).font(.system(size: 13, weight: .semibold)).textSelection(.enabled)
-            Text(L10n.text("Model download command. Save anywhere; automatic downloads go to the models directory in your workspace."))
-                .font(.system(size: 11)).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
-            Text(resource.relativeCommand).environment(\.layoutDirection, .leftToRight).font(.system(size: 11, design: .monospaced))
-                .textSelection(.enabled).fixedSize(horizontal: false, vertical: true).padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading).background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8))
-            HStack {
-                Link(destination: resource.url) { Text(L10n.text("Open Hugging Face")).underline().padding(.horizontal, 6).padding(.vertical, 5) }
-                    .buttonStyle(HoverButtonStyle(radius: 6))
-                Spacer()
-                Button(copied ? L10n.text("Copied") : L10n.text("Copy command")) {
-                    NSPasteboard.general.clearContents(); NSPasteboard.general.setString(resource.relativeCommand, forType: .string); copied = true
-                }.buttonStyle(SettingsActionStyle())
-            }.font(.system(size: 11))
-        }.padding(20).frame(width: 430).foregroundStyle(Palette.ink)
-    }
-
     private func concise(_ message: String) -> String {
         let localized = L10n.render(message)
         let firstLine = localized.split(whereSeparator: \.isNewline).first.map(String.init) ?? localized
@@ -141,6 +128,35 @@ private struct ModelDownloadCard: View {
         panel.directoryURL = path.isEmpty ? URL(fileURLWithPath: store.settings.workingDirectory) : URL(fileURLWithPath: path).deletingLastPathComponent()
         if panel.runModal() == .OK, let url = panel.url { path = url.path }
     }
+}
+
+struct ModelDownloadGuide: View {
+    @ObservedObject private var language = LanguagePreferences.shared
+    let resource: ModelResource
+    let source: ModelDownloadSource
+    @State private var copied = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(resource.repository).font(.system(size: 13, weight: .semibold)).textSelection(.enabled)
+            Text(L10n.text("Model download command. Save anywhere; automatic downloads go to the models directory in your workspace."))
+                .font(.system(size: 11)).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
+            ScrollView(.horizontal) {
+                Text(resource.relativeCommand(source: source)).font(.system(size: 11, design: .monospaced))
+                    .textSelection(.enabled).fixedSize().padding(12)
+            }.environment(\.layoutDirection, .leftToRight).scrollIndicators(.visible).frame(height: 52)
+                .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8))
+            HStack {
+                Link(destination: resource.url(source: source)) { Text(L10n.render(source.linkTitle)).underline().padding(.horizontal, 6).padding(.vertical, 5) }
+                    .buttonStyle(HoverButtonStyle(radius: 6))
+                Spacer()
+                Button(copied ? L10n.text("Copied") : L10n.text("Copy command")) {
+                    NSPasteboard.general.clearContents(); NSPasteboard.general.setString(resource.relativeCommand(source: source), forType: .string); copied = true
+                }.buttonStyle(SettingsActionStyle())
+            }.font(.system(size: 11))
+        }.padding(20).frame(width: 430).foregroundStyle(Palette.ink)
+            .onChange(of: source) { _, _ in copied = false }
+    }
+
 }
 
 private struct ModelDownloadFeedback: View {
