@@ -171,7 +171,7 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(output.read_bytes(),b'keep me')
 
     def test_automatic_text_resolution_reaches_cli_without_size(self):
-        for resolution in (1024, 2048):
+        for resolution in (512, 1024, 2048):
             output = self.root / f'auto-{resolution}/image.png'
             self.request.pop('width', None); self.request.pop('height', None)
             self.request.update(resolution=resolution, output=str(output))
@@ -185,7 +185,7 @@ class BridgeTests(unittest.TestCase):
 
     def test_automatic_resolution_rejects_ambiguous_or_invalid_sizes(self):
         base = {**self.request, 'width': None, 'height': None}
-        for resolution in (True, '1024', 1024.0, 0, 512, 4096):
+        for resolution in (True, '1024', 1024.0, 0, 256, 4096):
             with self.subTest(resolution=resolution), self.assertRaises(ValueError):
                 bridge.arguments({**base, 'resolution': resolution}, self.config)
         with self.assertRaises(ValueError):

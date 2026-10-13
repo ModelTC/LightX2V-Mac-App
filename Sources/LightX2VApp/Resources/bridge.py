@@ -74,8 +74,8 @@ def arguments(request, config_path):
         raise ValueError("Enter a prompt between 1 and 20000 characters.")
     resolution = request.get("resolution")
     if resolution is not None:
-        if type(resolution) is not int or resolution not in (1024, 2048) or any(request.get(k) is not None for k in ("width", "height")):
-            raise ValueError("Choose 1K or 2K for adaptive mode; width and height are not required.")
+        if type(resolution) is not int or resolution not in (512, 1024, 2048) or any(request.get(k) is not None for k in ("width", "height")):
+            raise ValueError("Choose 512, 1K or 2K for adaptive mode; width and height are not required.")
         size_args = ["--resolution", str(resolution)]
         if request.get("aspectRatio"):
             from prompt_enhancement import ratio_value

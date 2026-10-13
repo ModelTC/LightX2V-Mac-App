@@ -12,12 +12,13 @@ struct GenerationParametersView: View {
                 get: { store.generationSize.resolution },
                 set: { store.generationSize.selectResolution($0) }
             )) {
-                Text("1K").tag(ImageResolution.oneK)
-                Text("2K").tag(ImageResolution.twoK)
+                ForEach(ImageResolution.allCases) { resolution in
+                    Text(resolution.rawValue).tag(resolution)
+                }
             }
             .pickerStyle(.segmented).labelsHidden()
             .accessibilityLabel(L10n.text("Resolution"))
-            .help(L10n.text("Switch between 1K and 2K while preserving aspect ratio"))
+            .help(L10n.text("Switch between 512, 1K and 2K while preserving aspect ratio"))
 
             label(L10n.text("Aspect ratio")).padding(.top, 3)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 6) {

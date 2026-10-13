@@ -18,6 +18,10 @@ struct AppStateChecks {
             try await turboPreparationChecks()
             return
         }
+        if CommandLine.arguments.dropFirst().first == "--resolution-only" {
+            try await imageResolutionChecks()
+            return
+        }
         if CommandLine.arguments.dropFirst().first == "--startup-only" {
             try await startupEnvironmentChecks()
             return

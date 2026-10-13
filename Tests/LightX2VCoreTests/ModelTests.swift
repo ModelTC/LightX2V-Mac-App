@@ -19,7 +19,8 @@ struct CoreChecks {
         try persistentHistory()
         print("PASS atomic history persistence")
         try resolutionPresets()
-        print("PASS all 14 resolution presets and tier switches")
+        try smallResolutionPresets()
+        print("PASS all 21 resolution presets and tier switches")
         try automaticResolution()
         print("PASS automatic resolution encoding, restoration and tier switches")
         try sizeSelectionAndRestoration()
@@ -178,6 +179,25 @@ struct CoreChecks {
         }
     }
 
+    static func smallResolutionPresets() throws {
+        let expected: [(ImageAspectRatio, Int, Int)] = [
+            (.square, 512, 512), (.landscape43, 576, 448), (.portrait34, 448, 576),
+            (.landscape32, 640, 416), (.portrait23, 416, 640),
+            (.landscape169, 672, 384), (.portrait916, 384, 672)
+        ]
+        for (ratio, width, height) in expected {
+            var size = GenerationSize()
+            size.selectAspectRatio(ratio); size.selectResolution(.fiveTwelve)
+            try expect(size.dimensions == ImageDimensions(width: width, height: height), "incorrect 512 preset")
+            let request = try InferenceRequest(settings: .defaults, prompt: "512 preset", width: width, height: height, seed: 42, output: "/tmp/image.png")
+            let decoded = try JSONDecoder().decode(InferenceRequest.self, from: JSONEncoder().encode(request))
+            let restored = GenerationSize(width: decoded.width, height: decoded.height)
+            try expect(restored.resolution == .fiveTwelve && restored.aspectRatio == ratio, "512 history not restored")
+            size.selectResolution(.twoK); size.selectResolution(.fiveTwelve)
+            try expect(size.aspectRatio == ratio && size.dimensions == restored.dimensions, "512 tier switch lost ratio")
+        }
+    }
+
     static func sizeSelectionAndRestoration() throws {
         var selection = GenerationSize()
         try expect(selection.resolution == .oneK && selection.aspectRatio == nil && selection.dimensions == nil && selection.automaticResolution == 1024,
@@ -188,16 +208,16 @@ struct CoreChecks {
         try expect(selection.aspectRatio == .portrait916 && selection.resolution == .twoK, "orientation did not preserve 2K")
         try expect(selection.dimensions == ImageDimensions(width: 1536, height: 2752), "orientation swapped incorrectly")
         selection = GenerationSize(width: 512, height: 768)
-        try expect(selection.resolution == .oneK && selection.aspectRatio == .portrait23, "legacy portrait history not normalized")
-        try expect(selection.dimensions == ImageDimensions(width: 832, height: 1248), "legacy portrait dimensions are not a preset")
+        try expect(selection.resolution == .fiveTwelve && selection.aspectRatio == .portrait23, "legacy portrait history not normalized")
+        try expect(selection.dimensions == ImageDimensions(width: 416, height: 640), "legacy portrait dimensions are not a preset")
         selection.selectResolution(.twoK)
         try expect(selection.aspectRatio == .portrait23, "tier switch lost normalized ratio")
         try expect(selection.dimensions == ImageDimensions(width: 1696, height: 2528), "normalized tier switch has wrong dimensions")
         for (width, height, tier, ratio) in [
-            (768, 512, ImageResolution.oneK, ImageAspectRatio.landscape32),
+            (768, 512, ImageResolution.fiveTwelve, ImageAspectRatio.landscape32),
             (720, 1280, .oneK, .portrait916),
             (2560, 1440, .twoK, .landscape169),
-            (0, 0, .oneK, .square)
+            (0, 0, .fiveTwelve, .square)
         ] {
             let restored = GenerationSize(width: width, height: height)
             try expect(restored.resolution == tier && restored.aspectRatio == ratio, "legacy history chose wrong preset")
@@ -223,7 +243,7 @@ struct CoreChecks {
         selection.selectAspectRatio(.portrait34)
         try expect(selection.dimensions == ImageDimensions(width: 1792, height: 2400) && selection.automaticResolution == nil,
                    "switching back to a preset retained automatic mode")
-        for (width, height, resolution): (Int?, Int?, Int?) in [(nil, nil, 512), (1024, nil, 1024), (1024, 1024, 2048), (nil, nil, nil), (nil, 1024, nil)] {
+        for (width, height, resolution): (Int?, Int?, Int?) in [(nil, nil, 256), (1024, nil, 1024), (1024, 1024, 2048), (nil, nil, nil), (nil, 1024, nil)] {
             var rejected = false
             do { _ = try InferenceRequest(settings: .defaults, prompt: "test", width: width, height: height, seed: 42, output: "/tmp/image.png", resolution: resolution) }
             catch { rejected = true }

@@ -47,7 +47,7 @@
 "Choose" = "Auswählen";
 "Choose %@" = "%@ auswählen";
 "Choose %@." = "%@ auswählen.";
-"Choose 1K or 2K for adaptive mode; width and height are not required." = "Adaptiv: 1K oder 2K wählen, keine Maße nötig.";
+"Choose 512, 1K or 2K for adaptive mode; width and height are not required." = "Adaptiv: 512, 1K oder 2K wählen, keine Maße nötig.";
 "Choose PyTorch environment" = "PyTorch-Umgebung wählen";
 "Choose a LightX2V workspace first." = "Zuerst LightX2V-Arbeitsordner wählen.";
 "Choose a directory or paste its full path" = "Ordner wählen oder vollständigen Pfad einfügen";
@@ -303,7 +303,7 @@
 "Stopped · Download again to resume" = "Gestoppt · Erneut laden zum Fortsetzen";
 "Stopping" = "Wird gestoppt";
 "Stopping and releasing memory…" = "Stoppen und Speicher freigeben…";
-"Switch between 1K and 2K while preserving aspect ratio" = "Zwischen 1K und 2K wechseln und Seitenverhältnis beibehalten";
+"Switch between 512, 1K and 2K while preserving aspect ratio" = "Zwischen 512, 1K und 2K wechseln und Seitenverhältnis beibehalten";
 "Switches models based on reference images" = "Automatische Wahl: T2I / I2I";
 "Switching starts an empty history. Existing records and images stay in the previous workspace." = "Beim Wechsel beginnt ein leerer Verlauf. Vorhandene Daten bleiben im bisherigen Ordner.";
 "System Python" = "System-Python";

@@ -278,7 +278,7 @@ def inference_request(request, result):
     effective = dict(request)
     effective["prompt"] = result["rewritten_prompt"]
     effective.pop("promptEnhancement", None)
-    # A user's selected fixed shape takes precedence. Adaptive retains the 1K/2K
+    # A user's selected fixed shape takes precedence. Adaptive retains the 512/1K/2K
     # tier but can use the enhancer's semantic framing / chosen canvas image.
     if request.get("resolution") is not None:
         if result["wh_ratio"]:

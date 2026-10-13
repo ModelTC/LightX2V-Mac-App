@@ -47,7 +47,7 @@
 "Choose" = "선택";
 "Choose %@" = "%@ 선택";
 "Choose %@." = "%@을 선택하세요.";
-"Choose 1K or 2K for adaptive mode; width and height are not required." = "자동 조정은 1K 또는 2K를 선택하세요. 너비와 높이는 불필요합니다.";
+"Choose 512, 1K or 2K for adaptive mode; width and height are not required." = "자동 모드는 512, 1K 또는 2K를 선택하세요. 너비와 높이는 불필요합니다.";
 "Choose PyTorch environment" = "PyTorch 환경 선택";
 "Choose a LightX2V workspace first." = "먼저 LightX2V 작업 폴더를 선택하세요.";
 "Choose a directory or paste its full path" = "폴더 선택 또는 전체 경로 붙여넣기";
@@ -303,7 +303,7 @@
 "Stopped · Download again to resume" = "중지됨 · 다시 다운로드하여 계속";
 "Stopping" = "중지 중";
 "Stopping and releasing memory…" = "중지 및 메모리 해제 중…";
-"Switch between 1K and 2K while preserving aspect ratio" = "종횡비를 유지하며 1K와 2K 전환";
+"Switch between 512, 1K and 2K while preserving aspect ratio" = "종횡비를 유지하며 512, 1K, 2K 전환";
 "Switches models based on reference images" = "참조 이미지에 따라 자동 선택";
 "Switching starts an empty history. Existing records and images stay in the previous workspace." = "변경하면 새 기록으로 시작합니다. 기존 기록과 이미지는 이전 폴더에 남습니다.";
 "System Python" = "시스템 Python";

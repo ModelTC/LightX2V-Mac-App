@@ -89,8 +89,8 @@ public struct InferenceRequest: Codable {
             throw AppError.message(L10n.english("Enter a prompt between 1 and 20000 characters."))
         }
         if let resolution {
-            guard [1024, 2048].contains(resolution), width == nil, height == nil else {
-                throw AppError.message(L10n.english("Choose 1K or 2K for adaptive mode; width and height are not required."))
+            guard [512, 1024, 2048].contains(resolution), width == nil, height == nil else {
+                throw AppError.message(L10n.english("Choose 512, 1K or 2K for adaptive mode; width and height are not required."))
             }
         } else {
             guard let width, let height, ImageDimensions(width: width, height: height).isValid else {

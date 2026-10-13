@@ -1,9 +1,11 @@
 import Foundation
 
 public enum ImageResolution: String, CaseIterable, Identifiable {
-    case oneK = "1K", twoK = "2K"
+    case fiveTwelve = "512", oneK = "1K", twoK = "2K"
     public var id: String { rawValue }
-    public var baseDimension: Int { self == .oneK ? 1024 : 2048 }
+    public var baseDimension: Int {
+        switch self { case .fiveTwelve: return 512; case .oneK: return 1024; case .twoK: return 2048 }
+    }
 }
 
 public struct ImageDimensions: Equatable {
@@ -28,10 +30,17 @@ public enum ImageAspectRatio: String, CaseIterable, Identifiable {
     }
 
     public func dimensions(at resolution: ImageResolution) -> ImageDimensions {
-        // 1K: LightX2V image_dimensions(1024, ratio). 2K: Qwen's official table.
+        // 512 and 1K follow LightX2V image_dimensions(resolution, ratio). 2K uses Qwen's official table.
         // The 2K table is intentionally not derived by doubling the 1K sizes.
         let size: (Int, Int)
         switch (resolution, self) {
+        case (.fiveTwelve, .square): size = (512, 512)
+        case (.fiveTwelve, .landscape43): size = (576, 448)
+        case (.fiveTwelve, .portrait34): size = (448, 576)
+        case (.fiveTwelve, .landscape32): size = (640, 416)
+        case (.fiveTwelve, .portrait23): size = (416, 640)
+        case (.fiveTwelve, .landscape169): size = (672, 384)
+        case (.fiveTwelve, .portrait916): size = (384, 672)
         case (.oneK, .square): size = (1024, 1024)
         case (.oneK, .landscape43): size = (1184, 896)
         case (.oneK, .portrait34): size = (896, 1184)
@@ -62,7 +71,7 @@ public struct GenerationSize {
 
     public init(width: Int?, height: Int?, automaticResolution: Int? = nil) {
         if let automaticResolution {
-            resolution = automaticResolution == 2048 ? .twoK : .oneK
+            resolution = ImageResolution.allCases.first { $0.baseDimension == automaticResolution } ?? .oneK
             aspectRatio = nil
             return
         }

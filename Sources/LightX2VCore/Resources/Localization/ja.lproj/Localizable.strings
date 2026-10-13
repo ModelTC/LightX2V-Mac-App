@@ -47,7 +47,7 @@
 "Choose" = "選択";
 "Choose %@" = "%@を選択";
 "Choose %@." = "%@を選択してください。";
-"Choose 1K or 2K for adaptive mode; width and height are not required." = "自動調整は1Kか2Kを選択。幅と高さは不要です。";
+"Choose 512, 1K or 2K for adaptive mode; width and height are not required." = "自動調整は512、1K、2Kから選択。幅と高さは不要です。";
 "Choose PyTorch environment" = "PyTorch環境を選択";
 "Choose a LightX2V workspace first." = "まずLightX2V作業フォルダを選択してください。";
 "Choose a directory or paste its full path" = "フォルダを選択、または絶対パスを貼り付け";
@@ -303,7 +303,7 @@
 "Stopped · Download again to resume" = "停止済み · 再ダウンロードで再開";
 "Stopping" = "停止中";
 "Stopping and releasing memory…" = "停止してメモリを解放中…";
-"Switch between 1K and 2K while preserving aspect ratio" = "縦横比を維持して1Kと2Kを切り替え";
+"Switch between 512, 1K and 2K while preserving aspect ratio" = "縦横比を維持して512、1K、2Kを切り替え";
 "Switches models based on reference images" = "参照画像に応じて自動切替";
 "Switching starts an empty history. Existing records and images stay in the previous workspace." = "変更すると履歴は空になります。既存の記録と画像は元のフォルダに残ります。";
 "System Python" = "システムPython";
