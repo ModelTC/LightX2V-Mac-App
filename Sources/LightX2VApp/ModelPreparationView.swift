@@ -27,22 +27,20 @@ struct ModelPreparationView: View {
                     .disabled(store.busy).accessibilityLabel(L10n.text("Download source"))
             }
             ModelDownloadCard(resource: .turbo, path: $store.modelDirectory)
-            HStack(spacing: 8) {
-                Image(systemName: "sparkles").foregroundStyle(Palette.muted)
-                VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles").foregroundStyle(Palette.muted)
                     Text(L10n.text("Prompt enhancement")).font(.system(size: 12, weight: .semibold))
-                    if !store.settings.promptEnhancement.enabled {
-                        Text(L10n.text("Off · Enhancement model paths are optional"))
-                            .font(.system(size: 10)).foregroundStyle(Palette.muted)
-                    }
+                    Spacer(minLength: 4)
+                    Toggle(L10n.text("Prompt enhancement"), isOn: Binding(get: { store.settings.promptEnhancement.enabled }, set: store.setPromptEnhancementEnabled))
+                        .labelsHidden().toggleStyle(.switch).controlSize(.mini).tint(Palette.button)
+                        .disabled(store.configurationBusy).accessibilityLabel(L10n.text("Prompt enhancement"))
+                }.frame(height: 24).padding(.horizontal, 2)
+                VStack(alignment: .leading, spacing: 12) {
+                    ModelDownloadCard(resource: .t2i, path: $store.t2iDirectory)
+                    ModelDownloadCard(resource: .i2i, path: $store.i2iDirectory)
                 }
-                Spacer(minLength: 4)
-                Toggle(L10n.text("Prompt enhancement"), isOn: Binding(get: { store.settings.promptEnhancement.enabled }, set: store.setPromptEnhancementEnabled))
-                    .labelsHidden().toggleStyle(.switch).controlSize(.mini).tint(Palette.button)
-                    .disabled(store.configurationBusy).accessibilityLabel(L10n.text("Prompt enhancement"))
-            }.frame(height: 36).padding(.horizontal, 2)
-            ModelDownloadCard(resource: .t2i, path: $store.t2iDirectory)
-            ModelDownloadCard(resource: .i2i, path: $store.i2iDirectory)
+            }
         }
         .allowsHitTesting(!store.isImportingImages)
     }
