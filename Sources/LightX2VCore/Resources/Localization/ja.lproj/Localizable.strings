@@ -304,7 +304,6 @@
 "Stopping" = "停止中";
 "Stopping and releasing memory…" = "停止してメモリを解放中…";
 "Switch between 512, 1K and 2K while preserving aspect ratio" = "縦横比を維持して512、1K、2Kを切り替え";
-"Switches models based on reference images" = "参照画像に応じて自動切替";
 "Switching starts an empty history. Existing records and images stay in the previous workspace." = "変更すると履歴は空になります。既存の記録と画像は元のフォルダに残ります。";
 "System Python" = "システムPython";
 "T2I model" = "T2Iモデル";

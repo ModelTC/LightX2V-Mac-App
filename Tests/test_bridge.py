@@ -9,6 +9,8 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
+import types
 
 BRIDGE = Path(__file__).resolve().parents[1] / "Sources/LightX2VApp/Resources/bridge.py"
 sys.dont_write_bytecode = True
@@ -92,6 +94,46 @@ class BridgeTests(unittest.TestCase):
         event=json.loads(out.splitlines()[-1])
         self.assertEqual(event['status'],'failed')
         self.assertIn('deliberate fixture failure',event['message'])
+
+    def test_image_timer_starts_after_enhancement_and_is_separate_from_total(self):
+        events = []
+        pe = types.ModuleType('prompt_enhancement')
+        def enhance(request, destination, emit, supervisor):
+            time.sleep(.25)
+            emit('enhancement_result', prompt=request['prompt'], duration=.25)
+            return request
+        pe.run_enhancement = enhance
+        self.request['promptEnhancement'] = {}
+        with mock.patch.dict(sys.modules, {'prompt_enhancement': pe}), mock.patch.object(bridge, 'emit', side_effect=lambda kind, **fields: events.append(dict(type=kind, **fields))):
+            self.assertEqual(bridge.run(self.request, self.cfg), 0)
+        kinds = [e['type'] for e in events]
+        self.assertLess(kinds.index('enhancement_result'), kinds.index('inference_started'))
+        self.assertLess(kinds.index('inference_started'), kinds.index('step'))
+        done = events[-1]
+        self.assertGreaterEqual(done['duration'] - done['inferenceDuration'], .25)
+        self.assertGreater(done['inferenceDuration'], 0)
+
+    def test_enhancement_off_still_emits_an_independent_image_clock(self):
+        child = self.start(); out, err = child.communicate(timeout=15)
+        self.assertEqual(child.returncode, 0, err)
+        events = [json.loads(line) for line in out.splitlines()]
+        start = next(e for e in events if e['type'] == 'inference_started')
+        self.assertGreater(start['startedAt'], 0)
+        self.assertGreater(events[-1]['inferenceDuration'], 0)
+        self.assertGreaterEqual(events[-1]['duration'], events[-1]['inferenceDuration'])
+
+    def test_cancelled_enhancement_never_starts_the_image_timer(self):
+        events = []
+        pe = types.ModuleType('prompt_enhancement')
+        def cancel(request, destination, emit, supervisor):
+            supervisor.cancelled = True
+            raise bridge.RunCancelled()
+        pe.run_enhancement = cancel
+        self.request['promptEnhancement'] = {}
+        with mock.patch.dict(sys.modules, {'prompt_enhancement': pe}), mock.patch.object(bridge, 'emit', side_effect=lambda kind, **fields: events.append(dict(type=kind, **fields))):
+            self.assertEqual(bridge.run(self.request, self.cfg), 130)
+        self.assertNotIn('inference_started', [e['type'] for e in events])
+        self.assertIsNone(events[-1]['inferenceDuration'])
 
     def test_cancel_kills_an_uncooperative_inference_process(self):
         self.request['prompt']='SLEEP'

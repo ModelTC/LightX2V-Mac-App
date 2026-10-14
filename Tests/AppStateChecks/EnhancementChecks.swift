@@ -45,12 +45,13 @@ func enhancementStateChecks() async throws {
         if source=='FAIL_REWRITING':
             emit('done',status='failed',message='fixture truncated prompt'); sys.exit(1)
         emit('enhancement_prompt',delta=source); time.sleep(.2)
-        emit('enhancement_result',prompt='Enhanced '+source,whRatio='3:2',ratioFollow='',duration=.2)
+        emit('enhancement_result',prompt='Enhanced '+source,whRatio='3:2',ratioFollow='',duration=120)
         time.sleep(.2)
+    emit('inference_started',startedAt=time.time())
     for step in range(1,9):
         emit('step', step=step); time.sleep(.01)
     shutil.copyfile(Path(__file__).with_name('fixture.png'),request['output'])
-    emit('done',status='completed',width=32,height=32,duration=.4)
+    emit('done',status='completed',width=32,height=32,duration=144,inferenceDuration=24)
     """
     let python = try file("fixture-python", text: script, executable: true)
     _ = try file("source/lightx2v/infer.py")
@@ -103,6 +104,9 @@ func enhancementStateChecks() async throws {
     try check(store.settings.promptEnhancement.enabled, "enhancement cannot change midway through a run")
     try await wait({ store.isRunning })
     let first = store.generations[0]
+    try check(first.duration == 144 && first.inferenceDuration == 24 && first.inferenceStartedAt != nil
+              && store.elapsed(first) == "24 s" && store.enhancementElapsed(first) == "2 min 0 s",
+              "enhancement and image messages use independent clocks, while the full task duration is retained")
     try check(store.logs.contains("Enhancing prompt") && store.logs.contains("Prompt enhancement completed"), "APP enhancement log stays English with French interface")
     try check(store.currentStep == 8 && !store.logs.contains("思考 🐈") && !store.logs.contains("Enhanced Original input"),
               "eight Turbo steps are handled without an explicit total or streaming reply text in the task log")
@@ -123,6 +127,8 @@ func enhancementStateChecks() async throws {
     try await wait({ store.isRunning })
     try check(store.recentCreations.count == 1 && store.selectedCreation.count == 2, "both enhanced turns remain in the same creation")
     let reopened = AppStore(); reopened.selectedID = first.id
+    try check(reopened.selected?.inferenceDuration == 24 && reopened.selected?.inferenceStartedAt != nil
+              && reopened.elapsed(reopened.selected!) == "24 s", "relaunch restores image-only timing")
     try check(reopened.settings.promptEnhancement.enabled && reopened.selected?.enhancement?.thinking == "思考 🐈" && reopened.selected?.enhancement?.prompt == "Enhanced Original input", "relaunch restores enhancement switch, thinking and final reply")
     try check(reopened.selectedModel == nil && !reopened.canReferenceImages, "enhancement does not bypass manual model selection")
     store.prompt = "FAIL_ENHANCEMENT"; store.generate(); try await wait({ store.isRunning })
@@ -149,6 +155,8 @@ func enhancementStateChecks() async throws {
               "relaunch restores incomplete prompt text with its failure status")
     store.setPromptEnhancementEnabled(false); store.prompt = "Off input"; store.generate(); try await wait({ store.isRunning })
     try check(store.selected?.status == .completed && store.selected?.enhancement == nil && store.selected?.request.promptEnhancement == nil, "switch off returns to the original generation flow")
+    try check(store.selected?.inferenceDuration == 24 && store.selected?.inferenceStartedAt != nil
+              && store.elapsed(store.selected!) == "24 s", "enhancement-off image generation uses its own start event and clock")
     let reopenedOff = AppStore()
     try check(!reopenedOff.settings.promptEnhancement.enabled, "relaunch preserves an explicitly disabled enhancement")
     store.setPromptEnhancementEnabled(true)

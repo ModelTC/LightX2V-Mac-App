@@ -51,8 +51,10 @@ struct GenerationSnapshot: Codable {
         var requestFile: String
         var logFile: String
         var startedAt: String
+        var inferenceStartedAt: String?
         var finishedAt: String?
         var durationSeconds: Double?
+        var inferenceDurationSeconds: Double?
         var error: String?
     }
 
@@ -89,7 +91,9 @@ struct GenerationSnapshot: Codable {
         outputImages = [request.output]
         execution = Execution(directory: job.directory, sourceDirectory: request.repository, python: job.python,
                               requestFile: job.directory + "/request.json", logFile: job.directory + "/run.log",
-                              startedAt: createdAt, finishedAt: job.finishedAt?.ISO8601Format(), durationSeconds: job.duration, error: job.error)
+                              startedAt: createdAt, inferenceStartedAt: job.inferenceStartedAt?.ISO8601Format(),
+                              finishedAt: job.finishedAt?.ISO8601Format(), durationSeconds: job.duration,
+                              inferenceDurationSeconds: job.inferenceDuration, error: job.error)
     }
 
     func generation() throws -> Generation {
@@ -139,6 +143,11 @@ struct GenerationSnapshot: Codable {
         job.createdAt = created; job.status = status; job.enhancement = reply
         job.python = execution.python; job.actualWidth = parameters.width; job.actualHeight = parameters.height
         job.duration = execution.durationSeconds; job.error = execution.error
+        job.inferenceDuration = execution.inferenceDurationSeconds
+        if let started = execution.inferenceStartedAt {
+            guard let date = ISO8601DateFormatter().date(from: started) else { throw AppError.message("Invalid inferenceStartedAt") }
+            job.inferenceStartedAt = date
+        }
         if let finished = execution.finishedAt {
             guard let date = ISO8601DateFormatter().date(from: finished) else { throw AppError.message("Invalid finishedAt") }
             job.finishedAt = date

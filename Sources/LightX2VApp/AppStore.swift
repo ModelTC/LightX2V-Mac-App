@@ -717,6 +717,11 @@ final class AppStore: ObservableObject {
             generations[index].enhancement?.status = .completed
             appendLog(L10n.english("Prompt enhancement completed\n"))
             saveGeneration(generations[index]); persist()
+        case "inference_started":
+            guard let index = generations.firstIndex(where: { $0.id == id }),
+                  let timestamp = event["startedAt"] as? Double else { break }
+            generations[index].inferenceStartedAt = Date(timeIntervalSince1970: timestamp)
+            saveGeneration(generations[index]); persist()
         case "log":
             appendLog((event["message"] as? String ?? "") + "\n")
         case "status":
@@ -738,6 +743,7 @@ final class AppStore: ObservableObject {
             if let index = generations.firstIndex(where: { $0.id == id }) {
                 generations[index].actualWidth = event["width"] as? Int
                 generations[index].actualHeight = event["height"] as? Int
+                generations[index].inferenceDuration = event["inferenceDuration"] as? Double
             }
             markFinished(id, status: status, message: message, duration: event["duration"] as? Double)
         default: break
@@ -756,6 +762,9 @@ final class AppStore: ObservableObject {
         generations[index].finishedAt = Date()
         generations[index].error = message
         generations[index].duration = duration ?? startedAt.map { Date().timeIntervalSince($0) }
+        if generations[index].inferenceDuration == nil, let start = generations[index].inferenceStartedAt {
+            generations[index].inferenceDuration = max(0, Date().timeIntervalSince(start))
+        }
         if generations[index].enhancement?.status.isActive == true {
             generations[index].enhancement?.thinking = thinkingStreams[id]?.text ?? ""
             if let partial = promptStreams[id]?.text, !partial.isEmpty {
@@ -808,7 +817,18 @@ final class AppStore: ObservableObject {
     }
 
     func elapsed(_ generation: Generation, now: Date = Date()) -> String {
-        let seconds = Int(generation.duration ?? now.timeIntervalSince(generation.createdAt))
+        guard let duration = generation.inferenceDuration ?? generation.inferenceStartedAt.map({
+            (generation.finishedAt ?? now).timeIntervalSince($0)
+        }) else { return "—" }
+        return formatDuration(duration)
+    }
+
+    func enhancementElapsed(_ generation: Generation, now: Date = Date()) -> String {
+        formatDuration(generation.enhancement?.duration ?? (generation.finishedAt ?? now).timeIntervalSince(generation.createdAt))
+    }
+
+    private func formatDuration(_ duration: Double) -> String {
+        let seconds = Int(max(0, duration))
         return seconds < 60 ? L10n.english("%@ s", [String(describing: seconds)]) : L10n.english("%@ min %@ s", [String(describing: seconds / 60), String(describing: seconds % 60)])
     }
 

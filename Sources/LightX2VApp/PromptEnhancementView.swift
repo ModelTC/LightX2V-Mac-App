@@ -11,6 +11,7 @@ final class EnhancementTextStream: ObservableObject {
 
 struct PromptEnhancementMessageView: View {
     @ObservedObject private var language = LanguagePreferences.shared
+    @EnvironmentObject var store: AppStore
     let job: Generation
     let reply: PromptEnhancementReply
     let thinkingStream: EnhancementTextStream
@@ -32,7 +33,20 @@ struct PromptEnhancementMessageView: View {
                         Text("LightX2V").font(.system(size: 12, weight: .semibold))
                         Text(L10n.text("Prompt enhancement")).font(.system(size: 10)).foregroundStyle(Palette.muted)
                     }
-                    Text(L10n.render(reply.mode.title)).font(.system(size: 10)).foregroundStyle(Palette.muted)
+                    HStack(spacing: 6) {
+                        if reply.status == .completed {
+                            Label(L10n.text("Enhanced"), systemImage: "checkmark.circle.fill").foregroundStyle(Palette.green)
+                            Text("·")
+                            Text(L10n.render(store.enhancementElapsed(job))).monospacedDigit()
+                            if job.request.resolution != nil, let ratio = reply.whRatio, !ratio.isEmpty { Text("· \(ratio)") }
+                        } else if reply.status.isActive {
+                            TimelineView(.periodic(from: .now, by: 1)) { context in
+                                Text(L10n.render(store.enhancementElapsed(job, now: context.date))).monospacedDigit()
+                            }
+                        } else {
+                            Text(L10n.render(store.enhancementElapsed(job))).monospacedDigit()
+                        }
+                    }.font(.system(size: 10)).foregroundStyle(Palette.muted)
                 }
             }.frame(maxWidth: .infinity, alignment: .leading)
             Toggle(L10n.text("Show reasoning"), isOn: $showsThinking)
@@ -70,20 +84,14 @@ private struct EnhancedPromptBody: View {
                     .accessibilityIdentifier("enhanced-prompt")
             }
             if reply.status == .completed {
-                HStack(spacing: 7) {
-                    Image(systemName: "checkmark").foregroundStyle(Palette.green)
-                    Text(L10n.text("Enhanced")).foregroundStyle(Palette.muted)
-                    if let duration = reply.duration { Text(L10n.text("· %@ s", [String(describing: Int(duration.rounded()))])).foregroundStyle(Palette.muted) }
-                    if job.request.resolution != nil, let ratio = reply.whRatio, !ratio.isEmpty {
-                        Text("· \(ratio)").foregroundStyle(Palette.muted)
-                    }
-                    Spacer()
+                HStack(spacing: 4) {
                     Button {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(text, forType: .string)
-                    } label: { Image(systemName: "doc.on.doc").frame(width: 26, height: 26) }
-                        .buttonStyle(HoverButtonStyle(radius: 6)).help(L10n.text("Copy enhanced prompt")).accessibilityLabel(L10n.text("Copy enhanced prompt"))
-                }.font(.system(size: 10))
+                    } label: {
+                        Image(systemName: "doc.on.doc").frame(width: 30, height: 30)
+                    }.help(L10n.text("Copy enhanced prompt")).accessibilityLabel(L10n.text("Copy enhanced prompt"))
+                }.font(.system(size: 13)).foregroundStyle(Palette.muted).buttonStyle(HoverButtonStyle(radius: 6))
             } else if reply.status.isActive {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.mini)

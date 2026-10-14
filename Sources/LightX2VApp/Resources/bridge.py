@@ -209,6 +209,7 @@ def run(request, cfg):
     if Path(request["output"]).exists():
         raise ValueError("Output file already exists; create a new generation task")
     started = time.monotonic()
+    inference_started = None
     supervisor = ChildSupervisor()
     try:
         if request.get("promptEnhancement") is not None:
@@ -218,6 +219,8 @@ def run(request, cfg):
         cmd = arguments(request, config_path)
         config_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
         (destination / "invocation.json").write_text(json.dumps({"argv": cmd, "cwd": str(destination)}, ensure_ascii=False, indent=2), encoding="utf-8")
+        inference_started = time.monotonic()
+        emit("inference_started", startedAt=time.time())
         emit("status", message="Loading model", phase="loading")
         tail = []
         with (destination / "inference.log").open("w", encoding="utf-8") as log:
@@ -242,11 +245,13 @@ def run(request, cfg):
         if code != 0:
             raise RuntimeError(f"Inference process exited ({code})\n" + "\n".join(tail[-12:]))
         width, height = validate_image(request["output"], request.get("width"), request.get("height"))
-        emit("done", status="completed", image=request["output"], width=width, height=height, duration=time.monotonic() - started)
+        emit("done", status="completed", image=request["output"], width=width, height=height, duration=time.monotonic() - started,
+             inferenceDuration=time.monotonic() - inference_started)
         return 0
     except BaseException:
         if supervisor.cancelled:
-            emit("done", status="cancelled", message="Generation stopped", duration=time.monotonic() - started)
+            emit("done", status="cancelled", message="Generation stopped", duration=time.monotonic() - started,
+                 inferenceDuration=time.monotonic() - inference_started if inference_started is not None else None)
             return 130
         raise
     finally:

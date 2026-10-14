@@ -304,7 +304,6 @@
 "Stopping" = "중지 중";
 "Stopping and releasing memory…" = "중지 및 메모리 해제 중…";
 "Switch between 512, 1K and 2K while preserving aspect ratio" = "종횡비를 유지하며 512, 1K, 2K 전환";
-"Switches models based on reference images" = "참조 이미지에 따라 자동 선택";
 "Switching starts an empty history. Existing records and images stay in the previous workspace." = "변경하면 새 기록으로 시작합니다. 기존 기록과 이미지는 이전 폴더에 남습니다.";
 "System Python" = "시스템 Python";
 "T2I model" = "T2I 모델";

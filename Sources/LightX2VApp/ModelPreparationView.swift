@@ -31,8 +31,10 @@ struct ModelPreparationView: View {
                 Image(systemName: "sparkles").foregroundStyle(Palette.muted)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(L10n.text("Prompt enhancement")).font(.system(size: 12, weight: .semibold))
-                    Text(store.settings.promptEnhancement.enabled ? L10n.text("Switches models based on reference images") : L10n.text("Off · Enhancement model paths are optional"))
-                        .font(.system(size: 10)).foregroundStyle(Palette.muted)
+                    if !store.settings.promptEnhancement.enabled {
+                        Text(L10n.text("Off · Enhancement model paths are optional"))
+                            .font(.system(size: 10)).foregroundStyle(Palette.muted)
+                    }
                 }
                 Spacer(minLength: 4)
                 Toggle(L10n.text("Prompt enhancement"), isOn: Binding(get: { store.settings.promptEnhancement.enabled }, set: store.setPromptEnhancementEnabled))

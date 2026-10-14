@@ -163,6 +163,8 @@ public struct Generation: Codable, Identifiable {
     public var request: InferenceRequest
     public var status: GenerationStatus
     public var duration: Double?
+    public var inferenceStartedAt: Date?
+    public var inferenceDuration: Double?
     public var error: String?
     public var enhancement: PromptEnhancementReply?
     public var python: String = ""

@@ -304,7 +304,6 @@
 "Stopping" = "A parar";
 "Stopping and releasing memory…" = "A parar e libertar memória…";
 "Switch between 512, 1K and 2K while preserving aspect ratio" = "Alternar entre 512, 1K e 2K mantendo a proporção";
-"Switches models based on reference images" = "Seleção automática T2I / I2I";
 "Switching starts an empty history. Existing records and images stay in the previous workspace." = "A mudança inicia um histórico vazio. Os ficheiros anteriores ficam na pasta antiga.";
 "System Python" = "Python do sistema";
 "T2I model" = "Modelo T2I";
