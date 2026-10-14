@@ -1,10 +1,13 @@
 """Exercise release replacement and failure recovery without contacting GitHub."""
+import base64
 import copy
+from datetime import datetime
 import hashlib
 import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts/publish_latest.py"
 spec = importlib.util.spec_from_file_location("publish_latest", SCRIPT)
@@ -120,9 +123,6 @@ class LatestReleaseTests(unittest.TestCase):
         self.assertEqual(self.client.ref["object"]["sha"], "old")
 
 
-if __name__ == "__main__": unittest.main(verbosity=2)
-
-
 class StableReleaseTests(unittest.TestCase):
     def test_stable_replaces_only_its_package_and_keeps_latest_untouched(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -146,24 +146,98 @@ class StableReleaseTests(unittest.TestCase):
             self.assertEqual(client.assets[8]["name"], publisher.ASSET_NAME)
             self.assertEqual(client.ref["object"]["sha"], "old")
 
+class ReadmeClient:
+    repository = "example/app"
+
+    def __init__(self):
+        self.content = (
+            "| Channel | Download | Commit | Date (UTC+8) |\n"
+            "| --- | --- | --- | --- |\n"
+            "| Latest | [Download](latest.zip) | [`aaaaaaa`](https://github.com/example/app/commit/"
+            + "a" * 40 + ") | 2026-10-14 02:13 |\n"
+            "| Stable | [Download](stable.zip) · **Recommended** | old-stable | 2026-10-13 23:00 |\n")
+        self.writes = []
+
+    def api(self, method, path, payload=None):
+        if method == "GET" and path == "contents/README.md?ref=main":
+            return {"sha": "file-revision", "content": base64.b64encode(self.content.encode()).decode()}
+        if method == "PUT" and path == "contents/README.md":
+            self.writes.append(payload)
+            self.content = base64.b64decode(payload["content"]).decode()
+            return {}
+        raise AssertionError((method, path))
+
+
 class ReadmeCommitTests(unittest.TestCase):
-    def test_updates_one_channel_commit_without_changing_downloads(self):
-        import base64
-        class ReadmeClient:
-            repository = "example/app"
-            def __init__(self):
-                self.content = ("| Latest | [Download](latest.zip) | old-latest | Every build |\n"
-                                "| Stable | [Download](stable.zip) | old-stable | Manual |\n")
-            def api(self, method, path, payload=None):
-                if method == "GET":
-                    return {"sha": "file-revision", "content": base64.b64encode(self.content.encode()).decode()}
-                self.payload = payload
-                self.content = base64.b64decode(payload["content"]).decode()
-        client = ReadmeClient()
-        publisher.record_download_commit(client, "latest", "a" * 40)
-        self.assertIn("/commit/" + "a" * 40, client.content)
-        self.assertIn("| Stable | [Download](stable.zip) | old-stable | Manual |", client.content)
-        publisher.record_download_commit(client, "stable", "b" * 40)
-        self.assertIn("/commit/" + "a" * 40, client.content)
-        self.assertIn("/commit/" + "b" * 40, client.content)
-        self.assertEqual(client.payload["sha"], "file-revision")
+    def setUp(self):
+        self.client = ReadmeClient()
+
+    def row(self, tag):
+        return next(line for line in self.client.content.splitlines() if line.startswith(f"| {tag} |"))
+
+    def test_latest_records_commit_and_current_date_in_one_bot_update(self):
+        stable = self.row("Stable")
+        with patch.object(publisher, "datetime", wraps=datetime) as clock:
+            clock.now.return_value = datetime(2026, 10, 14, 15, 11, 59, tzinfo=publisher.DISPLAY_TIMEZONE)
+            publisher.record_download_commit(self.client, "latest", "b" * 40)
+            clock.now.assert_called_once_with(publisher.DISPLAY_TIMEZONE)
+        self.assertIn("/commit/" + "b" * 40, self.row("Latest"))
+        self.assertTrue(self.row("Latest").endswith(" | 2026-10-14 15:11 |"))
+        self.assertIn("[Download](latest.zip)", self.row("Latest"))
+        self.assertEqual(self.row("Stable"), stable)
+        self.assertEqual(len(self.client.writes), 1)
+        self.assertEqual(self.client.writes[0]["sha"], "file-revision")
+        self.assertIn("and date", self.client.writes[0]["message"])
+
+    def test_stable_copies_latest_date_without_changing_latest(self):
+        latest = self.row("Latest")
+        with patch.object(publisher, "datetime", wraps=datetime) as clock:
+            publisher.record_download_commit(self.client, "stable", "a" * 40)
+            clock.now.assert_not_called()
+        self.assertEqual(self.row("Latest"), latest)
+        self.assertIn("/commit/" + "a" * 40, self.row("Stable"))
+        self.assertTrue(self.row("Stable").endswith(" | 2026-10-14 02:13 |"))
+        self.assertIn("[Download](stable.zip) · **Recommended**", self.row("Stable"))
+
+    def test_latest_rebuild_refreshes_date_even_when_commit_is_unchanged(self):
+        with patch.object(publisher, "datetime", wraps=datetime) as clock:
+            clock.now.return_value = datetime(2026, 10, 15, 1, 2, tzinfo=publisher.DISPLAY_TIMEZONE)
+            publisher.record_download_commit(self.client, "latest", "a" * 40)
+        self.assertTrue(self.row("Latest").endswith(" | 2026-10-15 01:02 |"))
+        self.assertEqual(len(self.client.writes), 1)
+
+    def test_repeated_stable_promotion_does_not_create_redundant_commit(self):
+        publisher.record_download_commit(self.client, "stable", "a" * 40)
+        publisher.record_download_commit(self.client, "stable", "a" * 40)
+        self.assertEqual(len(self.client.writes), 1)
+
+    def test_stable_rejects_mismatched_latest_commit_without_writing(self):
+        with self.assertRaisesRegex(RuntimeError, "commit does not match"):
+            publisher.record_download_commit(self.client, "stable", "b" * 40)
+        self.assertEqual(self.client.writes, [])
+
+    def test_stable_rejects_missing_or_invalid_latest_date_without_writing(self):
+        for date in ("", "Every successful build", "2026-02-30 01:02", "2026-1-4 01:02"):
+            with self.subTest(date=date):
+                self.client = ReadmeClient()
+                self.client.content = self.client.content.replace("2026-10-14 02:13", date)
+                with self.assertRaisesRegex(RuntimeError, "date is missing or invalid"):
+                    publisher.record_download_commit(self.client, "stable", "a" * 40)
+                self.assertEqual(self.client.writes, [])
+
+    def test_missing_or_duplicate_channel_row_is_not_written(self):
+        latest = self.row("Latest")
+        for content in (self.client.content.replace(latest + "\n", ""), self.client.content + latest + "\n"):
+            with self.subTest(content=content):
+                self.client.content = content
+                with self.assertRaisesRegex(RuntimeError, "channel row missing"):
+                    publisher.record_download_commit(self.client, "latest", "b" * 40)
+                self.assertEqual(self.client.writes, [])
+
+    def test_unknown_channel_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Unknown release channel"):
+            publisher.record_download_commit(self.client, "nightly", "a" * 40)
+        self.assertEqual(self.client.writes, [])
+
+
+if __name__ == "__main__": unittest.main(verbosity=2)

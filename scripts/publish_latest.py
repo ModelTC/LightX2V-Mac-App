@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Maintain one non-expiring APP per release channel; called under workflow concurrency control."""
 import base64
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import os
@@ -13,6 +14,8 @@ import urllib.request
 
 ASSET_NAME = "LightX2V-APP-macOS-arm64.zip"
 PREFIX = "LightX2V-APP-macOS-arm64-"
+DISPLAY_TIMEZONE = timezone(timedelta(hours=8))
+DATE_FORMAT = "%Y-%m-%d %H:%M"
 
 
 class GitHub:
@@ -126,18 +129,37 @@ def publish(client, archive, sha, run_number, run_id, attempt, tag="latest"):
     return True
 
 
+def download_row_pattern(tag):
+    return re.compile(rf"^(\| {tag.title()} \| [^|\n]* \| )([^|\n]*)( \| )([^|\n]*)( \|)$", re.MULTILINE)
+
+
 def record_download_commit(client, tag, sha):
-    """Update only the published channel row, with optimistic file revision checks."""
+    """Record commit and date together; Stable inherits the verified Latest date."""
+    if tag not in {"latest", "stable"}:
+        raise ValueError("Unknown release channel")
     readme = client.api("GET", "contents/README.md?ref=main")
     content = base64.b64decode(readme["content"]).decode("utf-8")
-    pattern = re.compile(rf"^(\| {tag.title()} \| [^\n]*? \| )[^\n]*?( \| [^\n]* \|)$", re.MULTILINE)
+    if tag == "stable":
+        latest = download_row_pattern("latest").search(content)
+        if not latest or f"/commit/{sha})" not in latest[2]:
+            raise RuntimeError("Latest README commit does not match the promoted package")
+        date = latest[4]
+        try:
+            parsed = datetime.strptime(date, DATE_FORMAT)
+        except ValueError as error:
+            raise RuntimeError("Latest README date is missing or invalid") from error
+        if parsed.strftime(DATE_FORMAT) != date:
+            raise RuntimeError("Latest README date is missing or invalid")
+    else:
+        date = datetime.now(DISPLAY_TIMEZONE).strftime(DATE_FORMAT)
+    pattern = download_row_pattern(tag)
     link = f"[`{sha[:7]}`](https://github.com/{client.repository}/commit/{sha})"
-    updated, count = pattern.subn(lambda match: match[1] + link + match[2], content)
+    updated, count = pattern.subn(lambda match: match[1] + link + match[3] + date + match[5], content)
     if count != 1:
         raise RuntimeError("Download channel row missing from README")
     if updated != content:
         client.api("PUT", "contents/README.md", {
-            "message": f"docs: record {tag.title()} APP commit {sha[:7]}", "branch": "main",
+            "message": f"docs: record {tag.title()} APP commit {sha[:7]} and date", "branch": "main",
             "sha": readme["sha"], "content": base64.b64encode(updated.encode("utf-8")).decode("ascii")})
 
 
