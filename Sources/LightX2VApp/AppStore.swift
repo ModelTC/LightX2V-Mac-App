@@ -4,11 +4,14 @@ import LightX2VCore
 import UniformTypeIdentifiers
 
 enum GenerationModel: String, CaseIterable, Identifiable {
-    case qwenImage21Turbo
+    case qwenImage21Turbo, qwenImage21TurboInt8
 
     var id: String { rawValue }
     var title: String {
-        switch self { case .qwenImage21Turbo: return QwenImage21Turbo.title }
+        switch self {
+        case .qwenImage21Turbo: return QwenImage21Turbo.title
+        case .qwenImage21TurboInt8: return QwenImage21TurboInt8.title
+        }
     }
 }
 
@@ -21,6 +24,7 @@ final class AppStore: ObservableObject {
         }
     }
     @Published var modelDirectory: String { didSet { if oldValue != modelDirectory { modelPathChanged(.turbo) } } }
+    @Published var int8ModelDirectory: String { didSet { if oldValue != int8ModelDirectory { modelPathChanged(.turboInt8) } } }
     @Published var t2iDirectory: String { didSet { if oldValue != t2iDirectory { modelPathChanged(.t2i) } } }
     @Published var i2iDirectory: String { didSet { if oldValue != i2iDirectory { modelPathChanged(.i2i) } } }
     @Published var queuedModelDownloads: [ModelResource] = []
@@ -165,12 +169,17 @@ final class AppStore: ObservableObject {
     }
     var configurationBusy: Bool { isRunning || isChecking || isPreparingWorkspace || isPreparingResources }
     var busy: Bool { configurationBusy || isImportingImages }
-    var canReferenceImages: Bool { selectedModel == .qwenImage21Turbo && !needsGeneralSetup && !isPreparingWorkspace && terminationCompletion == nil }
+    var canReferenceImages: Bool { selectedModel != nil && !needsGeneralSetup && !isPreparingWorkspace && terminationCompletion == nil }
     var canAddImages: Bool { canReferenceImages && !isImportingImages }
     var needsGeneralSetup: Bool { !hasCompletedGeneralSetup || !settings.hasGeneralPaths }
     var width: Int? { generationSize.dimensions?.width }
     var height: Int? { generationSize.dimensions?.height }
-    var canGenerate: Bool { selectedModel != nil && !needsGeneralSetup && environmentReady && readyModelResources.contains(.turbo) && !busy && !isComposingPrompt && (!settings.promptEnhancement.enabled || enhancementResourcesReady) && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var selectedModelResource: ModelResource { selectedModel == .qwenImage21TurboInt8 ? .turboInt8 : .turbo }
+    var selectedModelDirectory: String { selectedModel == .qwenImage21TurboInt8 ? int8ModelDirectory : modelDirectory }
+    var selectedModelDownloadSource: ModelDownloadSource {
+        selectedModel == .qwenImage21TurboInt8 ? settings.qwenImage21TurboInt8.modelDownloadSource : settings.modelDownloadSource
+    }
+    var canGenerate: Bool { selectedModel != nil && !needsGeneralSetup && environmentReady && readyModelResources.contains(selectedModelResource) && !busy && !isComposingPrompt && (!settings.promptEnhancement.enabled || enhancementResourcesReady) && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var bridgePath: String {
         (Bundle.main.url(forResource: "bridge", withExtension: "py")
          ?? Bundle.module.url(forResource: "bridge", withExtension: "py")!).path
@@ -194,6 +203,7 @@ final class AppStore: ObservableObject {
         settings = data.settings; generations = data.generations
         creationSettings = data.creationSettings
         modelDirectory = data.settings.model
+        int8ModelDirectory = data.settings.qwenImage21TurboInt8.modelDirectory
         t2iDirectory = data.settings.promptEnhancement.t2iDirectory; i2iDirectory = data.settings.promptEnhancement.i2iDirectory
         hasCompletedGeneralSetup = data.hasCompletedGeneralSetup
         errorMessage = readError
@@ -426,7 +436,12 @@ final class AppStore: ObservableObject {
     }
 
     func resourceDirectory(_ resource: ModelResource) -> String {
-        switch resource { case .turbo: return modelDirectory; case .t2i: return t2iDirectory; case .i2i: return i2iDirectory }
+        switch resource {
+        case .turbo: return modelDirectory
+        case .turboInt8: return int8ModelDirectory
+        case .t2i: return t2iDirectory
+        case .i2i: return i2iDirectory
+        }
     }
 
     func modelPathChanged(_ resource: ModelResource) {
@@ -438,6 +453,7 @@ final class AppStore: ObservableObject {
         let path = Self.normalizedModelPath(resourceDirectory(resource))
         switch resource {
         case .turbo: updated.model = path
+        case .turboInt8: updated.qwenImage21TurboInt8.modelDirectory = path
         case .t2i:
             updated.promptEnhancement.t2iDirectory = path
             updated.promptEnhancement.t2iModel = ""; updated.promptEnhancement.t2iSystemPrompt = ""
@@ -474,6 +490,7 @@ final class AppStore: ObservableObject {
 
     private func restoreModelPaths() {
         modelDirectory = settings.model
+        int8ModelDirectory = settings.qwenImage21TurboInt8.modelDirectory
         t2iDirectory = settings.promptEnhancement.t2iDirectory; i2iDirectory = settings.promptEnhancement.i2iDirectory
     }
 
@@ -482,9 +499,10 @@ final class AppStore: ObservableObject {
     }
 
     func setModelDownloadSource(_ source: ModelDownloadSource) {
-        guard !busy, settings.modelDownloadSource != source else { return }
+        guard !busy, selectedModelDownloadSource != source else { return }
         modelDownloadMessages.removeAll(); modelDownloadErrors.removeAll(); modelDownloadProgress.removeAll()
-        settings.modelDownloadSource = source
+        if selectedModel == .qwenImage21TurboInt8 { settings.qwenImage21TurboInt8.modelDownloadSource = source }
+        else { settings.modelDownloadSource = source }
         persist()
     }
 
@@ -493,7 +511,7 @@ final class AppStore: ObservableObject {
     }
 
     func downloadAllModels() {
-        downloadModels([.turbo, .t2i, .i2i], all: true)
+        downloadModels([selectedModelResource, .t2i, .i2i], all: true)
     }
 
     func stopModelDownloads() {
@@ -515,7 +533,7 @@ final class AppStore: ObservableObject {
         queuedModelDownloads = Array(resources.dropFirst())
         let firstID = beginModelDownload(first)
         let python = settings.python; let layout = WorkspaceLayout(settings.workingDirectory)
-        let source = settings.modelDownloadSource
+        let source = selectedModelDownloadSource
         setupTask = Task { [weak self] in
             guard let self else { return }
             defer {
@@ -551,7 +569,12 @@ final class AppStore: ObservableObject {
                         }
                     }
                     try Task.checkCancellation()
-                    switch resource { case .turbo: self.modelDirectory = path; case .t2i: self.t2iDirectory = path; case .i2i: self.i2iDirectory = path }
+                    switch resource {
+                    case .turbo: self.modelDirectory = path
+                    case .turboInt8: self.int8ModelDirectory = path
+                    case .t2i: self.t2iDirectory = path
+                    case .i2i: self.i2iDirectory = path
+                    }
                     self.modelDownloadMessages[resource] = L10n.english("Download complete · Saved automatically")
                     self.refreshModelResources(); self.refreshEnhancementResources()
                     self.modelDownloadProgress.removeValue(forKey: resource); self.modelDownloadID = nil
@@ -634,8 +657,9 @@ final class AppStore: ObservableObject {
         guard !needsGeneralSetup else { showSettings = true; return }
         guard environmentReady else { showSettings = true; return }
         do {
-            try settings.validatePaths()
-            try ModelResource.turbo.validate(directory: settings.model)
+            let resource = selectedModelResource
+            try settings.validatePaths(modelDirectory: selectedModelDirectory)
+            try resource.validate(directory: selectedModelDirectory)
             if settings.promptEnhancement.enabled && (try? settings.promptEnhancement.validate(for: enhancementMode)) == nil {
                 showModelPreparation()
                 errorMessage = L10n.english("Configure complete enhancement model directories in model preparation, or turn off prompt enhancement.")
@@ -647,12 +671,18 @@ final class AppStore: ObservableObject {
             let directory = URL(fileURLWithPath: settings.outputDirectory)
                 .appendingPathComponent(formatter.string(from: Date()) + "-" + id.uuidString.prefix(8))
             var runSettings = settings
+            if selectedModel == .qwenImage21TurboInt8 {
+                runSettings.qwenImage21Turbo.modelDirectory = selectedModelDirectory
+            }
             if runSettings.promptEnhancement.enabled { runSettings.promptEnhancement = try runSettings.promptEnhancement.resolvedResources(for: enhancementMode) }
             var request = try InferenceRequest(settings: runSettings, prompt: prompt, width: width, height: height,
                                                seed: seed, output: directory.appendingPathComponent("image.png").path,
                                                inputImages: inputImages, resolution: generationSize.automaticResolution)
+            request.modelName = selectedModel?.title ?? QwenImage21Turbo.title
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            request.config = try QwenImage21Turbo.writeConfig(in: directory)
+            request.config = try selectedModel == .qwenImage21TurboInt8
+                ? QwenImage21TurboInt8.writeConfig(in: directory)
+                : QwenImage21Turbo.writeConfig(in: directory)
             request.inputImages = try InputImages.snapshot(inputImages, in: directory)
             let requestURL = directory.appendingPathComponent("request.json")
             var generation = Generation(id: id, creationID: selected?.creationID ?? draftCreationID, request: request)

@@ -24,7 +24,7 @@ public struct CreationSettings: Codable, Equatable {
         parameters = try values.decode(Parameters.self, forKey: .parameters)
         promptEnhancement = try values.decode(Enhancement.self, forKey: .promptEnhancement)
         updatedAt = try values.decode(String.self, forKey: .updatedAt)
-        guard modelName == QwenImage21Turbo.title,
+        guard [QwenImage21Turbo.title, QwenImage21TurboInt8.title].contains(modelName),
               ImageResolution.allCases.contains(where: { $0.baseDimension == parameters.resolution }),
               parameters.aspectRatio == "adaptive" || ImageAspectRatio(rawValue: parameters.aspectRatio) != nil,
               ISO8601DateFormatter().date(from: updatedAt) != nil else {

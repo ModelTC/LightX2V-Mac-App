@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import CryptoKit
 
 public enum ModelDownloadSource: String, Codable, CaseIterable, Identifiable, Sendable {
     case huggingFace, modelScope
@@ -10,18 +11,25 @@ public enum ModelDownloadSource: String, Codable, CaseIterable, Identifiable, Se
 }
 
 public enum ModelResource: String, CaseIterable, Identifiable, Sendable {
-    case turbo, t2i, i2i
+    case turbo, turboInt8, t2i, i2i
     public var id: String { rawValue }
     public var repository: String {
         switch self {
         case .turbo: return "Qwen/Qwen-Image-2.1-Turbo"
+        case .turboInt8: return "lightx2v/Qwen-Image-2.1-Turbo-INT8"
         case .t2i: return "lightx2v/Qwen-Image-2.1-PE-T2I-GGUF-Q8_0"
         case .i2i: return "lightx2v/Qwen-Image-2.1-PE-I2I-GGUF-Q8_0"
         }
     }
     public var title: String {
-        switch self { case .turbo: return L10n.english("Image generation model"); case .t2i: return "PE-T2I"; case .i2i: return "PE-I2I" }
+        switch self {
+        case .turbo: return L10n.english("Image generation model")
+        case .turboInt8: return L10n.english("Quantized image generation model")
+        case .t2i: return "PE-T2I"
+        case .i2i: return "PE-I2I"
+        }
     }
+    public var isTurbo: Bool { self == .turbo || self == .turboInt8 }
     public var modelName: String { repository.components(separatedBy: "/").last! }
     public var url: URL { url(source: .huggingFace) }
     public func url(source: ModelDownloadSource) -> URL {
@@ -41,14 +49,76 @@ public enum ModelResource: String, CaseIterable, Identifiable, Sendable {
 
     public func validate(directory: String) throws {
         guard directory.hasPrefix("/") else { throw AppError.message(L10n.english("Choose a local directory for %@.", [String(describing: title)])) }
-        if self == .turbo {
+        if isTurbo {
             let root = URL(fileURLWithPath: directory)
             for name in ["model_index.json", "transformer", "text_encoder", "vae", "scheduler", "processor"] {
                 guard FileManager.default.fileExists(atPath: root.appendingPathComponent(name).path) else {
-                    throw AppError.message(L10n.english("Image generation model is missing %@. Choose the complete Qwen-Image-2.1-Turbo directory.", [String(describing: name)]))
+                    let modelTitle = self == .turboInt8 ? QwenImage21TurboInt8.title : QwenImage21Turbo.title
+                    throw AppError.message(L10n.english("%@ is missing %@. Choose the complete model directory.", [String(describing: modelTitle), String(describing: name)]))
                 }
             }
+            if self == .turboInt8 { try Self.validateInt8Metal(in: root) }
         } else { _ = try Self.enhancementFiles(in: directory, mode: self == .t2i ? .t2i : .i2i) }
+    }
+
+    private struct Int8MetalManifest: Decodable {
+        struct Shape: Decodable, Equatable { let k: Int; let n: Int; let weightCount: Int
+            private enum CodingKeys: String, CodingKey { case k, n, weightCount = "weight_count" }
+        }
+        struct Library: Decodable { let file: String; let k: Int; let n: Int; let size: Int; let sha256: String }
+        let schemaVersion: Int
+        let modelRepo: String
+        let modelRevision: String
+        let requiredShapes: [Shape]
+        let libraries: [Library]
+        private enum CodingKeys: String, CodingKey {
+            case schemaVersion = "schema_version", modelRepo = "model_repo", modelRevision = "model_revision"
+            case requiredShapes = "required_shapes", libraries
+        }
+    }
+
+    private static func validateInt8Metal(in root: URL) throws {
+        let manifestURL = root.appendingPathComponent("apple_silicon_metal/manifest.json")
+        guard FileManager.default.isReadableFile(atPath: manifestURL.path) else {
+            throw AppError.message(L10n.english("Quantized model is missing apple_silicon_metal/manifest.json."))
+        }
+        let manifest: Int8MetalManifest
+        do { manifest = try JSONDecoder().decode(Int8MetalManifest.self, from: Data(contentsOf: manifestURL)) }
+        catch { throw AppError.message(L10n.english("The quantized model manifest is invalid.")) }
+        guard manifest.schemaVersion == 1,
+              manifest.modelRepo == "lightx2v/Qwen-Image-2.1-Turbo-INT8",
+              manifest.modelRevision == "b572c2d129f1f440c1643e1be730ac1336f2d5d5",
+              manifest.requiredShapes == [
+                .init(k: 4096, n: 4096, weightCount: 128),
+                .init(k: 4096, n: 12288, weightCount: 64),
+                .init(k: 12288, n: 4096, weightCount: 32)
+              ],
+              !manifest.libraries.isEmpty else {
+            throw AppError.message(L10n.english("The quantized model manifest does not match the supported Qwen INT8 Metal package."))
+        }
+        let requiredShapes = Set(manifest.requiredShapes.map { "\($0.k):\($0.n)" })
+        let libraryShapes = Set(manifest.libraries.map { "\($0.k):\($0.n)" })
+        guard requiredShapes == libraryShapes,
+              manifest.libraries.allSatisfy({ $0.file == "int8_k\($0.k)_n\($0.n).metallib" && $0.sha256.count == 64 && $0.sha256.allSatisfy(\.isHexDigit) }) else {
+            throw AppError.message(L10n.english("The quantized model manifest has incomplete or invalid K/N Metal library coverage."))
+        }
+        let fm = FileManager.default
+        for library in manifest.libraries {
+            guard !library.file.isEmpty, !library.file.contains("/"), !library.file.contains("\\") else {
+                throw AppError.message(L10n.english("The quantized model manifest contains an unsafe Metal library path."))
+            }
+            let file = root.appendingPathComponent("apple_silicon_metal").appendingPathComponent(library.file)
+            guard fm.isReadableFile(atPath: file.path),
+                  let attributes = try? fm.attributesOfItem(atPath: file.path),
+                  let size = (attributes[.size] as? NSNumber)?.intValue,
+                  size == library.size else {
+                throw AppError.message(L10n.english("Quantized model is missing or has an invalid Metal library: %@.", [String(describing: library.file)]))
+            }
+            let digest = SHA256.hash(data: try Data(contentsOf: file)).map { String(format: "%02x", $0) }.joined()
+            guard digest == library.sha256.lowercased() else {
+                throw AppError.message(L10n.english("Metal library checksum failed: %@.", [String(describing: library.file)]))
+            }
+        }
     }
 
     public static func enhancementFiles(in directory: String, mode: PromptEnhancementMode) throws -> (model: String, system: String, projector: String?) {

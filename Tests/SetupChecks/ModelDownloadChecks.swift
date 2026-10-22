@@ -45,7 +45,18 @@ if 'cancel' in str(path) and not (path / 'partial').exists():
     (path / 'partial').write_text('resume')
     time.sleep(20)
 repo = args[1]
-if repo.startswith('Qwen/'):
+if 'Qwen-Image-2.1-Turbo-INT8' in repo:
+    (path / 'model_index.json').write_text(json.dumps({'sample_sigmas': [1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568]}))
+    for name in ['transformer','text_encoder','vae','scheduler','processor']: (path / name).mkdir(exist_ok=True)
+    metal = path / 'apple_silicon_metal'; metal.mkdir(exist_ok=True)
+    libraries = [('int8_k4096_n4096.metallib', b'kernel4096', 4096, 4096), ('int8_k4096_n12288.metallib', b'kernel12288', 4096, 12288), ('int8_k12288_n4096.metallib', b'kernelmixed', 12288, 4096)]
+    entries = []
+    import hashlib
+    for filename, content, k, n in libraries:
+        (metal / filename).write_bytes(content)
+        entries.append({'file': filename, 'k': k, 'n': n, 'size': len(content), 'sha256': hashlib.sha256(content).hexdigest()})
+    (metal / 'manifest.json').write_text(json.dumps({'schema_version': 1, 'model_repo': repo, 'model_revision': 'b572c2d129f1f440c1643e1be730ac1336f2d5d5', 'required_shapes': [{'k': 4096, 'n': 4096, 'weight_count': 128}, {'k': 4096, 'n': 12288, 'weight_count': 64}, {'k': 12288, 'n': 4096, 'weight_count': 32}], 'libraries': entries}))
+elif repo.startswith('Qwen/'):
     (path / 'model_index.json').write_text('{}')
     for name in ['transformer','text_encoder','vae','scheduler','processor']: (path / name).mkdir(exist_ok=True)
 else:

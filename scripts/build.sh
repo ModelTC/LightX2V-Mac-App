@@ -17,7 +17,9 @@ cp "$BIN/LightX2VApp" "$APP/Contents/MacOS/LightX2VApp"
 for resource in bridge.py prompt_enhancement.py requirements.txt; do
     cp "$BIN/LightX2VAPP_LightX2VApp.bundle/$resource" "$APP/Contents/Resources/$resource"
 done
-cp "$BIN/LightX2VAPP_LightX2VCore.bundle/qwen_image_21_turbo.json" "$APP/Contents/Resources/qwen_image_21_turbo.json"
+for config in qwen_image_21_turbo.json qwen_image_21_turbo_int8.json; do
+    cp "$BIN/LightX2VAPP_LightX2VCore.bundle/$config" "$APP/Contents/Resources/$config"
+done
 
 cp -R "$BIN/LightX2VAPP_LightX2VCore.bundle/Bundled" "$APP/Contents/Resources/Bundled"
 
