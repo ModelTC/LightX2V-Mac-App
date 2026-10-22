@@ -49,15 +49,49 @@ def load_request(path):
         raise ValueError("Turbo configuration requires do_time_shift=false")
     if cfg.get("enable_cfg") is not False or cfg.get("sample_guide_scale") != 1.0:
         raise ValueError("Turbo configuration requires CFG disabled and sample_guide_scale=1.0")
+    if cfg.get("dit_quant_scheme") == "int8-metal":
+        if cfg.get("dit_quantized") is not True or cfg.get("int8_metal_manifest_required") is not True:
+            raise ValueError("INT8 Metal configuration is incomplete")
+        manifest_name = cfg.get("int8_metal_manifest")
+        if not isinstance(manifest_name, str) or Path(manifest_name).is_absolute() or ".." in Path(manifest_name).parts:
+            raise ValueError("INT8 Metal manifest path is invalid")
+        manifest = model / manifest_name
+        if not manifest.is_file():
+            raise ValueError("Quantized model is missing the required INT8 Metal manifest")
+        try:
+            manifest_data = json.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ValueError("Quantized model INT8 Metal manifest is invalid") from error
+        if manifest_data.get("model_repo") != cfg.get("int8_metal_model_repo") or manifest_data.get("model_revision") != cfg.get("int8_metal_model_revision"):
+            raise ValueError("INT8 Metal manifest does not match the selected model revision")
+        libraries = manifest_data.get("libraries", [])
+        required_shapes = {(entry.get("k"), entry.get("n")) for entry in manifest_data.get("required_shapes", [])}
+        library_shapes = {(entry.get("k"), entry.get("n")) for entry in libraries}
+        if not libraries or required_shapes != library_shapes:
+            raise ValueError("INT8 Metal manifest has incomplete K/N library coverage")
+        for library in libraries:
+            filename = library.get("file")
+            if (not isinstance(filename, str) or Path(filename).name != filename
+                    or filename != f"int8_k{library.get('k')}_n{library.get('n')}.metallib"
+                    or not (manifest.parent / filename).is_file()):
+                raise ValueError("Quantized model is missing a required INT8 Metal library")
+        apple_python = repo / "lightx2v_kernel/apple/python"
+        if not apple_python.is_dir():
+            raise ValueError("Bundled LightX2V runtime is missing the Apple INT8 kernel package")
+    elif cfg.get("dit_quantized"):
+        raise ValueError("Unsupported quantized model configuration")
     return request, cfg
 
 
-def environment(request):
+def environment(request, cfg):
     env = os.environ.copy()
     # Keep base.sh semantics while selecting the Python explicitly in the app.
+    python_paths = [request["repository"]]
+    if cfg.get("dit_quant_scheme") == "int8-metal":
+        python_paths.append(str(Path(request["repository"]) / "lightx2v_kernel/apple/python"))
     env.update({
         "PLATFORM": "mps", "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8",
-        "PYTHONPATH": request["repository"] + os.pathsep + env.get("PYTHONPATH", ""),
+        "PYTHONPATH": os.pathsep.join(python_paths + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else [])),
         "MOONCAKE_CONFIG_PATH": str(Path(request["repository"]) / "configs/mooncake_config.json"),
         "TOKENIZERS_PARALLELISM": "false", "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
         "PYTORCH_ALLOC_CONF": "expandable_segments:True", "DTYPE": "BF16",
@@ -65,6 +99,8 @@ def environment(request):
         "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1",
         "PATH": str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "/usr/bin:/bin"),
     })
+    if cfg.get("dit_quant_scheme") == "int8-metal":
+        env["LIGHTX2V_METALLIB_DIR"] = str((Path(request["model"]) / cfg["int8_metal_manifest"]).parent)
     return env
 
 
@@ -224,7 +260,7 @@ def run(request, cfg):
         emit("status", message="Loading model", phase="loading")
         tail = []
         with (destination / "inference.log").open("w", encoding="utf-8") as log:
-            child = supervisor.spawn(cmd, cwd=str(destination), env=environment(request), stdout=subprocess.PIPE,
+            child = supervisor.spawn(cmd, cwd=str(destination), env=environment(request, cfg), stdout=subprocess.PIPE,
                                      stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", bufsize=1)
             for raw in child.stdout:
                 line = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", raw).rstrip("\r\n")

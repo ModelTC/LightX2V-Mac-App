@@ -62,7 +62,7 @@ struct GenerationSnapshot: Codable {
         id = job.id; creationID = job.creationID
         createdAt = job.createdAt.ISO8601Format(); status = job.status
         let request = job.request
-        model = Model(name: QwenImage21Turbo.title, directory: request.model, configFile: request.config)
+        model = Model(name: request.modelName, directory: request.model, configFile: request.config)
         let size = GenerationSize(width: request.width, height: request.height, automaticResolution: request.resolution)
         parameters = Parameters(resolution: size.resolution.baseDimension, aspectRatio: request.resolution == nil ? (size.aspectRatio?.rawValue ?? "adaptive") : "adaptive",
                                 width: job.actualWidth ?? request.width, height: job.actualHeight ?? request.height,
@@ -97,12 +97,15 @@ struct GenerationSnapshot: Codable {
     }
 
     func generation() throws -> Generation {
-        guard model.name == QwenImage21Turbo.title, parameters.steps == QwenImage21Turbo.inferenceSteps,
+        guard [QwenImage21Turbo.title, QwenImage21TurboInt8.title].contains(model.name), parameters.steps == QwenImage21Turbo.inferenceSteps,
               let output = outputImages.first, outputImages.count == 1,
               let created = ISO8601DateFormatter().date(from: createdAt) else {
             throw AppError.message("Invalid generation snapshot")
         }
         var settings = AppSettings(repository: execution.sourceDirectory, model: model.directory, config: model.configFile, python: execution.python)
+        if model.name == QwenImage21TurboInt8.title {
+            settings.qwenImage21TurboInt8.modelDirectory = model.directory
+        }
         settings.promptEnhancement.enabled = promptEnhancement.enabled
         var reply: PromptEnhancementReply?
         if promptEnhancement.enabled {
@@ -138,6 +141,7 @@ struct GenerationSnapshot: Codable {
             "inputImages": inputImages.map { ["path": $0.path, "name": $0.name] }
         ])
         var request = try JSONDecoder().decode(InferenceRequest.self, from: data)
+        request.modelName = model.name
         request.promptEnhancement = promptEnhancement.enabled ? settings.promptEnhancement : nil
         var job = Generation(id: id, creationID: creationID, request: request)
         job.createdAt = created; job.status = status; job.enhancement = reply

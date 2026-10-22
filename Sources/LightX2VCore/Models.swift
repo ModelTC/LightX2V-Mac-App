@@ -6,6 +6,7 @@ public struct AppSettings: Codable, Equatable {
     public var python: String
     public var workingDirectory: String
     public var qwenImage21Turbo: QwenImage21TurboSettings
+    public var qwenImage21TurboInt8: QwenImage21TurboSettings
     public var model: String {
         get { qwenImage21Turbo.modelDirectory }
         set { qwenImage21Turbo.modelDirectory = newValue }
@@ -24,6 +25,7 @@ public struct AppSettings: Codable, Equatable {
         self.repository = repository; self.config = config
         self.python = python; self.workingDirectory = workingDirectory
         qwenImage21Turbo = .init(modelDirectory: model, modelDownloadSource: modelDownloadSource, promptEnhancement: promptEnhancement)
+        qwenImage21TurboInt8 = .init(modelDownloadSource: modelDownloadSource)
     }
 
     public static var defaults: AppSettings {
@@ -33,12 +35,14 @@ public struct AppSettings: Codable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case python, workingDirectory
         case qwenImage21Turbo = "Qwen-Image-2.1-Turbo"
+        case qwenImage21TurboInt8 = "Qwen-Image-2.1-Turbo-INT8"
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         python = try values.decode(String.self, forKey: .python)
         workingDirectory = try values.decode(String.self, forKey: .workingDirectory)
         qwenImage21Turbo = try values.decode(QwenImage21TurboSettings.self, forKey: .qwenImage21Turbo)
+        qwenImage21TurboInt8 = try values.decodeIfPresent(QwenImage21TurboSettings.self, forKey: .qwenImage21TurboInt8) ?? .init()
         repository = ""; config = ""
         BundledInferenceResources.configure(&self)
     }
@@ -48,6 +52,7 @@ public struct AppSettings: Codable, Equatable {
         try values.encode(python, forKey: .python)
         try values.encode(workingDirectory, forKey: .workingDirectory)
         try values.encode(qwenImage21Turbo, forKey: .qwenImage21Turbo)
+        try values.encode(qwenImage21TurboInt8, forKey: .qwenImage21TurboInt8)
     }
 
     public var hasGeneralPaths: Bool {
@@ -78,11 +83,12 @@ public struct AppSettings: Codable, Equatable {
         }
     }
 
-    public func validatePaths() throws {
+    public func validatePaths(modelDirectory: String? = nil) throws {
         let fm = FileManager.default
         try validateGeneralPaths()
-        guard model.hasPrefix("/") else { throw AppError.message(L10n.english("Model directory must use an absolute path.")) }
-        guard fm.fileExists(atPath: model + "/model_index.json") else { throw AppError.message(L10n.english("Model directory is missing model_index.json.")) }
+        let selectedModel = modelDirectory ?? model
+        guard selectedModel.hasPrefix("/") else { throw AppError.message(L10n.english("Model directory must use an absolute path.")) }
+        guard fm.fileExists(atPath: selectedModel + "/model_index.json") else { throw AppError.message(L10n.english("Model directory is missing model_index.json.")) }
     }
 }
 
@@ -92,6 +98,7 @@ public enum AppError: LocalizedError {
 }
 
 public struct InferenceRequest: Codable {
+    public var modelName: String
     public var repository: String
     public var model: String
     public var config: String
@@ -119,6 +126,7 @@ public struct InferenceRequest: Codable {
         }
         guard (0...4294967295).contains(seed) else { throw AppError.message(L10n.english("Seed must be between 0 and 4294967295.")) }
         try InputImages.validate(inputImages)
+        modelName = QwenImage21Turbo.title
         repository = settings.repository; model = settings.model; config = settings.config
         self.prompt = prompt; self.width = width; self.height = height; self.seed = seed; self.output = output
         self.inputImages = inputImages
@@ -126,9 +134,10 @@ public struct InferenceRequest: Codable {
         self.promptEnhancement = settings.promptEnhancement.enabled ? settings.promptEnhancement : nil
     }
 
-    private enum CodingKeys: String, CodingKey { case repository, model, config, prompt, width, height, resolution, seed, output, inputImages, promptEnhancement }
+    private enum CodingKeys: String, CodingKey { case modelName, repository, model, config, prompt, width, height, resolution, seed, output, inputImages, promptEnhancement }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        modelName = try values.decodeIfPresent(String.self, forKey: .modelName) ?? QwenImage21Turbo.title
         repository = try values.decode(String.self, forKey: .repository)
         model = try values.decode(String.self, forKey: .model)
         config = try values.decode(String.self, forKey: .config)

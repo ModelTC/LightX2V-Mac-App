@@ -7,7 +7,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [.executable(name: "LightX2VApp", targets: ["LightX2VApp"])],
     targets: [
-        .target(name: "LightX2VCore", resources: [.copy("Resources/qwen_image_21_turbo.json"), .copy("Resources/Bundled"), .process("Resources/Localization")]),
+        .target(name: "LightX2VCore", resources: [.copy("Resources/qwen_image_21_turbo.json"), .copy("Resources/qwen_image_21_turbo_int8.json"), .copy("Resources/Bundled"), .process("Resources/Localization")]),
         .executableTarget(name: "LightX2VApp", dependencies: ["LightX2VCore"], resources: [.copy("Resources/bridge.py"), .copy("Resources/prompt_enhancement.py"), .copy("Resources/requirements.txt")]),
         // Standalone checks also run with Command Line Tools (XCTest requires full Xcode).
         .executableTarget(name: "LightX2VCoreChecks", dependencies: ["LightX2VCore"], path: "Tests/LightX2VCoreTests"),

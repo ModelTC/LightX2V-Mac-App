@@ -32,7 +32,18 @@ print('Downloading bytes: | 10.0MB 2.50MB/s', end='\r', flush=True)
 print('Reconstructing (incomplete total...): 50%|██| 250MB / 500MB 99MB/s', end='\r', flush=True)
 time.sleep(0.7 if behavior == 'normal' else 20 if behavior in ['cancel','unknown'] else 0.2)
 if behavior == 'fail' or (behavior == 'fail-t2i' and 'PE-T2I' in sys.argv[2]): print('network failure', flush=True); sys.exit(3)
-if sys.argv[2].startswith('Qwen/'):
+if 'Qwen-Image-2.1-Turbo-INT8' in sys.argv[2]:
+    import json, hashlib
+    (p / 'model_index.json').write_text(json.dumps({'sample_sigmas': [1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568]}))
+    for name in ['transformer','text_encoder','vae','scheduler','processor']: (p / name).mkdir(exist_ok=True)
+    metal = p / 'apple_silicon_metal'; metal.mkdir(exist_ok=True)
+    libraries = [('int8_k4096_n4096.metallib', b'kernel4096', 4096, 4096), ('int8_k4096_n12288.metallib', b'kernel12288', 4096, 12288), ('int8_k12288_n4096.metallib', b'kernelmixed', 12288, 4096)]
+    entries = []
+    for filename, content, k, n in libraries:
+        (metal / filename).write_bytes(content)
+        entries.append({'file': filename, 'k': k, 'n': n, 'size': len(content), 'sha256': hashlib.sha256(content).hexdigest()})
+    (metal / 'manifest.json').write_text(json.dumps({'schema_version': 1, 'model_repo': sys.argv[2], 'model_revision': 'b572c2d129f1f440c1643e1be730ac1336f2d5d5', 'required_shapes': [{'k': 4096, 'n': 4096, 'weight_count': 128}, {'k': 4096, 'n': 12288, 'weight_count': 64}, {'k': 12288, 'n': 4096, 'weight_count': 32}], 'libraries': entries}))
+elif sys.argv[2].startswith('Qwen/'):
     (p / 'model_index.json').write_text('{}')
     for name in ['transformer','text_encoder','vae','scheduler','processor']: (p / name).mkdir(exist_ok=True)
 else:

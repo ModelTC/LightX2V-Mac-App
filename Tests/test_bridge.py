@@ -172,6 +172,35 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Turbo weights'):
             bridge.load_request(self.request_path)
 
+    def test_int8_metal_requires_manifest_and_exports_library_directory(self):
+        metal = self.model / 'apple_silicon_metal'
+        metal.mkdir()
+        (self.repo / 'lightx2v_kernel/apple/python').mkdir(parents=True)
+        (metal / 'manifest.json').write_text(json.dumps({
+            'model_repo': 'lightx2v/Qwen-Image-2.1-Turbo-INT8',
+            'model_revision': 'revision',
+            'required_shapes': [{'k': 4096, 'n': 4096, 'weight_count': 1}],
+            'libraries': [{'file': 'int8_k4096_n4096.metallib', 'k': 4096, 'n': 4096}]
+        }))
+        (metal / 'int8_k4096_n4096.metallib').write_bytes(b'kernel')
+        self.cfg.update({
+            'dit_quantized': True,
+            'dit_quant_scheme': 'int8-metal',
+            'int8_metal_manifest': 'apple_silicon_metal/manifest.json',
+            'int8_metal_manifest_required': True,
+            'int8_metal_model_repo': 'lightx2v/Qwen-Image-2.1-Turbo-INT8',
+            'int8_metal_model_revision': 'revision'
+        })
+        self.config.write_text(json.dumps(self.cfg))
+        self.request_path.write_text(json.dumps(self.request))
+        request, cfg = bridge.load_request(self.request_path)
+        with mock.patch.dict(os.environ, {}, clear=True):
+            env = bridge.environment(request, cfg)
+        self.assertEqual(env['LIGHTX2V_METALLIB_DIR'], str(metal))
+        (metal / 'manifest.json').unlink()
+        with self.assertRaisesRegex(ValueError, 'manifest'):
+            bridge.load_request(self.request_path)
+
     def test_all_1k_and_2k_presets_reach_cli_in_height_width_order(self):
         sizes = [(1024, 1024), (1184, 896), (896, 1184), (1248, 832),
                  (832, 1248), (1376, 768), (768, 1376), (2048, 2048),
