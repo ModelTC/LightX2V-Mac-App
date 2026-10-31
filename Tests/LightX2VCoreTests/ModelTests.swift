@@ -34,6 +34,7 @@ struct CoreChecks {
         try modelSettingsChecks()
         try enhancementChecks()
         try turboModelChecks()
+        try turboInt8ModelChecks()
         print("Core checks passed")
     }
     static func invalidRequests() throws {

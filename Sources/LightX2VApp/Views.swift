@@ -194,7 +194,7 @@ struct WelcomeView: View {
                             Text("·"); Text(model.title); Text("·"); Text(L10n.text("%@-step generation", [String(describing: QwenImage21Turbo.inferenceSteps)]))
                         }
                     }.font(.system(size: 10)).foregroundStyle(Palette.muted).padding(.top, 16)
-                    if store.selectedModel == .qwenImage21Turbo {
+                    if store.selectedModel != nil {
                         HStack(spacing: 10) {
                             ForEach(examples, id: \.0) { item in
                                 Button { store.usePrompt(item.2) } label: {
@@ -322,7 +322,7 @@ struct ModelSelector: View {
         .menuIndicator(.visible)
         // Constrain the native menu itself, so changing its title does not
         // move either the popup anchor or the indicator while it closes.
-        .frame(width: 180)
+        .frame(width: 230)
         .padding(.horizontal, 8).frame(height: 30)
         .foregroundStyle(store.selectedModel == nil ? Palette.accent : Palette.ink)
         .background(store.selectedModel == nil ? Palette.accentSurface : Palette.surfaceSubtle,

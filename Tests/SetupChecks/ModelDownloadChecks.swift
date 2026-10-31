@@ -45,7 +45,14 @@ if 'cancel' in str(path) and not (path / 'partial').exists():
     (path / 'partial').write_text('resume')
     time.sleep(20)
 repo = args[1]
-if repo.startswith('Qwen/'):
+if 'Qwen-Image-2.1-Turbo-INT8' in repo:
+    (path / 'model_index.json').write_text(json.dumps({'sample_sigmas': [1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568]}))
+    for name in ['transformer','text_encoder','vae','scheduler','processor']: (path / name).mkdir(exist_ok=True)
+    metal = path / 'apple_silicon_metal'; metal.mkdir(exist_ok=True)
+    import shutil
+    fixtures = pathlib.Path(r'\#(URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().path)') / 'Fixtures/qwen-int8-metal'
+    for library in fixtures.glob('*.metallib'): shutil.copyfile(library, metal / library.name)
+elif repo.startswith('Qwen/'):
     (path / 'model_index.json').write_text('{}')
     for name in ['transformer','text_encoder','vae','scheduler','processor']: (path / name).mkdir(exist_ok=True)
 else:

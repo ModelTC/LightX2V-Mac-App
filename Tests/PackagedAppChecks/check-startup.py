@@ -57,8 +57,10 @@ with tempfile.TemporaryDirectory(prefix='lightx2v-packaged-startup-') as folder:
                             break
                         time.sleep(0.1)
                     assert marker.exists(), 'Packaged APP did not complete offline preparation and reach the Python probe'
-                    installed = workspace / 'runtimes/bundled-LightX2V-0.6.0-minimal-v1-llama-b11583'
-                    assert (installed / 'LightX2V-0.6.0/lightx2v/infer.py').is_file()
+                    installed = workspace / 'runtimes/bundled-LightX2V-19c19614-minimal-v1-llama-b11583'
+                    source = installed / 'LightX2V-19c19614b067f1746ac24350dfd097e1c0b48591'
+                    assert (source / 'lightx2v/infer.py').is_file()
+                    assert (source / 'lightx2v_kernel/apple/python/lightx2v_kernel_apple/int8_gemm/gemm.py').is_file()
                     assert (installed / 'llama-b11583/llama-completion').is_file()
                 time.sleep(3)
                 assert process.poll() is None, log.read_text(errors='replace')

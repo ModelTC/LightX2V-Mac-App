@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "model_repo": "lightx2v/Qwen-Image-2.1-Turbo-INT8",
+  "model_revision": "b572c2d129f1f440c1643e1be730ac1336f2d5d5",
+  "required_shapes": [
+    {"k": 4096, "n": 4096, "weight_count": 128},
+    {"k": 4096, "n": 12288, "weight_count": 64},
+    {"k": 12288, "n": 4096, "weight_count": 32}
+  ],
+  "libraries": [
+    {"file": "int8_k4096_n4096.metallib", "k": 4096, "n": 4096, "size": 36075, "sha256": "1d2e28f4ff7457d6b9e95a3345210028b716f193e101cf49a4f230dc235bd65c"},
+    {"file": "int8_k4096_n12288.metallib", "k": 4096, "n": 12288, "size": 36091, "sha256": "b1cb490e80b7ec49246d740ef5c96ec76c849a4683b829bc39a6d05113e1d62c"},
+    {"file": "int8_k12288_n4096.metallib", "k": 12288, "n": 4096, "size": 36091, "sha256": "8cfca71cab30f9974683406c23c54d042582fb8baffbff28e5664cff9f3dff93"}
+  ]
+}

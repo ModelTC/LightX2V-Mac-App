@@ -26,7 +26,7 @@ enum ReadableJSON {
         } else if object["enabled"] != nil {
             fields = ["enabled", "mode", "status", "modelName", "directory", "modelFile", "systemPromptFile", "visionProjectorFile", "runtimeDirectory", "t2iDirectory", "i2iDirectory", "t2iModel", "t2iSystemPrompt", "i2iModel", "i2iSystemPrompt", "visionProjector", "thinking", "output", "whRatio", "ratioFollow", "durationSeconds"]
         } else {
-            fields = ["workingDirectory", "python", "Qwen-Image-2.1-Turbo", "modelDirectory", "modelDownloadSource", "promptEnhancement", "repository", "model", "config", "prompt", "resolution", "width", "height", "seed", "inputImages", "output", "generation", "path", "name"]
+            fields = ["workingDirectory", "python", "Qwen-Image-2.1-Turbo", "Qwen-Image-2.1-Turbo-INT8", "modelDirectory", "modelDownloadSource", "promptEnhancement", "repository", "model", "config", "modelName", "prompt", "resolution", "width", "height", "seed", "inputImages", "output", "generation", "path", "name"]
         }
         let specified = fields.filter { object[$0] != nil }
         // Unspecified extension fields follow the defined groups; production
