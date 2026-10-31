@@ -8,6 +8,11 @@ python3 "$ROOT/scripts/prepare-bundled-resources.py"
 
 swift build --package-path "$ROOT" --scratch-path "$SCRATCH" -c release --arch arm64 --product LightX2VApp
 BIN="$(swift build --package-path "$ROOT" --scratch-path "$SCRATCH" -c release --arch arm64 --show-bin-path)"
+APP_RES="$BIN/LightX2VAPP_LightX2VApp.bundle"
+CORE_RES="$BIN/LightX2VAPP_LightX2VCore.bundle"
+# SwiftPM's native and Swift Build backends use different bundle layouts.
+[[ ! -d "$APP_RES/Contents/Resources" ]] || APP_RES="$APP_RES/Contents/Resources"
+[[ ! -d "$CORE_RES/Contents/Resources" ]] || CORE_RES="$CORE_RES/Contents/Resources"
 mkdir -p "$APP/Contents/MacOS"
 # Rebuild generated resources so removed adapters cannot survive an incremental build.
 rm -rf "$APP/Contents/Resources"
@@ -15,15 +20,15 @@ mkdir -p "$APP/Contents/Resources"
 cp "$BIN/LightX2VApp" "$APP/Contents/MacOS/LightX2VApp"
 # A .app uses the native Resources directory; SwiftPM's bundle remains a development fallback.
 for resource in bridge.py prompt_enhancement.py requirements.txt; do
-    cp "$BIN/LightX2VAPP_LightX2VApp.bundle/$resource" "$APP/Contents/Resources/$resource"
+    cp "$APP_RES/$resource" "$APP/Contents/Resources/$resource"
 done
-for config in qwen_image_21_turbo.json qwen_image_21_turbo_int8.json; do
-    cp "$BIN/LightX2VAPP_LightX2VCore.bundle/$config" "$APP/Contents/Resources/$config"
+for config in qwen_image_21_turbo.json qwen_image_21_turbo_int8.json qwen_image_21_turbo_int8_metal.json; do
+    cp "$CORE_RES/$config" "$APP/Contents/Resources/$config"
 done
 
-cp -R "$BIN/LightX2VAPP_LightX2VCore.bundle/Bundled" "$APP/Contents/Resources/Bundled"
+cp -R "$CORE_RES/Bundled" "$APP/Contents/Resources/Bundled"
 
-for locale in "$BIN/LightX2VAPP_LightX2VCore.bundle/"*.lproj; do
+for locale in "$CORE_RES/"*.lproj; do
     cp -R "$locale" "$APP/Contents/Resources/"
 done
 

@@ -2,19 +2,21 @@ import Foundation
 
 /// Offline, versioned resources. Never replace user-managed source or runtime folders.
 public enum BundledInferenceResources {
-    public static let sourceArchive = "LightX2V-0.6.0-minimal.tar.gz"
+    public static let sourceRevision = "19c19614b067f1746ac24350dfd097e1c0b48591"
+    public static let sourceRoot = "LightX2V-" + sourceRevision
+    public static let sourceArchive = "LightX2V-19c19614-minimal.tar.gz"
     public static let runtimeArchive = "llama-b11583-bin-macos-arm64.tar.gz"
     public static let hashes = [
-        sourceArchive: "fbb8256d037e98c317b0ad95c041cb6f88b1ccad9c2e6e9ce17946957d287a29",
+        sourceArchive: "93f7137cbc115c83f51686baf1cf2f80cb96e919f9cc89895407296b3bedbc27",
         runtimeArchive: "d23832f4b847a722a64c9bf57e518c3df81dfab325942182ff17792d5d33351f"
     ]
     public static func directory(in workspace: WorkspaceLayout) -> URL {
-        workspace.runtimes.appendingPathComponent("bundled-LightX2V-0.6.0-minimal-v1-llama-b11583")
+        workspace.runtimes.appendingPathComponent("bundled-LightX2V-19c19614-minimal-v1-llama-b11583")
     }
     public static func configure(_ settings: inout AppSettings) {
         guard !settings.workingDirectory.isEmpty else { return }
         let root = directory(in: WorkspaceLayout(settings.workingDirectory))
-        settings.repository = root.appendingPathComponent("LightX2V-0.6.0").path
+        settings.repository = root.appendingPathComponent(sourceRoot).path
         settings.promptEnhancement.runtimeDirectory = root.appendingPathComponent("llama-b11583").path
     }
     public static func resource(_ name: String) throws -> URL {
@@ -34,8 +36,10 @@ public enum BundledInferenceResources {
         let fm = FileManager.default
         let destination = directory(in: workspace)
         func validate(_ root: URL) throws {
-            guard fm.fileExists(atPath: root.appendingPathComponent("LightX2V-0.6.0/lightx2v/infer.py").path) else {
-                throw AppError.message("Bundled LightX2V source is incomplete.")
+            for file in ["lightx2v/infer.py", "lightx2v_kernel/apple/python/lightx2v_kernel_apple/int8_gemm/gemm.py", "lightx2v_kernel/apple/pyproject.toml", "configs/platforms/mps/qwen_image_21_turbo_int8.json"] {
+                guard fm.fileExists(atPath: root.appendingPathComponent(sourceRoot).appendingPathComponent(file).path) else {
+                    throw AppError.message("Bundled LightX2V source is incomplete.")
+                }
             }
             try LlamaRuntimeDownloader.validateRuntime(root.appendingPathComponent("llama-b11583").path)
         }
@@ -56,7 +60,7 @@ public enum BundledInferenceResources {
             let details = try await SetupCommand.run("/usr/bin/tar", arguments: ["-tvzf", archive.path], workspace: workspace, timeout: 60)
             guard listing.status == 0, details.status == 0 else { throw AppError.message("Unable to read bundled archive: \(name)") }
             // Both packages have one root; identical safety rules apply to source files and dylib links.
-            let root = name == sourceArchive ? "LightX2V-0.6.0" : "llama-b11583"
+            let root = name == sourceArchive ? sourceRoot : "llama-b11583"
             try LlamaRuntimeDownloader.validateArchive(paths: listing.output, details: details.output, version: "b11583", expectedRoot: root)
             let extraction = try await SetupCommand.run("/usr/bin/tar", arguments: ["-xzf", archive.path, "-C", staging.path], workspace: workspace, timeout: 120)
             guard extraction.status == 0 else { throw AppError.message("Unable to extract bundled archive: \(name)") }

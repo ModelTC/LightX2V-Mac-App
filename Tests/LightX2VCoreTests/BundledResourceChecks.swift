@@ -19,6 +19,8 @@ func bundledResourceChecks() async throws {
         try expect(!fm.fileExists(atPath: settings.repository + "/" + directory), "Pruned source folder survived packaging")
     }
     try expect(fm.fileExists(atPath: settings.repository + "/LICENSE"), "Source license must be preserved")
+    try expect(fm.fileExists(atPath: settings.repository + "/lightx2v_kernel/apple/python/lightx2v_kernel_apple/int8_gemm/gemm.py"), "upstream Apple INT8 kernel package must be bundled")
+    try expect(!fm.fileExists(atPath: settings.repository + "/lightx2v/models/runners/qwen_image_21/int8_metal_binding.py"), "App must not depend on the optional Engine PR")
     try settings.validateGeneralPath(.source)
     try settings.validateGeneralPath(.llama)
     try expect(!settings.promptEnhancement.runtimeDirectory.hasSuffix("/bin"), "llama runtime must retain its original archive layout")

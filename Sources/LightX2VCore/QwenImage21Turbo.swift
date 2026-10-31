@@ -29,6 +29,10 @@ public enum QwenImage21TurboInt8 {
     public static let title = "Qwen-Image-2.1-Turbo-INT8"
     public static let inferenceSteps = QwenImage21Turbo.inferenceSteps
     public static let configRelativePath = "configs/platforms/mps/qwen_image_21_turbo_int8.json"
+    public static var bundledMetalMetadata: URL {
+        Bundle.main.url(forResource: "qwen_image_21_turbo_int8_metal", withExtension: "json")
+            ?? Bundle.module.url(forResource: "qwen_image_21_turbo_int8_metal", withExtension: "json")!
+    }
     public static var bundledConfig: URL {
         Bundle.main.url(forResource: "qwen_image_21_turbo_int8", withExtension: "json")
             ?? Bundle.module.url(forResource: "qwen_image_21_turbo_int8", withExtension: "json")!

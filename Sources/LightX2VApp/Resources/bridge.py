@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """LightX2V APP process supervisor; all stdout is NDJSON."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -16,6 +17,28 @@ sys.dont_write_bytecode = True
 
 TURBO_STEPS = 8
 TURBO_SIGMAS = [1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568]
+
+
+def validate_int8_libraries(model):
+    name = 'qwen_image_21_turbo_int8_metal.json'
+    script = Path(__file__).resolve()
+    candidates = [script.with_name(name),
+                  script.parent.parent / 'LightX2VAPP_LightX2VCore.bundle' / name,
+                  script.parents[3] / 'LightX2VAPP_LightX2VCore.bundle/Contents/Resources' / name,
+                  script.parents[2] / 'LightX2VCore/Resources' / name]
+    metadata = next((path for path in candidates if path.is_file()), None)
+    if metadata is None:
+        raise ValueError('App is missing its bundled INT8 Metal integrity metadata')
+    data = json.loads(metadata.read_text(encoding='utf-8'))
+    for library in data['libraries']:
+        filename = library['file']
+        if Path(filename).name != filename:
+            raise ValueError('Invalid bundled INT8 Metal library filename')
+        path = model / 'apple_silicon_metal' / filename
+        if not path.is_file() or path.stat().st_size != library['size']:
+            raise ValueError(f'Quantized model is missing or has an invalid Metal library: {filename}')
+        if hashlib.sha256(path.read_bytes()).hexdigest() != library['sha256']:
+            raise ValueError(f'Metal library checksum failed: {filename}')
 
 
 def emit(kind, **fields):
@@ -50,33 +73,11 @@ def load_request(path):
     if cfg.get("enable_cfg") is not False or cfg.get("sample_guide_scale") != 1.0:
         raise ValueError("Turbo configuration requires CFG disabled and sample_guide_scale=1.0")
     if cfg.get("dit_quant_scheme") == "int8-metal":
-        if cfg.get("dit_quantized") is not True or cfg.get("int8_metal_manifest_required") is not True:
+        if cfg.get("dit_quantized") is not True:
             raise ValueError("INT8 Metal configuration is incomplete")
-        manifest_name = cfg.get("int8_metal_manifest")
-        if not isinstance(manifest_name, str) or Path(manifest_name).is_absolute() or ".." in Path(manifest_name).parts:
-            raise ValueError("INT8 Metal manifest path is invalid")
-        manifest = model / manifest_name
-        if not manifest.is_file():
-            raise ValueError("Quantized model is missing the required INT8 Metal manifest")
-        try:
-            manifest_data = json.loads(manifest.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
-            raise ValueError("Quantized model INT8 Metal manifest is invalid") from error
-        if manifest_data.get("model_repo") != cfg.get("int8_metal_model_repo") or manifest_data.get("model_revision") != cfg.get("int8_metal_model_revision"):
-            raise ValueError("INT8 Metal manifest does not match the selected model revision")
-        libraries = manifest_data.get("libraries", [])
-        required_shapes = {(entry.get("k"), entry.get("n")) for entry in manifest_data.get("required_shapes", [])}
-        library_shapes = {(entry.get("k"), entry.get("n")) for entry in libraries}
-        if not libraries or required_shapes != library_shapes:
-            raise ValueError("INT8 Metal manifest has incomplete K/N library coverage")
-        for library in libraries:
-            filename = library.get("file")
-            if (not isinstance(filename, str) or Path(filename).name != filename
-                    or filename != f"int8_k{library.get('k')}_n{library.get('n')}.metallib"
-                    or not (manifest.parent / filename).is_file()):
-                raise ValueError("Quantized model is missing a required INT8 Metal library")
-        apple_python = repo / "lightx2v_kernel/apple/python"
-        if not apple_python.is_dir():
+        validate_int8_libraries(model)
+        apple_python = repo / "lightx2v_kernel/apple/python/lightx2v_kernel_apple/int8_gemm/gemm.py"
+        if not apple_python.is_file():
             raise ValueError("Bundled LightX2V runtime is missing the Apple INT8 kernel package")
     elif cfg.get("dit_quantized"):
         raise ValueError("Unsupported quantized model configuration")
@@ -100,7 +101,7 @@ def environment(request, cfg):
         "PATH": str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "/usr/bin:/bin"),
     })
     if cfg.get("dit_quant_scheme") == "int8-metal":
-        env["LIGHTX2V_METALLIB_DIR"] = str((Path(request["model"]) / cfg["int8_metal_manifest"]).parent)
+        env["LIGHTX2V_METALLIB_DIR"] = str(Path(request["model"]) / "apple_silicon_metal")
     return env
 
 

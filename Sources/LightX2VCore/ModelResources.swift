@@ -78,13 +78,11 @@ public enum ModelResource: String, CaseIterable, Identifiable, Sendable {
     }
 
     private static func validateInt8Metal(in root: URL) throws {
-        let manifestURL = root.appendingPathComponent("apple_silicon_metal/manifest.json")
-        guard FileManager.default.isReadableFile(atPath: manifestURL.path) else {
-            throw AppError.message(L10n.english("Quantized model is missing apple_silicon_metal/manifest.json."))
-        }
+        // Integrity metadata ships with the App; official model downloads contain only libraries.
+        let manifestURL = QwenImage21TurboInt8.bundledMetalMetadata
         let manifest: Int8MetalManifest
         do { manifest = try JSONDecoder().decode(Int8MetalManifest.self, from: Data(contentsOf: manifestURL)) }
-        catch { throw AppError.message(L10n.english("The quantized model manifest is invalid.")) }
+        catch { throw AppError.message(L10n.english("The bundled INT8 Metal integrity metadata is invalid.")) }
         guard manifest.schemaVersion == 1,
               manifest.modelRepo == "lightx2v/Qwen-Image-2.1-Turbo-INT8",
               manifest.modelRevision == "b572c2d129f1f440c1643e1be730ac1336f2d5d5",

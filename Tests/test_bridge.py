@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -172,33 +173,43 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Turbo weights'):
             bridge.load_request(self.request_path)
 
-    def test_int8_metal_requires_manifest_and_exports_library_directory(self):
+    def prepare_int8(self):
         metal = self.model / 'apple_silicon_metal'
-        metal.mkdir()
-        (self.repo / 'lightx2v_kernel/apple/python').mkdir(parents=True)
-        (metal / 'manifest.json').write_text(json.dumps({
-            'model_repo': 'lightx2v/Qwen-Image-2.1-Turbo-INT8',
-            'model_revision': 'revision',
-            'required_shapes': [{'k': 4096, 'n': 4096, 'weight_count': 1}],
-            'libraries': [{'file': 'int8_k4096_n4096.metallib', 'k': 4096, 'n': 4096}]
-        }))
-        (metal / 'int8_k4096_n4096.metallib').write_bytes(b'kernel')
-        self.cfg.update({
-            'dit_quantized': True,
-            'dit_quant_scheme': 'int8-metal',
-            'int8_metal_manifest': 'apple_silicon_metal/manifest.json',
-            'int8_metal_manifest_required': True,
-            'int8_metal_model_repo': 'lightx2v/Qwen-Image-2.1-Turbo-INT8',
-            'int8_metal_model_revision': 'revision'
-        })
+        shutil.copytree(Path(__file__).parent / 'Fixtures/qwen-int8-metal', metal)
+        kernel = self.repo / 'lightx2v_kernel/apple/python/lightx2v_kernel_apple/int8_gemm/gemm.py'
+        kernel.parent.mkdir(parents=True)
+        kernel.write_text('# fixture kernel')
+        self.cfg.update({'dit_quantized': True, 'dit_quant_scheme': 'int8-metal'})
         self.config.write_text(json.dumps(self.cfg))
         self.request_path.write_text(json.dumps(self.request))
+        return metal
+
+    def test_int8_metal_official_libraries_need_no_model_manifest(self):
+        metal = self.prepare_int8()
         request, cfg = bridge.load_request(self.request_path)
+        self.assertFalse((metal / 'manifest.json').exists())
         with mock.patch.dict(os.environ, {}, clear=True):
             env = bridge.environment(request, cfg)
         self.assertEqual(env['LIGHTX2V_METALLIB_DIR'], str(metal))
-        (metal / 'manifest.json').unlink()
-        with self.assertRaisesRegex(ValueError, 'manifest'):
+        self.assertIn(str(self.repo / 'lightx2v_kernel/apple/python'), env['PYTHONPATH'].split(os.pathsep))
+        child = self.start()
+        out, err = child.communicate(timeout=15)
+        self.assertEqual(child.returncode, 0, err + out)
+        self.assertEqual(json.loads(out.splitlines()[-1])['status'], 'completed')
+
+    def test_int8_metal_rejects_missing_library(self):
+        metal = self.prepare_int8()
+        (metal / 'int8_k4096_n4096.metallib').unlink()
+        with self.assertRaisesRegex(ValueError, 'Metal library'):
+            bridge.load_request(self.request_path)
+
+    def test_int8_metal_rejects_same_size_corruption(self):
+        metal = self.prepare_int8()
+        library = metal / 'int8_k4096_n4096.metallib'
+        payload = bytearray(library.read_bytes())
+        payload[0] ^= 1
+        library.write_bytes(payload)
+        with self.assertRaisesRegex(ValueError, 'checksum'):
             bridge.load_request(self.request_path)
 
     def test_all_1k_and_2k_presets_reach_cli_in_height_width_order(self):

@@ -6,9 +6,9 @@ public struct SourceDownload: Codable {
 }
 
 public enum SourceDownloader {
-    public static let version = "0.6.0"
-    public static let revision = "94f0f19459e66f61a723db7690f1707f308599ef"
-    public static let archiveURL = URL(string: "https://github.com/ModelTC/LightX2V/archive/refs/tags/0.6.0.zip")!
+    public static let version = BundledInferenceResources.sourceRevision
+    public static let revision = BundledInferenceResources.sourceRevision
+    public static let archiveURL = URL(string: "https://github.com/ModelTC/LightX2V/archive/\(revision).zip")!
     public static let manualCommand = """
 mkdir -p './code'
 curl -L '\(archiveURL.absoluteString)' -o './code/LightX2V-\(version).zip'
