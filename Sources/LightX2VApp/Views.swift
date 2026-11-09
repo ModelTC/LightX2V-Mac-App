@@ -64,7 +64,7 @@ struct WorkspaceView: View {
         .ignoresSafeArea(.container, edges: .top)
         .sheet(isPresented: $store.showSettings) { SettingsView(settings: store.settings).environmentObject(store) }
 
-        .alert("LightX2V APP", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
+        .alert("LightX2V", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
             Button(L10n.text("OK")) { store.errorMessage = nil }
         } message: { Text(L10n.render(store.errorMessage ?? "")) }
     }
@@ -91,7 +91,6 @@ struct SidebarView: View {
             HStack(spacing: 9) {
                 BrandMark(size: 28)
                 Text("LightX2V").font(.system(size: 17, weight: .semibold))
-                Text("APP").font(.system(size: 9, weight: .semibold)).foregroundStyle(Palette.muted)
             }.padding(.horizontal, 22).padding(.top, 52).padding(.bottom, 27)
             Button { store.newGeneration() } label: {
                 HStack { Image(systemName: "square.and.pencil"); Text(L10n.text("New creation")); Spacer(); Text("⌘ N").font(.system(size: 11)).foregroundStyle(Palette.muted) }

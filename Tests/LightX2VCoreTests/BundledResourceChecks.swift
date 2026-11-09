@@ -11,7 +11,8 @@ func bundledResourceChecks() async throws {
     try Data("preserve".utf8).write(to: original)
     let previousDirectories = [
         "bundled-LightX2V-0.6.0-minimal-v1-llama-b11583",
-        "bundled-LightX2V-19c19614-minimal-v1-llama-b11583"
+        "bundled-LightX2V-19c19614-minimal-v1-llama-b11583",
+        "bundled-LightX2V-0.6.1-minimal-v1-llama-b11583"
     ].map { workspace.runtimes.appendingPathComponent($0) }
     for directory in previousDirectories {
         try fm.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -22,7 +23,7 @@ func bundledResourceChecks() async throws {
     try expect(settings.hasGeneralPaths, "source and llama paths must no longer be required settings")
     try expect(GeneralSetupStep.allCases == [.workspace, .python], "general settings must contain only the two user paths")
     BundledInferenceResources.configure(&settings)
-    let expectedRoot = workspace.runtimes.appendingPathComponent("bundled-LightX2V-0.6.1-minimal-v1-llama-b11583")
+    let expectedRoot = workspace.runtimes.appendingPathComponent("bundled-LightX2V-0.6.1-minimal-v2-llama-b11583")
     try expect(BundledInferenceResources.sourceRevision == "0.6.1", "bundled source must use the 0.6.1 release")
     try expect(settings.repository == expectedRoot.appendingPathComponent("LightX2V-0.6.1").path, "source must use the 0.6.1 installation")
     for directory in previousDirectories {
@@ -35,7 +36,7 @@ func bundledResourceChecks() async throws {
         try expect(restored.python == settings.python && restored.workingDirectory == settings.workingDirectory, "engine upgrade changed user paths")
     }
     try await BundledInferenceResources.prepare(in: workspace)
-    for directory in ["assert", "assets", "dockerfiles", "docs", "examples", "lightx2v_ros", "lightx2v_train"] {
+    for directory in ["assert", "assets", "dockerfiles", "docs", "examples", "lightx2v_rl", "lightx2v_ros", "lightx2v_train"] {
         try expect(!fm.fileExists(atPath: settings.repository + "/" + directory), "Pruned source folder survived packaging")
     }
     try expect(fm.fileExists(atPath: settings.repository + "/LICENSE"), "Source license must be preserved")
@@ -66,5 +67,5 @@ func bundledResourceChecks() async throws {
     var rejected = false
     do { try await BundledInferenceResources.prepare(in: collision) } catch { rejected = true }
     try expect(rejected && fm.fileExists(atPath: protected.path), "unmanaged install collision was overwritten")
-    print("PASS offline 0.6.1 extraction, settings upgrade, previous runtime preservation, both b11583 CLIs, reuse and collision protection")
+    print("PASS offline 0.6.1 extraction with RL pruning, settings upgrade, previous runtime preservation, both b11583 CLIs, reuse and collision protection")
 }

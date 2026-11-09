@@ -626,7 +626,13 @@ final class AppStore: ObservableObject {
                 do {
                     // Startup and the general-settings picker share one policy.
                     // Environment readiness is independent of model selection.
-                    try await BundledInferenceResources.prepare(in: layout)
+                    try await BundledInferenceResources.prepare(in: layout) { [self] message in
+                        Task { @MainActor in
+                            guard self.isChecking, WorkspaceLayout(self.settings.workingDirectory).root == layout.root else { return }
+                            self.environmentMessage = message
+                        }
+                    }
+                    try Task.checkCancellation()
                     BundledInferenceResources.configure(&settings)
                     refreshEnhancementResources()
                     if reuseVerifiedEnvironment {
@@ -635,6 +641,7 @@ final class AppStore: ObservableObject {
                         if enterWorkspaceOnSuccess { showStartupSettings = false }
                         return
                     }
+                    environmentMessage = L10n.english("Checking dependencies and MPS…")
                     let environment = try await PythonEnvironmentSearch.probe(python, workspace: layout)
                     try Task.checkCancellation()
                     environmentReady = environment.isCompatible

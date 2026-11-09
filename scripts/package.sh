@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP="${1:-$ROOT/dist/LightX2V APP.app}"
+APP="${1:-$ROOT/dist/LightX2V.app}"
 ARCHIVE="${2:-$ROOT/dist/LightX2V-APP-macOS-arm64.zip}"
 
 test -f "$APP/Contents/Info.plist"

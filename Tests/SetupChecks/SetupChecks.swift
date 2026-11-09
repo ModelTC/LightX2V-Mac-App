@@ -46,9 +46,14 @@ func rejects(_ body: () throws -> Void) throws {
             try expect(fm.fileExists(atPath: result.directory + "/lightx2v/infer.py"), "real download missing source")
             try expect(result.commit == SourceDownloader.revision && URL(fileURLWithPath: result.directory).lastPathComponent == BundledInferenceResources.sourceRoot, "download did not use the pinned upstream source")
             try expect(!fm.fileExists(atPath: result.directory + "/.git"), "download contains git history")
+            let training = URL(fileURLWithPath: result.directory).appendingPathComponent("lightx2v_rl")
+            try expect(!fm.fileExists(atPath: training.path), "real source download retained training resources")
+            try fm.createDirectory(at: training, withIntermediateDirectories: true)
+            try Data("cached training resource".utf8).write(to: training.appendingPathComponent("sentinel"))
             let second = try await SourceDownloader.download(workspace: workspace) { print($0) }
             try expect(second.commit == result.commit, "repeat download not reused")
-            print("PASS real GitHub download and reuse: \(result.commit)")
+            try expect(!fm.fileExists(atPath: training.path) && fm.fileExists(atPath: second.directory + "/lightx2v/infer.py"), "real source reuse did not prune training resources and preserve inference")
+            print("PASS real GitHub download, reuse and training-resource cleanup: \(result.commit)")
             return
         }
         if CommandLine.arguments.contains("--search") {
@@ -69,6 +74,8 @@ func rejects(_ body: () throws -> Void) throws {
         print("PASS destination collision and failed locator rollback")
         try archiveValidation()
         print("PASS SHA parsing, pinned archive paths, traversal/history rejection")
+        try await sourceDownloadChecks(root)
+        print("PASS source download, custom destination, cache cleanup, HTTP retry, cancellation and preserved collisions")
         try discovery(root)
         print("PASS separate venv identities and alias deduplication")
         try await commands(root)
@@ -83,7 +90,7 @@ func rejects(_ body: () throws -> Void) throws {
         print("PASS llama.cpp download, dynamic libraries, reuse, checksum, HTTP, archive rejection, cancellation and retry")
         try await modelDownloadChecks(root)
         try modelDownloadProgressChecks()
-        print("12 setup checks passed")
+        print("13 setup checks passed")
     }
 
     static func setupGuide(_ root: URL) throws {

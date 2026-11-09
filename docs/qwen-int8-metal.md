@@ -3,7 +3,9 @@
 The App bundles upstream LightX2V release `0.6.1`, resolving to commit
 `43c6a11bb65b7357f06e9603fa92249bc16b484e`. Its pruned source archive includes
 the Apple INT8 kernel Python package. The bridge adds it to `PYTHONPATH`
-for INT8 inference.
+for INT8 inference. The source package excludes `lightx2v_rl`. During setup,
+missing source is downloaded automatically from the official `0.6.1` tag.
+A managed installation with missing source files is repaired on startup.
 
 Download the complete `lightx2v/Qwen-Image-2.1-Turbo-INT8` model. No
 `apple_silicon_metal/manifest.json` is required. The App ships its own integrity

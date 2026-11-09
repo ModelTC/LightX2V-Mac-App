@@ -59,7 +59,7 @@ jobs:
           DOWNLOAD_URL: https://github.com/${{ github.repository }}/releases/download/latest/LightX2V-APP-macOS-arm64.zip
         run: |
           {
-            printf '## LightX2V APP · Apple Silicon\n\n'
+            printf '## LightX2V · Apple Silicon\n\n'
             printf '[Download latest APP](%s)\n\n' "$DOWNLOAD_URL"
             printf -- '- Build commit: `%s`\n' "$GITHUB_SHA"
             printf -- '- Target: macOS 14+, arm64\n'

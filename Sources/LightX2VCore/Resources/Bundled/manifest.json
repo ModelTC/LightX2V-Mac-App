@@ -9,10 +9,11 @@
       "dockerfiles",
       "docs",
       "examples",
+      "lightx2v_rl",
       "lightx2v_ros",
       "lightx2v_train"
     ],
-    "bundle_sha256": "ab1a6271b262af2e2450ff1bc2d208f861b4a3a94188331257e49b0723dabc4c"
+    "bundle_sha256": "7fd739858f33857c73e1c4ddf7cf6cad0097222e33ba04c1bdb30c51d3abf41d"
   },
   "llama-b11583-bin-macos-arm64.tar.gz": {
     "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11583/llama-b11583-bin-macos-arm64.tar.gz",

@@ -143,7 +143,7 @@ struct SettingsView: View {
         } actions: {
             Button { startSearch() } label: { Label(L10n.text("Search local environments"), systemImage: "magnifyingglass").fixedSize() }
                 .disabled(store.busy || !hasWorkDirectory)
-            SettingsStatusLine(message: pythonMatchesSaved && store.isChecking ? L10n.text("Checking") : "",
+            SettingsStatusLine(message: pythonMatchesSaved && store.isChecking ? L10n.render(store.environmentMessage) : "",
                                running: pythonMatchesSaved && store.isChecking,
                                color: pythonMatchesSaved && store.environmentReady ? Palette.green : Palette.muted)
         }

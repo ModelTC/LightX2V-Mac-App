@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP="${1:-$ROOT/dist/LightX2V APP.app}"
+APP="${1:-$ROOT/dist/LightX2V.app}"
 SCRATCH="${LIGHTX2V_BUILD_DIR:-$ROOT/.build}"
 
 python3 "$ROOT/scripts/prepare-bundled-resources.py"
@@ -38,8 +38,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <plist version="1.0"><dict>
 <key>CFBundleDevelopmentRegion</key><string>en</string>
 <key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string><string>fr</string><string>ja</string><string>ko</string><string>de</string><string>ru</string><string>es</string><string>pt</string></array>
-<key>CFBundleDisplayName</key><string>LightX2V APP</string>
-<key>CFBundleName</key><string>LightX2V APP</string>
+<key>CFBundleDisplayName</key><string>LightX2V</string>
+<key>CFBundleName</key><string>LightX2V</string>
 <key>CFBundleIdentifier</key><string>app.lightx2v.desktop</string>
 <key>CFBundleExecutable</key><string>LightX2VApp</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
@@ -50,7 +50,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>LSArchitecturePriority</key><array><string>arm64</string></array>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSPrincipalClass</key><string>NSApplication</string>
-<key>NSHumanReadableCopyright</key><string>LightX2V APP · Local image generation</string>
+<key>NSHumanReadableCopyright</key><string>LightX2V · Local image generation</string>
 </dict></plist>
 PLIST
 

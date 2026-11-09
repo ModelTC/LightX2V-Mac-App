@@ -9,7 +9,7 @@ struct LightX2VApplication: App {
     @StateObject private var store = AppStore()
 
     var body: some Scene {
-        Window("LightX2V APP", id: "main") {
+        Window("LightX2V", id: "main") {
             Group {
                 if store.showStartupSettings { FirstLaunchSetupView() }
                 else { WorkspaceView() }

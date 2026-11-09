@@ -76,7 +76,7 @@ def publish(client, archive, sha, run_number, run_id, attempt, tag="latest"):
     else:
         release = client.api("POST", "releases", {
             "tag_name": tag, "target_commitish": sha, "draft": True,
-            "name": f"LightX2V APP · {title}", "body": "Preparing the first build."})
+            "name": f"LightX2V · {title}", "body": "Preparing the first build."})
 
     # Stage and verify the new upload before changing the working download.
     staged = client.upload(release["id"], f"{PREFIX}{run_id}-{attempt}.zip", blob)
@@ -112,7 +112,7 @@ def publish(client, archive, sha, run_number, run_id, attempt, tag="latest"):
         "- Requires local LightX2V source, model weights and a Python inference environment\n\n"
         f"SHA-256:\n```text\n{digest}  {ASSET_NAME}\n```\n")
     client.api("PATCH", f"releases/{release['id']}", {
-        "name": f"LightX2V APP · {title}", "target_commitish": sha,
+        "name": f"LightX2V · {title}", "target_commitish": sha,
         "body": notes, "draft": False, "prerelease": False, "make_latest": "true" if tag == "latest" else "false"})
 
     # Only retire APP assets managed by this workflow, after successful publication.

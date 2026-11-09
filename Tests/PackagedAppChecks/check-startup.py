@@ -15,7 +15,8 @@ assert not list(app.rglob('LightX2VAPP_*.bundle'))
 with tempfile.TemporaryDirectory(prefix='lightx2v-packaged-startup-') as folder:
     root = Path(folder)
 
-    def launch(package, label, configured=True, expect_probe=True, old_state=False, old_schema=False, old_runtimes=False):
+    def launch(package, label, configured=True, expect_probe=True, old_state=False, old_schema=False,
+               old_runtimes=False, incomplete_source=False, timeout=40):
         fixture = root / label
         support = fixture / 'support'
         workspace = fixture / 'workspace'
@@ -44,14 +45,29 @@ with tempfile.TemporaryDirectory(prefix='lightx2v-packaged-startup-') as folder:
                     'generations': [], 'creationSettings': {}, 'hasCompletedGeneralSetup': True,
                 }))
         original_workspace = (workspace / 'workspace.json').read_bytes() if old_schema else None
+        installed = workspace / 'runtimes/bundled-LightX2V-0.6.1-minimal-v2-llama-b11583'
+        source = installed / 'LightX2V-0.6.1'
         previous_files = {}
         if old_runtimes:
-            for version in ['0.6.0', '19c19614']:
+            for version in ['0.6.0', '19c19614', '0.6.1']:
                 previous = workspace / ('runtimes/bundled-LightX2V-' + version + '-minimal-v1-llama-b11583')
                 previous.mkdir(parents=True)
                 sentinel = previous / 'preserve-sentinel'
                 sentinel.write_bytes(b'previous runtime')
                 previous_files[sentinel] = sentinel.read_bytes()
+        if incomplete_source:
+            resources = package / 'Contents/Resources/Bundled'
+            manifest = json.loads((resources / 'manifest.json').read_text())
+            installed.mkdir(parents=True)
+            for archive in manifest:
+                subprocess.run(['tar', '-xzf', str(resources / archive), '-C', str(installed)], check=True)
+            hashes = {name: entry.get('bundle_sha256', entry['sha256']) for name, entry in manifest.items()}
+            (installed / '.bundled-resources.json').write_text(json.dumps(hashes))
+            (source / 'lightx2v/infer.py').unlink()
+            (source / 'source-sentinel').write_bytes(b'preserve source contents')
+            sentinel = installed / 'preserve-sentinel'
+            sentinel.write_bytes(b'preserve runtime sibling')
+            previous_files[sentinel] = sentinel.read_bytes()
         log = fixture / 'startup.log'
         suite = 'local.lightx2v.packaged-startup.' + root.name + '.' + label
         with log.open('wb') as output:
@@ -59,18 +75,23 @@ with tempfile.TemporaryDirectory(prefix='lightx2v-packaged-startup-') as folder:
                 env={**os.environ, 'LIGHTX2V_APP_STATE_DIR': str(support), 'LIGHTX2V_APP_PREFERENCES_SUITE': suite}, stdout=output, stderr=output)
             try:
                 if configured and expect_probe:
-                    for _ in range(400):
+                    for _ in range(int(timeout * 10)):
                         assert process.poll() is None, log.read_text(errors='replace')
                         if marker.exists():
                             break
                         time.sleep(0.1)
-                    assert marker.exists(), 'Packaged APP did not complete offline preparation and reach the Python probe'
-                    installed = workspace / 'runtimes/bundled-LightX2V-0.6.1-minimal-v1-llama-b11583'
-                    source = installed / 'LightX2V-0.6.1'
+                    assert marker.exists(), 'Packaged APP did not prepare inference resources and reach the Python probe\n' + log.read_text(errors='replace')
                     assert (source / 'lightx2v/infer.py').is_file()
+                    source_record = source / '.lightx2v-source.json'
+                    if source_record.exists():
+                        assert json.loads(source_record.read_text())['directory'] == str(source), 'Downloaded source marker retained a temporary path'
+                    assert not (source / 'lightx2v_rl').exists(), 'Packaged source retained RL training files'
                     assert (source / 'lightx2v_kernel/apple/python/lightx2v_kernel_apple/int8_gemm/gemm.py').is_file()
                     assert (installed / 'llama-b11583/llama-completion').is_file()
-                    assert all(path.read_bytes() == value for path, value in previous_files.items()), 'Packaged APP changed previous runtimes'
+                    assert all(path.read_bytes() == value for path, value in previous_files.items()), 'Packaged APP changed preserved runtime files'
+                    if incomplete_source:
+                        backups = list(installed.glob('LightX2V-0.6.1-before-repair-*'))
+                        assert len(backups) == 1 and (backups[0] / 'source-sentinel').read_bytes() == b'preserve source contents', 'Source repair discarded original source contents'
                 time.sleep(3)
                 assert process.poll() is None, log.read_text(errors='replace')
                 assert 'Fatal error' not in log.read_text(errors='replace')
@@ -100,3 +121,10 @@ with tempfile.TemporaryDirectory(prefix='lightx2v-packaged-startup-') as folder:
     (broken / 'Contents/Resources/Bundled/llama-b11583-bin-macos-arm64.tar.gz').unlink()
     subprocess.run(['codesign', '--force', '--deep', '--sign', '-', str(broken)], check=True)
     launch(broken, 'missing-resource-error', expect_probe=False)
+
+    missing_source = root / 'missing-source.app'
+    shutil.copytree(app, missing_source, symlinks=True)
+    (missing_source / 'Contents/Resources/Bundled/LightX2V-0.6.1-minimal.tar.gz').unlink()
+    subprocess.run(['codesign', '--force', '--deep', '--sign', '-', str(missing_source)], check=True)
+    launch(missing_source, 'download-missing-source', timeout=180)
+    launch(app, 'repair-incomplete-source', incomplete_source=True, timeout=180)

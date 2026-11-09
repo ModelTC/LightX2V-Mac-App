@@ -34,7 +34,10 @@ unzip './code/LightX2V-\(version).zip' -d './code'
         }) else { throw AppError.message(L10n.english("Invalid source archive paths. Download it again.")) }
     }
 
-    public static func download(workspace: WorkspaceLayout, progress: @escaping @Sendable (String) -> Void) async throws -> SourceDownload {
+    public static func download(workspace: WorkspaceLayout, destination requestedDestination: URL? = nil,
+                                archiveURL: URL = SourceDownloader.archiveURL,
+                                progress: @escaping @Sendable (String) -> Void) async throws -> SourceDownload {
+        try Task.checkCancellation()
         try workspace.prepare()
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 45
@@ -42,12 +45,14 @@ unzip './code/LightX2V-\(version).zip' -d './code'
         let session = URLSession(configuration: config)
         defer { session.invalidateAndCancel() }
         progress(L10n.english("Downloading LightX2V %@…", [String(describing: version)]))
-        let destination = workspace.code.appendingPathComponent("LightX2V-\(version)")
+        let destination = requestedDestination ?? workspace.code.appendingPathComponent("LightX2V-\(version)")
         let result = SourceDownload(commit: revision, directory: destination.path)
         let fm = FileManager.default
         if fm.fileExists(atPath: destination.path) {
             if let existing = try? JSONFile.read(SourceDownload.self, from: destination.appendingPathComponent(".lightx2v-source.json")),
                existing.commit == revision, fm.fileExists(atPath: destination.appendingPathComponent("lightx2v/infer.py").path) {
+                try Task.checkCancellation()
+                try removeTrainingResources(from: destination)
                 progress(L10n.english("LightX2V %@ source ready", [String(describing: version)]))
                 return result
             }
@@ -86,9 +91,20 @@ unzip './code/LightX2V-\(version).zip' -d './code'
         guard fm.fileExists(atPath: source.appendingPathComponent("lightx2v/infer.py").path),
               !fm.fileExists(atPath: source.appendingPathComponent(".git").path) else { throw AppError.message(L10n.english("Source verification failed. Download it again.")) }
         try Task.checkCancellation()
+        try removeTrainingResources(from: source)
         try JSONFile.write(result, to: source.appendingPathComponent(".lightx2v-source.json"))
+        try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Task.checkCancellation()
         try fm.moveItem(at: source, to: destination)
         progress(L10n.english("Downloaded LightX2V %@", [String(describing: version)]))
         return result
+    }
+
+    private static func removeTrainingResources(from source: URL) throws {
+        let path = source.appendingPathComponent("lightx2v_rl")
+        let fm = FileManager.default
+        if fm.fileExists(atPath: path.path) || (try? fm.destinationOfSymbolicLink(atPath: path.path)) != nil {
+            try fm.removeItem(at: path)
+        }
     }
 }
