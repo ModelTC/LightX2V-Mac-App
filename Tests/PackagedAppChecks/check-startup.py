@@ -15,7 +15,7 @@ assert not list(app.rglob('LightX2VAPP_*.bundle'))
 with tempfile.TemporaryDirectory(prefix='lightx2v-packaged-startup-') as folder:
     root = Path(folder)
 
-    def launch(package, label, configured=True, expect_probe=True, old_state=False, old_schema=False):
+    def launch(package, label, configured=True, expect_probe=True, old_state=False, old_schema=False, old_runtimes=False):
         fixture = root / label
         support = fixture / 'support'
         workspace = fixture / 'workspace'
@@ -44,6 +44,14 @@ with tempfile.TemporaryDirectory(prefix='lightx2v-packaged-startup-') as folder:
                     'generations': [], 'creationSettings': {}, 'hasCompletedGeneralSetup': True,
                 }))
         original_workspace = (workspace / 'workspace.json').read_bytes() if old_schema else None
+        previous_files = {}
+        if old_runtimes:
+            for version in ['0.6.0', '19c19614']:
+                previous = workspace / ('runtimes/bundled-LightX2V-' + version + '-minimal-v1-llama-b11583')
+                previous.mkdir(parents=True)
+                sentinel = previous / 'preserve-sentinel'
+                sentinel.write_bytes(b'previous runtime')
+                previous_files[sentinel] = sentinel.read_bytes()
         log = fixture / 'startup.log'
         suite = 'local.lightx2v.packaged-startup.' + root.name + '.' + label
         with log.open('wb') as output:
@@ -57,11 +65,12 @@ with tempfile.TemporaryDirectory(prefix='lightx2v-packaged-startup-') as folder:
                             break
                         time.sleep(0.1)
                     assert marker.exists(), 'Packaged APP did not complete offline preparation and reach the Python probe'
-                    installed = workspace / 'runtimes/bundled-LightX2V-19c19614-minimal-v1-llama-b11583'
-                    source = installed / 'LightX2V-19c19614b067f1746ac24350dfd097e1c0b48591'
+                    installed = workspace / 'runtimes/bundled-LightX2V-0.6.1-minimal-v1-llama-b11583'
+                    source = installed / 'LightX2V-0.6.1'
                     assert (source / 'lightx2v/infer.py').is_file()
                     assert (source / 'lightx2v_kernel/apple/python/lightx2v_kernel_apple/int8_gemm/gemm.py').is_file()
                     assert (installed / 'llama-b11583/llama-completion').is_file()
+                    assert all(path.read_bytes() == value for path, value in previous_files.items()), 'Packaged APP changed previous runtimes'
                 time.sleep(3)
                 assert process.poll() is None, log.read_text(errors='replace')
                 assert 'Fatal error' not in log.read_text(errors='replace')
@@ -84,6 +93,7 @@ with tempfile.TemporaryDirectory(prefix='lightx2v-packaged-startup-') as folder:
     launch(app, 'first-launch', configured=False)
     launch(app, 'first-launch-with-old-files', configured=False, old_state=True)
     launch(app, 'configured-offline-startup')
+    launch(app, 'upgrade-old-bundled-runtimes', old_runtimes=True)
     launch(app, 'reject-flat-model-settings', old_schema=True, expect_probe=False)
     broken = root / 'missing-resource.app'
     shutil.copytree(app, broken, symlinks=True)
