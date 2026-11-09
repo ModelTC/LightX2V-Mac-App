@@ -399,3 +399,46 @@
 "Use your own Python environment" = "Используйте свою среду Python";
 
 "Wait for environment search to finish" = "Дождитесь завершения поиска сред";
+
+// Application updates and uninstall.
+"Application management" = "Управление приложением";
+"Updates" = "Обновления";
+"Uninstall" = "Удаление";
+"Cancel" = "Отмена";
+"Uninstall LightX2V?" = "Удалить LightX2V?";
+"Uninstall and quit" = "Удалить и выйти";
+"The selected files will be permanently deleted after LightX2V closes." = "Выбранные файлы будут безвозвратно удалены после закрытия LightX2V.";
+"Stable app updates" = "Обновления стабильной версии";
+"Current build %@" = "Текущая сборка %@";
+"The app will close, replace its application bundle and restart." = "Приложение закроется, заменит свой пакет и запустится снова.";
+"Check stable version" = "Проверить стабильную версию";
+"Download and install" = "Скачать и установить";
+"Choose what to remove" = "Выберите, что удалить";
+"Select the files to delete. Unchecked items will be kept." = "Выберите файлы для удаления. Неотмеченные элементы будут сохранены.";
+"Select all" = "Выбрать всё";
+"Keep all" = "Сохранить всё";
+"External folder" = "Внешняя папка";
+"Delete selected items…" = "Удалить выбранные элементы…";
+"Checking the stable release…" = "Проверка стабильной версии…";
+"Build information is unavailable. Use a packaged LightX2V app." = "Информация о сборке недоступна. Используйте упакованное приложение LightX2V.";
+"Stable version %@ is available." = "Доступна стабильная версия %@.";
+"LightX2V is up to date." = "Установлена последняя версия LightX2V.";
+"The installed build is newer than the current stable release." = "Установленная сборка новее текущей стабильной версии.";
+"Preparing the stable update…" = "Подготовка обновления стабильной версии…";
+"Application" = "Приложение";
+"Models" = "Модели";
+"Generation program files" = "Файлы программ генерации изображений";
+"Managed Python environments" = "Управляемые среды Python";
+"Generated images" = "Созданные изображения";
+"Caches and logs" = "Кэш и журналы";
+"Settings and history" = "Настройки и история";
+"Application updates" = "Обновления приложения";
+"Uninstall LightX2V" = "Удалить LightX2V";
+"Downloading Stable application…" = "Загрузка стабильной версии приложения…";
+"Downloading Stable application · %.1f / %.1f MB" = "Загрузка стабильного приложения · %.1f / %.1f МБ";
+"Verifying Stable application…" = "Проверка стабильной версии приложения…";
+"Stable application is ready to install." = "Стабильная версия приложения готова к установке.";
+"Application maintenance failed.\n%@" = "Не удалось выполнить операцию обслуживания приложения.\n%@";
+"Remove selected files?" = "Удалить выбранные файлы?";
+"Delete and restart" = "Удалить и перезапустить";
+"Programs used for image generation and prompt enhancement. These files can be downloaded again when needed." = "Программы для генерации изображений и улучшения запросов. При необходимости эти файлы можно скачать снова.";

@@ -399,3 +399,46 @@
 "Use your own Python environment" = "既存の Python 環境を使用";
 
 "Wait for environment search to finish" = "環境の検索が完了するまでお待ちください";
+
+// Application updates and uninstall.
+"Application management" = "アプリ管理";
+"Updates" = "アップデート";
+"Uninstall" = "アンインストール";
+"Cancel" = "キャンセル";
+"Uninstall LightX2V?" = "LightX2V をアンインストールしますか？";
+"Uninstall and quit" = "アンインストールして終了";
+"The selected files will be permanently deleted after LightX2V closes." = "LightX2V の終了後、選択したファイルは完全に削除されます。";
+"Stable app updates" = "安定版アプリの更新";
+"Current build %@" = "現在のビルド %@";
+"The app will close, replace its application bundle and restart." = "アプリを終了してアプリケーションを置き換え、再起動します。";
+"Check stable version" = "安定版を確認";
+"Download and install" = "ダウンロードしてインストール";
+"Choose what to remove" = "削除する項目を選択";
+"Select the files to delete. Unchecked items will be kept." = "削除するファイルを選択してください。チェックを外した項目は保持されます。";
+"Select all" = "すべて選択";
+"Keep all" = "すべて保持";
+"External folder" = "外部フォルダ";
+"Delete selected items…" = "選択した項目を削除…";
+"Checking the stable release…" = "安定版を確認中…";
+"Build information is unavailable. Use a packaged LightX2V app." = "ビルド情報を取得できません。パッケージ化された LightX2V アプリを使用してください。";
+"Stable version %@ is available." = "安定版 %@ が利用可能です。";
+"LightX2V is up to date." = "LightX2V は最新です。";
+"The installed build is newer than the current stable release." = "インストール済みのビルドは現在の安定版より新しいバージョンです。";
+"Preparing the stable update…" = "安定版アップデートを準備中…";
+"Application" = "アプリケーション";
+"Models" = "モデル";
+"Generation program files" = "画像生成用のプログラムファイル";
+"Managed Python environments" = "管理対象の Python 環境";
+"Generated images" = "生成画像";
+"Caches and logs" = "キャッシュとログ";
+"Settings and history" = "設定と履歴";
+"Application updates" = "アプリのアップデート";
+"Uninstall LightX2V" = "LightX2V をアンインストール";
+"Downloading Stable application…" = "安定版アプリをダウンロード中…";
+"Downloading Stable application · %.1f / %.1f MB" = "安定版アプリをダウンロード中 · %.1f / %.1f MB";
+"Verifying Stable application…" = "安定版アプリを検証中…";
+"Stable application is ready to install." = "安定版アプリをインストールする準備ができました。";
+"Application maintenance failed.\n%@" = "アプリの管理操作に失敗しました。\n%@";
+"Remove selected files?" = "選択したファイルを削除しますか？";
+"Delete and restart" = "削除して再起動";
+"Programs used for image generation and prompt enhancement. These files can be downloaded again when needed." = "画像生成とプロンプト拡張に使用するプログラムファイルです。必要なときに再ダウンロードできます。";

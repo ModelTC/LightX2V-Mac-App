@@ -399,3 +399,46 @@
 "Use your own Python environment" = "기존 Python 환경 사용";
 
 "Wait for environment search to finish" = "환경 검색이 끝날 때까지 기다려 주세요";
+
+// Application updates and uninstall.
+"Application management" = "앱 관리";
+"Updates" = "업데이트";
+"Uninstall" = "제거";
+"Cancel" = "취소";
+"Uninstall LightX2V?" = "LightX2V를 제거하시겠습니까?";
+"Uninstall and quit" = "제거 후 종료";
+"The selected files will be permanently deleted after LightX2V closes." = "LightX2V가 종료되면 선택한 파일이 영구적으로 삭제됩니다.";
+"Stable app updates" = "안정 버전 앱 업데이트";
+"Current build %@" = "현재 빌드 %@";
+"The app will close, replace its application bundle and restart." = "앱이 종료된 후 앱 번들이 교체되고 다시 시작됩니다.";
+"Check stable version" = "안정 버전 확인";
+"Download and install" = "다운로드 및 설치";
+"Choose what to remove" = "삭제할 항목 선택";
+"Select the files to delete. Unchecked items will be kept." = "삭제할 파일을 선택하세요. 선택하지 않은 항목은 유지됩니다.";
+"Select all" = "모두 선택";
+"Keep all" = "모두 유지";
+"External folder" = "외부 폴더";
+"Delete selected items…" = "선택한 항목 삭제…";
+"Checking the stable release…" = "안정 버전 확인 중…";
+"Build information is unavailable. Use a packaged LightX2V app." = "빌드 정보를 사용할 수 없습니다. 패키지로 배포된 LightX2V 앱을 사용하세요.";
+"Stable version %@ is available." = "안정 버전 %@을 사용할 수 있습니다.";
+"LightX2V is up to date." = "LightX2V가 최신 상태입니다.";
+"The installed build is newer than the current stable release." = "설치된 빌드가 현재 안정 버전보다 최신입니다.";
+"Preparing the stable update…" = "안정 버전 업데이트 준비 중…";
+"Application" = "앱";
+"Models" = "모델";
+"Generation program files" = "이미지 생성 프로그램 파일";
+"Managed Python environments" = "앱에서 관리하는 Python 환경";
+"Generated images" = "생성된 이미지";
+"Caches and logs" = "캐시 및 로그";
+"Settings and history" = "설정 및 기록";
+"Application updates" = "앱 업데이트";
+"Uninstall LightX2V" = "LightX2V 제거";
+"Downloading Stable application…" = "안정 버전 앱 다운로드 중…";
+"Downloading Stable application · %.1f / %.1f MB" = "안정 버전 앱 다운로드 중 · %.1f / %.1f MB";
+"Verifying Stable application…" = "안정 버전 앱 확인 중…";
+"Stable application is ready to install." = "안정 버전 앱을 설치할 준비가 되었습니다.";
+"Application maintenance failed.\n%@" = "앱 관리 작업에 실패했습니다.\n%@";
+"Remove selected files?" = "선택한 파일을 삭제하시겠습니까?";
+"Delete and restart" = "삭제 후 다시 시작";
+"Programs used for image generation and prompt enhancement. These files can be downloaded again when needed." = "이미지 생성과 프롬프트 향상에 사용하는 프로그램 파일입니다. 필요할 때 다시 다운로드할 수 있습니다.";

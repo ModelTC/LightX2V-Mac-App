@@ -7,17 +7,19 @@ SCRATCH="${LIGHTX2V_BUILD_DIR:-$ROOT/.build}"
 python3 "$ROOT/scripts/prepare-bundled-resources.py"
 
 swift build --package-path "$ROOT" --scratch-path "$SCRATCH" -c release --arch arm64 --product LightX2VApp
+swift build --package-path "$ROOT" --scratch-path "$SCRATCH" -c release --arch arm64 --product LightX2VMaintenance
 BIN="$(swift build --package-path "$ROOT" --scratch-path "$SCRATCH" -c release --arch arm64 --show-bin-path)"
 APP_RES="$BIN/LightX2VAPP_LightX2VApp.bundle"
 CORE_RES="$BIN/LightX2VAPP_LightX2VCore.bundle"
 # SwiftPM's native and Swift Build backends use different bundle layouts.
 [[ ! -d "$APP_RES/Contents/Resources" ]] || APP_RES="$APP_RES/Contents/Resources"
 [[ ! -d "$CORE_RES/Contents/Resources" ]] || CORE_RES="$CORE_RES/Contents/Resources"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Helpers"
 # Rebuild generated resources so removed adapters cannot survive an incremental build.
 rm -rf "$APP/Contents/Resources"
 mkdir -p "$APP/Contents/Resources"
 cp "$BIN/LightX2VApp" "$APP/Contents/MacOS/LightX2VApp"
+cp "$BIN/LightX2VMaintenance" "$APP/Contents/Helpers/LightX2VMaintenance"
 # A .app uses the native Resources directory; SwiftPM's bundle remains a development fallback.
 for resource in bridge.py prompt_enhancement.py requirements.txt; do
     cp "$APP_RES/$resource" "$APP/Contents/Resources/$resource"
@@ -54,6 +56,18 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict></plist>
 PLIST
 
+python3 - "$ROOT" "$APP/Contents/Info.plist" <<'PY'
+from pathlib import Path
+import plistlib
+import subprocess
+import sys
+root, destination = sys.argv[1:]
+info = plistlib.loads(Path(destination).read_bytes())
+info["LightX2VCommit"] = subprocess.check_output(["git", "-C", root, "rev-parse", "HEAD"], text=True).strip()
+info["LightX2VCommitDate"] = subprocess.check_output(["git", "-C", root, "show", "-s", "--format=%cI", "HEAD"], text=True).strip()
+Path(destination).write_bytes(plistlib.dumps(info))
+PY
+
 ICON_WORK="$SCRATCH/icon"
 mkdir -p "$ICON_WORK/AppIcon.iconset"
 swift "$ROOT/scripts/make-icon.swift" "$ICON_WORK/master.png"
@@ -63,6 +77,7 @@ for size in 16 32 128 256 512; do
     sips -z "$twice" "$twice" "$ICON_WORK/master.png" --out "$ICON_WORK/AppIcon.iconset/icon_${size}x${size}@2x.png" >/dev/null
 done
 iconutil -c icns "$ICON_WORK/AppIcon.iconset" -o "$APP/Contents/Resources/AppIcon.icns"
+codesign --force --sign - "$APP/Contents/Helpers/LightX2VMaintenance"
 codesign --force --deep --sign - "$APP"
 codesign --verify --deep --strict "$APP"
 printf 'Built: %s\n' "$APP"

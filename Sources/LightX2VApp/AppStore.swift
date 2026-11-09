@@ -198,6 +198,9 @@ final class AppStore: ObservableObject {
             canPersist = false
             readError = L10n.english("Unable to read the previous workspace. Original files were preserved. %@", [String(describing: error.localizedDescription)])
         }
+        if let maintenanceError = AppMaintenance.failureMessage() {
+            readError = L10n.english("Application maintenance failed.\n%@", [maintenanceError])
+        }
         data.recoverInterrupted()
         BundledInferenceResources.configure(&data.settings)
         settings = data.settings; generations = data.generations
@@ -215,6 +218,26 @@ final class AppStore: ObservableObject {
             restoreCreationParameters()
         }
         refreshEnhancementResources(); refreshModelResources()
+        recordMaintenanceWorkspace()
+    }
+
+    private func recordMaintenanceWorkspace() {
+        guard !settings.workingDirectory.isEmpty else { return }
+        registerMaintenanceWorkspace(WorkspaceLayout(settings.workingDirectory).root)
+    }
+
+    func registerMaintenanceWorkspace(_ root: URL) {
+        try? UninstallWorkspaceRegistry.record(workspaceRoot: root, supportRoot: locatorRoot)
+    }
+
+    func makeUninstallPlan(applicationURL: URL) throws -> AppUninstallPlan {
+        recordMaintenanceWorkspace()
+        let domain = ProcessInfo.processInfo.environment["LIGHTX2V_APP_PREFERENCES_SUITE"] ?? "app.lightx2v.desktop"
+        var roots = UninstallWorkspaceRegistry.roots(in: locatorRoot)
+        if let stateURL { roots.append(stateURL.deletingLastPathComponent()) }
+        return try AppUninstaller.discover(settings: settings, appURL: applicationURL, supportRoot: locatorRoot,
+                                          additionalWorkspaceRoots: roots,
+                                          preferenceDomains: [domain])
     }
 
     func persist() {
@@ -389,6 +412,7 @@ final class AppStore: ObservableObject {
     func applyGeneralSettings(_ value: AppSettings) async throws {
         guard !busy else { throw AppError.message(L10n.english("Wait for the current task to finish before saving settings.")) }
         var updated = settings
+        recordMaintenanceWorkspace()
         func path(_ value: String) -> String {
             (value.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath
         }
@@ -427,6 +451,7 @@ final class AppStore: ObservableObject {
         refreshModelResources()
         canPersist = true; hasCompletedGeneralSetup = saved.hasCompletedGeneralSetup; environmentReady = keepEnvironmentReady
         errorMessage = nil
+        recordMaintenanceWorkspace()
         isPreparingWorkspace = false
         guard !needsGeneralSetup else { return }
         checkEnvironment(reuseVerifiedEnvironment: keepEnvironmentReady)
