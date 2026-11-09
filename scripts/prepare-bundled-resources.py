@@ -42,7 +42,7 @@ def prune_source(archive, output, entry):
                 source.extractall(folder)
         root = folder / root_name
         for name in entry['prune']:
-            if Path(name).name != name:
+            if not name or name in ('.', '..') or '/' in name or '\\' in name:
                 raise ValueError('Invalid pruned directory')
             path = root / name
             if path.is_dir() and not path.is_symlink():

@@ -36,7 +36,8 @@ func bundledResourceChecks() async throws {
         try expect(restored.python == settings.python && restored.workingDirectory == settings.workingDirectory, "engine upgrade changed user paths")
     }
     try await BundledInferenceResources.prepare(in: workspace)
-    for directory in ["assert", "assets", "dockerfiles", "docs", "examples", "lightx2v_rl", "lightx2v_ros", "lightx2v_train"] {
+    let prunedDirectories = ["assert", "assets", "dockerfiles", "docs", "examples", "lightx2v_rl", "lightx2v_ros", "lightx2v_train"]
+    for directory in prunedDirectories {
         try expect(!fm.fileExists(atPath: settings.repository + "/" + directory), "Pruned source folder survived packaging")
     }
     try expect(fm.fileExists(atPath: settings.repository + "/LICENSE"), "Source license must be preserved")
@@ -51,7 +52,22 @@ func bundledResourceChecks() async throws {
     }
     let sentinel = URL(fileURLWithPath: settings.repository).appendingPathComponent("reuse-sentinel")
     try Data("keep".utf8).write(to: sentinel)
+    for name in prunedDirectories {
+        let directory = URL(fileURLWithPath: settings.repository).appendingPathComponent(name)
+        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("old source cache".utf8).write(to: directory.appendingPathComponent("sentinel"))
+    }
+    let cancelled = Task {
+        withUnsafeCurrentTask { $0?.cancel() }
+        try await BundledInferenceResources.prepare(in: workspace)
+    }
+    var stopped = false
+    do { try await cancelled.value } catch is CancellationError { stopped = true }
+    try expect(stopped && prunedDirectories.allSatisfy { fm.fileExists(atPath: settings.repository + "/" + $0 + "/sentinel") }, "cancelled bundled cache reuse changed installed files")
     try await BundledInferenceResources.prepare(in: workspace)
+    for name in prunedDirectories {
+        try expect(!fm.fileExists(atPath: settings.repository + "/" + name), "bundled source cache retained pruned directory " + name)
+    }
     let originalText = try String(contentsOf: original, encoding: .utf8)
     try expect(fm.fileExists(atPath: sentinel.path) && originalText == "preserve", "reuse overwrote existing data")
     for directory in previousDirectories {

@@ -145,11 +145,21 @@ struct AppMaintenanceView: View {
     }
 
     private func loadUninstallPlan() {
-        do {
-            let plan = try store.makeUninstallPlan(applicationURL: applicationURL)
-            uninstallPlan = plan
-            selectedItems = Set(plan.items.filter(\.defaultSelected).map(\.id))
-        } catch { failure = error.localizedDescription }
+        guard !store.busy else { return }
+        beginOperation(L10n.english("Preparing"))
+        store.setupTask = Task {
+            defer { finishOperation() }
+            do {
+                let plan = try await store.makeUninstallPlan(applicationURL: applicationURL)
+                try Task.checkCancellation()
+                uninstallPlan = plan
+                selectedItems = Set(plan.items.filter(\.defaultSelected).map(\.id))
+                message = ""
+            } catch {
+                message = ""
+                if !Task.isCancelled { failure = error.localizedDescription }
+            }
+        }
     }
 
     private func select(_ item: UninstallItem, selected: Bool) {
@@ -218,7 +228,7 @@ struct AppMaintenanceView: View {
                 try Task.checkCancellation()
                 var plan = AppMaintenancePlan(updateApplicationAt: applicationURL, with: app)
                 plan.jobDirectory = job
-                _ = try AppMaintenance.launch(plan: plan)
+                _ = try await AppMaintenance.launch(plan: plan)
                 helperStarted = true
                 finishOperation()
                 NSApp.terminate(nil)
@@ -231,10 +241,18 @@ struct AppMaintenanceView: View {
 
     private func uninstallSelectedItems() {
         guard !store.busy, let uninstallPlan, !selectedItems.isEmpty else { return }
-        do {
-            let plan = AppMaintenancePlan(uninstall: uninstallPlan, selectedIDs: selectedItems)
-            _ = try AppMaintenance.launch(plan: plan)
-            NSApp.terminate(nil)
-        } catch { failure = error.localizedDescription }
+        let plan = AppMaintenancePlan(uninstall: uninstallPlan, selectedIDs: selectedItems)
+        beginOperation(L10n.english("Preparing"))
+        store.setupTask = Task {
+            defer { finishOperation() }
+            do {
+                _ = try await AppMaintenance.launch(plan: plan)
+                finishOperation()
+                NSApp.terminate(nil)
+            } catch {
+                message = ""
+                if !Task.isCancelled { failure = error.localizedDescription }
+            }
+        }
     }
 }

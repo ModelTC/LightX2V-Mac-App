@@ -2,7 +2,7 @@ import Foundation
 import LightX2VCore
 import Darwin
 
-func appMaintenanceChecks() throws {
+func appMaintenanceChecks() async throws {
     let fm = FileManager.default
     guard let temporaryPath = realpath(fm.temporaryDirectory.path, nil) else {
         throw CheckFailure(message: "Unable to resolve the maintenance fixture directory")
@@ -14,13 +14,16 @@ func appMaintenanceChecks() throws {
     defer { try? fm.removeItem(at: root) }
     let helper = URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL
 
-    func signedApplication(at app: URL, stamp: String) throws {
+    func signedApplication(at app: URL, stamp: String, extraFiles: Int = 0) throws {
         try fm.createDirectory(at: app.appendingPathComponent("Contents/MacOS"), withIntermediateDirectories: true)
         try fm.createDirectory(at: app.appendingPathComponent("Contents/Resources"), withIntermediateDirectories: true)
         try fm.copyItem(at: helper, to: app.appendingPathComponent("Contents/MacOS/LightX2VApp"))
         let info = ["CFBundleIdentifier": "app.lightx2v.desktop", "CFBundleExecutable": "LightX2VApp", "CFBundleName": "LightX2V", "CFBundlePackageType": "APPL"]
         try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: app.appendingPathComponent("Contents/Info.plist"))
         try Data(stamp.utf8).write(to: app.appendingPathComponent("Contents/Resources/stamp"))
+        for index in 0..<extraFiles {
+            try Data("fixture".utf8).write(to: app.appendingPathComponent("Contents/Resources/file-\(index)"))
+        }
         let signing = Process()
         signing.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
         signing.arguments = ["--force", "--deep", "--sign", "-", app.path]
@@ -48,6 +51,62 @@ func appMaintenanceChecks() throws {
     let leftovers = try fm.contentsOfDirectory(atPath: app.deletingLastPathComponent().path)
     try expect(leftovers == ["LightX2V.app"], "successful update left backup application copies")
 
+    let sentinel = root.appendingPathComponent("unowned-prepared-input")
+    let sentinelData = Data("preserve caller files".utf8)
+    try sentinelData.write(to: sentinel)
+    let invalidJob = try AppMaintenance.createJobDirectory(excluding: [app])
+    defer { try? fm.removeItem(at: invalidJob) }
+    var invalidPlan = AppMaintenancePlan(updateApplicationAt: app, with: root.appendingPathComponent("missing.app"), parentPID: 0)
+    invalidPlan.jobDirectory = invalidJob
+    invalidPlan.preparedApplicationURL = sentinel
+    var invalidRejected = false
+    do { _ = try AppMaintenance.prepare(plan: invalidPlan, helperURL: helper) }
+    catch { invalidRejected = true }
+    let retainedSentinel = try Data(contentsOf: sentinel)
+    try expect(invalidRejected && retainedSentinel == sentinelData, "failed preparation removed an input path it did not create")
+    try expect(!fm.fileExists(atPath: invalidJob.path), "failed preparation retained its owned job")
+
+    let cancellationJob = try AppMaintenance.createJobDirectory(excluding: [app])
+    defer { try? fm.removeItem(at: cancellationJob) }
+    let cancellationIncoming = cancellationJob.appendingPathComponent("download/LightX2V.app")
+    try signedApplication(at: cancellationIncoming, stamp: "cancelled update", extraFiles: 4000)
+    let launchMarker = root.appendingPathComponent("cancelled-helper-started")
+    let markerHelper = root.appendingPathComponent("marker-helper")
+    let quotedMarker = "'" + launchMarker.path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    try Data(("#!/bin/sh\n/usr/bin/touch " + quotedMarker + "\n").utf8).write(to: markerHelper)
+    try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: markerHelper.path)
+    var cancellationPlan = AppMaintenancePlan(updateApplicationAt: app, with: cancellationIncoming, parentPID: Int32.max)
+    cancellationPlan.jobDirectory = cancellationJob
+    let heartbeat = await MainActor.run { MaintenanceHeartbeat() }
+    let ticker = Task { @MainActor in
+        while !Task.isCancelled {
+            heartbeat.pulses += 1
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+    }
+    defer { ticker.cancel() }
+    let launch = Task { @MainActor [cancellationPlan] in
+        try await AppMaintenance.launch(plan: cancellationPlan, helperURL: markerHelper)
+    }
+    var copying = false
+    for _ in 0..<5000 {
+        let contents = try fm.contentsOfDirectory(atPath: app.deletingLastPathComponent().path)
+        if contents.contains(where: { $0.hasPrefix(".LightX2V-update-") }) { copying = true; break }
+        try await Task.sleep(nanoseconds: 1_000_000)
+    }
+    let pulsesBeforeCancellation = await MainActor.run { heartbeat.pulses }
+    launch.cancel()
+    var cancelled = false
+    do { _ = try await launch.value } catch is CancellationError { cancelled = true }
+    ticker.cancel()
+    try expect(copying && pulsesBeforeCancellation > 1, "maintenance preparation blocked the main actor heartbeat")
+    try expect(cancelled && !fm.fileExists(atPath: cancellationJob.path), "cancelled maintenance did not finish cleaning its job")
+    try expect(!fm.fileExists(atPath: launchMarker.path), "cancelled preparation started the maintenance helper")
+    let afterCancellation = try fm.contentsOfDirectory(atPath: app.deletingLastPathComponent().path)
+    try expect(afterCancellation == ["LightX2V.app"], "cancelled preparation left a partial update application")
+    let cancellationStamp = try String(contentsOf: app.appendingPathComponent("Contents/Resources/stamp"), encoding: .utf8)
+    try expect(cancellationStamp == "updated", "cancelled preparation changed the installed application")
+
     let rollbackJob = try AppMaintenance.createJobDirectory(excluding: [app])
     defer { try? fm.removeItem(at: rollbackJob) }
     let rollbackIncoming = rollbackJob.appendingPathComponent("download/LightX2V.app")
@@ -61,7 +120,7 @@ func appMaintenanceChecks() throws {
     pending.jobDirectory = rollbackJob
     let rollback = try AppMaintenance.prepare(plan: pending, helperURL: helper)
     let disappearing = rollback.preparedApplicationURL!
-    DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) { try? fm.removeItem(at: disappearing) }
+    DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) { try? FileManager.default.removeItem(at: disappearing) }
     var rolledBack = false
     do { try AppMaintenance.execute(rollback, relaunch: false) } catch { rolledBack = true }
     let retained = try String(contentsOf: app.appendingPathComponent("Contents/Resources/stamp"), encoding: .utf8)
@@ -131,4 +190,9 @@ func appMaintenanceChecks() throws {
     try expect((try? fm.destinationOfSymbolicLink(atPath: broken.path)) == nil, "uninstall retained a broken selected symlink")
     try expect(!fm.fileExists(atPath: removal.jobDirectory!.path), "successful uninstall left its helper job")
     print("PASS native maintenance staging, bundle replacement, rollback, failure reporting, selected uninstall and nested preservation")
+}
+
+@MainActor
+private final class MaintenanceHeartbeat {
+    var pulses = 0
 }

@@ -4,14 +4,10 @@ import Foundation
 public enum BundledInferenceResources {
     public static let sourceRevision = "0.6.1"
     public static let sourceRoot = "LightX2V-" + sourceRevision
-    public static let sourceArchive = "LightX2V-0.6.1-minimal.tar.gz"
+    public static let sourceArchive = "LightX2V-\(sourceRevision)-minimal.tar.gz"
     public static let runtimeArchive = "llama-b11583-bin-macos-arm64.tar.gz"
-    public static let hashes = [
-        sourceArchive: "7fd739858f33857c73e1c4ddf7cf6cad0097222e33ba04c1bdb30c51d3abf41d",
-        runtimeArchive: "d23832f4b847a722a64c9bf57e518c3df81dfab325942182ff17792d5d33351f"
-    ]
     public static func directory(in workspace: WorkspaceLayout) -> URL {
-        workspace.runtimes.appendingPathComponent("bundled-LightX2V-0.6.1-minimal-v2-llama-b11583")
+        workspace.runtimes.appendingPathComponent("bundled-LightX2V-\(sourceRevision)-minimal-v2-llama-b11583")
     }
     public static func configure(_ settings: inout AppSettings) {
         guard !settings.workingDirectory.isEmpty else { return }
@@ -31,14 +27,46 @@ public enum BundledInferenceResources {
         if Bundle.main.bundleURL.pathExtension != "app", let url = find(in: Bundle.module) { return url }
         throw AppError.message("Bundled inference archive is missing: \(name)")
     }
+
+    struct Archive: Decodable {
+        let url: URL
+        let sha256: String
+        let archiveRoot: String?
+        let prune: [String]?
+        let bundleSHA256: String?
+        var installedArchiveSHA256: String { bundleSHA256 ?? sha256 }
+        private enum CodingKeys: String, CodingKey {
+            case url, sha256, prune, archiveRoot = "archive_root", bundleSHA256 = "bundle_sha256"
+        }
+    }
+
+    // Loading resources is intentionally separate from configure: settings are
+    // also decoded by the maintenance helper after it leaves the App bundle.
+    static func manifest() throws -> [String: Archive] {
+        let archives = try JSONDecoder().decode([String: Archive].self, from: Data(contentsOf: resource("manifest.json")))
+        func validDigest(_ value: String) -> Bool { value.count == 64 && value.allSatisfy { "0123456789abcdef".contains($0) } }
+        guard Set(archives.keys) == Set([sourceArchive, runtimeArchive]), let source = archives[sourceArchive],
+              source.archiveRoot == sourceRoot,
+              source.url.absoluteString == "https://github.com/ModelTC/LightX2V/archive/refs/tags/\(sourceRevision).tar.gz",
+              let prune = source.prune, !prune.isEmpty, Set(prune).count == prune.count,
+              prune.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." && !$0.contains("/") && !$0.contains("\\") }),
+              source.bundleSHA256 != nil,
+              archives.allSatisfy({ name, archive in
+                  name == URL(fileURLWithPath: name).lastPathComponent && name.hasSuffix(".tar.gz") &&
+                  archive.url.scheme == "https" && validDigest(archive.sha256) && validDigest(archive.installedArchiveSHA256)
+              }) else { throw AppError.message("Bundled inference manifest does not match the pinned LightX2V release.") }
+        return archives
+    }
+
     public static func prepare(in workspace: WorkspaceLayout, progress: @escaping @Sendable (String) -> Void = { _ in }) async throws {
         try workspace.prepare(); try Task.checkCancellation()
+        let archives = try manifest()
+        let hashes = archives.mapValues(\.installedArchiveSHA256)
+        let prunedDirectories = archives[sourceArchive]?.prune ?? []
         let fm = FileManager.default
         let destination = directory(in: workspace)
         func sourceIsComplete(_ root: URL) -> Bool {
-            ["lightx2v/infer.py", "lightx2v_kernel/apple/python/lightx2v_kernel_apple/int8_gemm/gemm.py", "lightx2v_kernel/apple/pyproject.toml", "configs/platforms/mps/qwen_image_21_turbo_int8.json"].allSatisfy {
-                fm.fileExists(atPath: root.appendingPathComponent(sourceRoot).appendingPathComponent($0).path)
-            }
+            SourceDownloader.isComplete(root.appendingPathComponent(sourceRoot))
         }
         func downloadSource(into root: URL) async throws {
             _ = try await SourceDownloader.download(workspace: workspace, destination: root.appendingPathComponent(sourceRoot), progress: progress)
@@ -69,6 +97,8 @@ public enum BundledInferenceResources {
                     try fm.moveItem(at: replacement, to: source)
                 }
             }
+            try Task.checkCancellation()
+            try SourceDownloader.prune(destination.appendingPathComponent(sourceRoot), directories: prunedDirectories)
             try validate(destination); return
         }
         let staging = workspace.temporary.appendingPathComponent("bundled-\(UUID().uuidString)")
@@ -95,6 +125,7 @@ public enum BundledInferenceResources {
             guard extraction.status == 0 else { throw AppError.message("Unable to extract bundled archive: \(name)") }
             try Task.checkCancellation()
         }
+        try SourceDownloader.prune(staging.appendingPathComponent(sourceRoot), directories: prunedDirectories)
         try validate(staging)
         try JSONFile.write(hashes, to: staging.appendingPathComponent(".bundled-resources.json"))
         try Task.checkCancellation()

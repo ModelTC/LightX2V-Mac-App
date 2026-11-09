@@ -11,50 +11,52 @@ private final class SourceDownloadUpdates: @unchecked Sendable {
 extension SetupChecks {
     static func sourceDownloadChecks(_ root: URL) async throws {
         let fm = FileManager.default
+        guard let archivePath = ProcessInfo.processInfo.environment["LIGHTX2V_TEST_SOURCE_ARCHIVE"],
+              fm.isReadableFile(atPath: archivePath) else {
+            throw Failure(message: "Set LIGHTX2V_TEST_SOURCE_ARCHIVE to the original pinned LightX2V 0.6.1 tar.gz before running SetupChecks. The fixture is served locally and must match Bundled/manifest.json.")
+        }
         let serverWorkspace = WorkspaceLayout(root.appendingPathComponent("source-server").path)
         try serverWorkspace.prepare()
         let portFile = serverWorkspace.root.appendingPathComponent("port")
         let script = #"""
-import http.server, pathlib, random, sys, time, zipfile
-root = pathlib.Path(sys.argv[1])
-archive = root / 'source.zip'
-with zipfile.ZipFile(archive, 'w') as output:
-    prefix = sys.argv[3] + '/'
-    for name in ('lightx2v/infer.py', 'lightx2v_kernel/apple/python/lightx2v_kernel_apple/int8_gemm/gemm.py',
-                 'lightx2v_kernel/apple/pyproject.toml', 'configs/platforms/mps/qwen_image_21_turbo_int8.json',
-                 'lightx2v_rl/scripts/train.py'):
-        output.writestr(prefix + name, 'source fixture\n')
-    output.writestr(prefix + 'lightx2v/payload.bin', random.Random(42).randbytes(1048576))
-payload = archive.read_bytes()
+import http.server, pathlib, sys, time
+payload = pathlib.Path(sys.argv[2]).read_bytes()
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *args): pass
     def do_GET(self):
-        if self.path not in ('/source.zip', '/slow.zip'):
+        if self.path not in ('/source.tar.gz', '/slow.tar.gz', '/corrupt.tar.gz'):
             self.send_error(404)
             return
+        content = payload + b'corrupted archive' if self.path == '/corrupt.tar.gz' else payload
         self.send_response(200)
-        self.send_header('Content-Length', str(len(payload)))
+        self.send_header('Content-Length', str(len(content)))
         self.end_headers()
         try:
-            for offset in range(0, len(payload), 4096):
-                self.wfile.write(payload[offset:offset + 4096])
+            for offset in range(0, len(content), 4096):
+                self.wfile.write(content[offset:offset + 4096])
                 self.wfile.flush()
-                if self.path == '/slow.zip': time.sleep(.02)
+                if self.path == '/slow.tar.gz': time.sleep(.02)
         except (BrokenPipeError, ConnectionResetError): pass
 server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
-pathlib.Path(sys.argv[2]).write_text(str(server.server_port))
+pathlib.Path(sys.argv[1]).write_text(str(server.server_port))
 server.serve_forever()
 """#
         let server = Task {
             try await SetupCommand.run("/usr/bin/python3", arguments: ["-I", "-B", "-u", "-c", script,
-                                       serverWorkspace.root.path, portFile.path, BundledInferenceResources.sourceRoot],
-                                       workspace: serverWorkspace, timeout: 60)
+                                       portFile.path, archivePath],
+                                       workspace: serverWorkspace, timeout: 120)
         }
         defer { server.cancel() }
         for _ in 0..<200 where !fm.fileExists(atPath: portFile.path) { try await Task.sleep(for: .milliseconds(25)) }
         try expect(fm.fileExists(atPath: portFile.path), "source download server did not start")
         let port = try String(contentsOf: portFile, encoding: .utf8)
-        func url(_ path: String) -> URL { URL(string: "http://127.0.0.1:\(port)/\(path).zip")! }
+        func url(_ path: String) -> URL { URL(string: "http://127.0.0.1:\(port)/\(path).tar.gz")! }
+
+        struct ArchivePolicy: Decodable { let prune: [String]? }
+        let policies = try JSONDecoder().decode([String: ArchivePolicy].self,
+            from: Data(contentsOf: BundledInferenceResources.resource("manifest.json")))
+        let prunedDirectories = policies[BundledInferenceResources.sourceArchive]?.prune ?? []
+        try expect(prunedDirectories.contains("lightx2v_rl"), "source manifest must remove training resources")
 
         let workspace = WorkspaceLayout(root.appendingPathComponent("source download 中文 spaces").path)
         let updates = SourceDownloadUpdates()
@@ -64,14 +66,24 @@ server.serve_forever()
         try expect(source == workspace.code.appendingPathComponent(BundledInferenceResources.sourceRoot), "default source installation moved outside workspace code")
         try expect(updates.hasBytes, "source download did not report byte progress")
         try expect(fm.fileExists(atPath: source.appendingPathComponent("lightx2v/infer.py").path), "source download missing inference entry")
-        try expect(!fm.fileExists(atPath: training.path), "fresh source download retained training resources")
+        for name in prunedDirectories {
+            try expect(!fm.fileExists(atPath: source.appendingPathComponent(name).path), "fresh source download retained pruned directory " + name)
+        }
         let original = try Data(contentsOf: source.appendingPathComponent("lightx2v/infer.py"))
-        try fm.createDirectory(at: training, withIntermediateDirectories: true)
-        try Data("cached training resource".utf8).write(to: training.appendingPathComponent("sentinel"))
+        for name in prunedDirectories {
+            let directory = source.appendingPathComponent(name)
+            try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+            try Data("cached resource".utf8).write(to: directory.appendingPathComponent("sentinel"))
+        }
+        // Earlier ZIP installations stored only these two fields.
+        try JSONFile.write(["commit": SourceDownloader.revision, "directory": source.path], to: source.appendingPathComponent(".lightx2v-source.json"))
         let sentinel = source.appendingPathComponent("preserve-sentinel")
         try Data("preserve".utf8).write(to: sentinel)
         let reused = try await SourceDownloader.download(workspace: workspace, archiveURL: url("missing")) { _ in }
         try expect(reused.directory == downloaded.directory && !fm.fileExists(atPath: training.path), "verified source cache was not reused and cleaned without a download")
+        for name in prunedDirectories {
+            try expect(!fm.fileExists(atPath: source.appendingPathComponent(name).path), "legacy source cache retained pruned directory " + name)
+        }
         let retained = try Data(contentsOf: source.appendingPathComponent("lightx2v/infer.py"))
         try expect(retained == original && fm.fileExists(atPath: sentinel.path), "cache cleanup changed inference or user files")
 
@@ -99,6 +111,13 @@ server.serve_forever()
         let retried = try await SourceDownloader.download(workspace: retryWorkspace, archiveURL: url("source")) { _ in }
         try expect(fm.fileExists(atPath: retried.directory + "/lightx2v/infer.py"), "source download could not retry after HTTP failure")
 
+        let corruptWorkspace = WorkspaceLayout(root.appendingPathComponent("source checksum failure").path)
+        var checksumFailed = false
+        do { _ = try await SourceDownloader.download(workspace: corruptWorkspace, archiveURL: url("corrupt")) { _ in } }
+        catch { checksumFailed = error.localizedDescription.contains("checksum") }
+        let corruptTemporary = try fm.contentsOfDirectory(atPath: corruptWorkspace.temporary.path)
+        try expect(checksumFailed && corruptTemporary.isEmpty && !fm.fileExists(atPath: corruptWorkspace.code.appendingPathComponent(BundledInferenceResources.sourceRoot).path), "checksum failure was accepted or left a partial source installation")
+
         let cancelledWorkspace = WorkspaceLayout(root.appendingPathComponent("source download cancelled").path)
         let slow = SourceDownloadUpdates()
         let downloading = Task {
@@ -121,11 +140,10 @@ server.serve_forever()
             let protected = existing.appendingPathComponent("lightx2v_rl/preserve-sentinel")
             try fm.createDirectory(at: protected.deletingLastPathComponent(), withIntermediateDirectories: true)
             try Data("protected".utf8).write(to: protected)
+            try fm.createDirectory(at: existing.appendingPathComponent("lightx2v"), withIntermediateDirectories: true)
+            try original.write(to: existing.appendingPathComponent("lightx2v/infer.py"))
             if name == "incomplete" {
                 try JSONFile.write(["commit": SourceDownloader.revision, "directory": existing.path], to: existing.appendingPathComponent(".lightx2v-source.json"))
-            } else {
-                try fm.createDirectory(at: existing.appendingPathComponent("lightx2v"), withIntermediateDirectories: true)
-                try original.write(to: existing.appendingPathComponent("lightx2v/infer.py"))
             }
             var rejected = false
             do { _ = try await SourceDownloader.download(workspace: collision, archiveURL: url("source")) { _ in } }

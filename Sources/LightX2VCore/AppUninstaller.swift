@@ -71,6 +71,7 @@ public enum AppUninstaller {
                                 homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
                                 additionalWorkspaceRoots: [URL] = [],
                                 preferenceDomains: [String] = [bundleIdentifier]) throws -> AppUninstallPlan {
+        try Task.checkCancellation()
         let fm = FileManager.default
         let home = normalized(homeDirectory.resolvingSymlinksInPath())
         var roots = additionalWorkspaceRoots + UninstallWorkspaceRegistry.roots(in: supportRoot)
@@ -81,12 +82,13 @@ public enum AppUninstaller {
                           settings.qwenImage21TurboInt8.promptEnhancement.t2iDirectory, settings.qwenImage21TurboInt8.promptEnhancement.i2iDirectory]
         var checkedCandidates = Set<String>()
         for path in configured where path.hasPrefix("/") {
+            try Task.checkCancellation()
             var candidate = normalized(URL(fileURLWithPath: path)).deletingLastPathComponent()
             // Prior versions kept only the current workspace locator. Recover
             // older workspaces only through explicitly configured resources.
             for _ in 0..<8 {
                 if checkedCandidates.insert(candidate.path).inserted,
-                   (try? validateSafePath(candidate, homeDirectory: home)) != nil,
+                   (try? validateWorkspaceRoot(candidate, homeDirectory: home)) != nil,
                    let saved = try? JSONFile.read(WorkspaceData.self, from: candidate.appendingPathComponent("workspace.json")),
                    !saved.settings.workingDirectory.isEmpty,
                    normalized(WorkspaceLayout(saved.settings.workingDirectory).root).path == candidate.path {
@@ -98,7 +100,7 @@ public enum AppUninstaller {
             }
         }
         roots = Array(Set(roots.map { normalized($0.resolvingSymlinksInPath()) })).sorted { $0.path < $1.path }
-        for root in roots { try validateSafePath(root, homeDirectory: home) }
+        for root in roots { try validateWorkspaceRoot(root, homeDirectory: home) }
         var items: [UninstallItem] = []
         func add(_ url: URL, _ category: UninstallCategory, external: Bool = false,
                  preferenceDomain: String? = nil, includeMissing: Bool = false) throws {
@@ -113,10 +115,12 @@ public enum AppUninstaller {
         var savedSettings = [settings]
         var resourcePaths: [(String, UninstallCategory)] = []
         for root in roots {
+            try Task.checkCancellation()
             let layout = WorkspaceLayout(root.path)
             if let saved = try? JSONFile.read(WorkspaceData.self, from: layout.state) {
                 savedSettings.append(saved.settings)
                 for job in saved.generations {
+                    try Task.checkCancellation()
                     resourcePaths.append((job.request.model, .models))
                     resourcePaths.append((job.request.repository, .sources))
                     if let enhancement = job.request.promptEnhancement {
@@ -135,6 +139,7 @@ public enum AppUninstaller {
             for folder in ["cache", "tmp", "logs"] { try add(root.appendingPathComponent(folder), .caches, includeMissing: true) }
         }
         for value in savedSettings {
+            try Task.checkCancellation()
             for model in [value.qwenImage21Turbo, value.qwenImage21TurboInt8] {
                 resourcePaths += [(model.modelDirectory, .models), (model.promptEnhancement.t2iDirectory, .models),
                                   (model.promptEnhancement.i2iDirectory, .models)]
@@ -150,6 +155,7 @@ public enum AppUninstaller {
             }
         }
         for (path, category) in resourcePaths where !path.isEmpty {
+            try Task.checkCancellation()
             guard path.hasPrefix("/") else { throw AppError.message("An uninstall resource path is not absolute. Check its configuration.") }
             let original = URL(fileURLWithPath: path).standardizedFileURL
             // A link within an owned workspace is removed as a link, including
@@ -188,7 +194,7 @@ public enum AppUninstaller {
     public static func selection(from plan: AppUninstallPlan, selectedIDs: Set<String>) throws -> AppUninstallSelection {
         let fm = FileManager.default
         guard selectedIDs.isSubset(of: Set(plan.items.map(\.id))) else { throw AppError.message("The uninstall selection contains an unknown item.") }
-        for root in plan.workspaceRoots { try validateSafePath(root, homeDirectory: plan.homeDirectory) }
+        for root in plan.workspaceRoots { try validateWorkspaceRoot(root, homeDirectory: plan.homeDirectory) }
         for item in plan.items {
             guard item.path.hasPrefix("/") else { throw AppError.message("An uninstall resource path is not absolute.") }
             let url = URL(fileURLWithPath: item.path, isDirectory: false)
@@ -249,7 +255,9 @@ public enum AppUninstaller {
             for root in plan.workspaceRoots where contains(target, in: root) {
                 var parent = target.deletingLastPathComponent()
                 while contains(parent, in: root) {
-                    if !retained.contains(where: { contains(parent, in: $0) }) && !unselected.contains(where: { contains(parent, in: $0) }) { parents.insert(parent) }
+                    if !retained.contains(where: { contains(parent, in: $0) }),
+                       !unselected.contains(where: { contains(parent, in: $0) }),
+                       (try? validateSafePath(parent, homeDirectory: plan.homeDirectory)) != nil { parents.insert(parent) }
                     if parent.path == root.path { break }
                     parent.deleteLastPathComponent()
                 }
@@ -277,6 +285,14 @@ public enum AppUninstaller {
     }
 
     static func validateSafePath(_ url: URL, homeDirectory: URL) throws {
+        try validateSafePath(url, homeDirectory: homeDirectory, allowsVolumeRoot: false)
+    }
+
+    static func validateWorkspaceRoot(_ url: URL, homeDirectory: URL) throws {
+        try validateSafePath(url, homeDirectory: homeDirectory, allowsVolumeRoot: true)
+    }
+
+    private static func validateSafePath(_ url: URL, homeDirectory: URL, allowsVolumeRoot: Bool) throws {
         let path = url.standardizedFileURL.path
         let safetyPath = path.lowercased()
         let system = ["/", "/Users", "/Applications", "/System", "/Library", "/usr", "/bin", "/sbin", "/etc", "/var", "/private", "/opt", "/Volumes", "/tmp", "/private/tmp", "/private/var", "/private/var/folders", "/private/var/db", "/private/var/root", "/private/var/mobile", "/private/var/log", "/private/var/tmp", "/opt/homebrew"]
@@ -288,6 +304,26 @@ public enum AppUninstaller {
               !safetyPath.hasPrefix("/bin/"), !safetyPath.hasPrefix("/sbin/"), !safetyPath.hasPrefix("/library/"),
               !safetyPath.hasPrefix("/private/etc/"), !safetyPath.hasPrefix("/private/var/db/") else {
             throw AppError.message("Refusing to uninstall a system or general-purpose directory: " + path)
+        }
+        // A mounted volume can live outside /Volumes. Removing a mount point
+        // may erase its contents before the final directory removal fails.
+        if !allowsVolumeRoot && !isLink(url) {
+            let descriptor = Darwin.open(url.path, O_EVTONLY | O_NOFOLLOW | O_CLOEXEC)
+            if descriptor >= 0 {
+                defer { close(descriptor) }
+                var volume = statfs()
+                guard fstatfs(descriptor, &volume) == 0 else {
+                    throw AppError.message("Unable to inspect the uninstall volume: " + path)
+                }
+                let mountPath = withUnsafePointer(to: &volume.f_mntonname) { value in
+                    value.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
+                }
+                guard normalized(url).path != normalized(URL(fileURLWithPath: mountPath)).path else {
+                    throw AppError.message("Refusing to uninstall a mounted volume: " + path)
+                }
+            } else if errno != ENOENT && errno != ENOTDIR {
+                throw AppError.message("Unable to inspect the uninstall volume: " + path)
+            }
         }
     }
 

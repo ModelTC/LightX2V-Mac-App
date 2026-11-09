@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run the packaged helper against disposable application and data fixtures."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import plistlib
@@ -185,5 +186,70 @@ with tempfile.TemporaryDirectory(prefix='lightx2v-helper-check-') as directory:
             retained_process.terminate()
             retained_process.wait(timeout=10)
         registrar = Path('/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister')
+        if registrar.is_file():
+            subprocess.run([str(registrar), '-u', str(retained_app)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    # A valid, signed update can still fail to launch. Require a future macOS
+    # version to exercise replacement followed by restoration of the old app.
+    launch_marker.unlink()
+    original_binary = retained_binary.read_bytes()
+    original_info = (retained_app / 'Contents/Info.plist').read_bytes()
+    rollback_job = root / ('lightx2v-maintenance-' + str(uuid.uuid4()))
+    rollback_job.mkdir(mode=0o700)
+    (rollback_job / '.lightx2v-maintenance-job').write_text(str(uuid.uuid4()))
+    rollback_helper = rollback_job / 'LightX2VMaintenance'
+    shutil.copy2(helper, rollback_helper)
+    rollback_helper.chmod(0o700)
+    prepared = retained_app.parent / ('.LightX2V-update-' + str(uuid.uuid4()) + '.app')
+    shutil.copytree(retained_app, prepared)
+    incompatible_info = plistlib.loads(original_info)
+    incompatible_info['LSMinimumSystemVersion'] = '99.0'
+    (prepared / 'Contents/Info.plist').write_bytes(plistlib.dumps(incompatible_info))
+    subprocess.run(['/usr/bin/codesign', '--force', '--deep', '--sign', '-', str(prepared)],
+                   check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(['/usr/bin/codesign', '--verify', '--deep', '--strict', str(prepared)],
+                   check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    rollback_parent = subprocess.Popen(['/bin/sleep', '2'])
+    rollback_plan = {
+        'operation': 'update', 'parentPID': rollback_parent.pid,
+        'applicationURL': retained_app.as_uri(), 'selectedIDs': [],
+        'jobDirectory': rollback_job.as_uri(), 'preparedApplicationURL': prepared.as_uri(),
+        'originalApplicationDigest': hashlib.sha256(original_binary).hexdigest(),
+    }
+    rollback_request = rollback_job / 'plan.json'
+    rollback_request.write_text(json.dumps(rollback_plan))
+    rollback_log = root / 'rollback-helper.log'
+    rollback_process = None
+    try:
+        with rollback_log.open('wb') as output:
+            rollback_process = subprocess.Popen([str(rollback_helper), str(rollback_request)], cwd=rollback_job,
+                                               stdout=output, stderr=subprocess.STDOUT)
+            time.sleep(0.5)
+            assert rollback_parent.poll() is None and rollback_process.poll() is None, rollback_log.read_text(errors='replace')
+            assert retained_binary.read_bytes() == original_binary and prepared.is_dir(), 'Update replaced the app before the parent exited'
+            rollback_parent.wait(timeout=10)
+            assert rollback_process.wait(timeout=30) != 0, 'Incompatible update did not report its launch failure'
+        for _ in range(100):
+            if launch_marker.exists():
+                break
+            time.sleep(0.1)
+        assert launch_marker.read_text() == 'restarted', 'Helper did not relaunch the restored application'
+        assert retained_binary.read_bytes() == original_binary, 'Rollback changed the original executable'
+        assert (retained_app / 'Contents/Info.plist').read_bytes() == original_info, 'Rollback changed the original Info.plist'
+        assert not prepared.exists(), 'Rollback left its prepared application behind'
+        assert not any(path.name.startswith('.LightX2V-backup-') for path in retained_app.parent.iterdir()), 'Rollback left an old application backup'
+        result = json.loads((rollback_job / 'result.json').read_text())
+        assert result['success'] is False and result['message'], 'Rollback did not retain an actionable failure report'
+        assert 'kLSIncompatibleSystemVersionErr' in result['message'] or '-10825' in result['message'], 'Update failed before attempting the incompatible application launch'
+        assert state.read_bytes() == saved_state and locator.read_bytes() == saved_locator, 'Failed update changed workspace settings'
+        assert unrelated.read_bytes() == b'unrelated user data', 'Failed update changed unrelated user data'
+        print('PASS packaged native helper replaces incompatible app, restores original bytes, relaunches and retains its failure report')
+    finally:
+        if rollback_parent.poll() is None:
+            rollback_parent.terminate()
+        rollback_parent.wait(timeout=10)
+        if rollback_process is not None and rollback_process.poll() is None:
+            rollback_process.terminate()
+            rollback_process.wait(timeout=10)
         if registrar.is_file():
             subprocess.run([str(registrar), '-u', str(retained_app)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

@@ -9,7 +9,7 @@ public enum UninstallWorkspaceRegistry {
 
     public static func record(workspaceRoot: URL, supportRoot: URL) throws {
         let root = AppUninstaller.normalized(workspaceRoot.resolvingSymlinksInPath())
-        try AppUninstaller.validateSafePath(root, homeDirectory: FileManager.default.homeDirectoryForCurrentUser)
+        try AppUninstaller.validateWorkspaceRoot(root, homeDirectory: FileManager.default.homeDirectoryForCurrentUser)
         let fm = FileManager.default
         try fm.createDirectory(at: supportRoot, withIntermediateDirectories: true)
         let lock = supportRoot.appendingPathComponent(".workspaces.lock")

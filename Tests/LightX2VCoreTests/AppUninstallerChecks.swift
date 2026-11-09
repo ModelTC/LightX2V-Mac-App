@@ -190,10 +190,33 @@ func appUninstallerChecks() throws {
         do { try action() } catch { failed = true }
         try expect(failed, "uninstall accepted an unsafe selection")
     }
-    for path in ["/", "/Applications", "/System/Library", "/opt/homebrew", home.path, home.appendingPathComponent("Documents").path] {
+    for path in ["/", "/Applications", "/System/Library", "/opt/homebrew", "/dev", home.path, home.appendingPathComponent("Documents").path] {
         try rejected {
             try AppUninstaller.validateDeletionTargets(.init(deletionURLs: [URL(fileURLWithPath: path)], retainedURLs: [], emptyParentURLs: [], preferenceDomains: [], homeDirectory: home))
         }
+    }
+    let mountLink = root.appendingPathComponent("dev-volume-link")
+    try fm.createSymbolicLink(atPath: mountLink.path, withDestinationPath: "/dev")
+    try AppUninstaller.validateDeletionTargets(.init(deletionURLs: [mountLink], retainedURLs: [], emptyParentURLs: [],
+                                                     preferenceDomains: [], homeDirectory: home))
+    let mountContainer = URL(fileURLWithPath: "/dev", isDirectory: false)
+    let mountSupport = root.appendingPathComponent("mount-container-support")
+    try UninstallWorkspaceRegistry.record(workspaceRoot: mountContainer, supportRoot: mountSupport)
+    let mountFixture = workspace.root.appendingPathComponent("mount-container-fixture")
+    try file(mountFixture.appendingPathComponent("data"))
+    var mountSettings = AppSettings.defaults
+    mountSettings.workingDirectory = workspace.root.path
+    mountSettings.repository = mountFixture.path
+    mountSettings.python = "/usr/bin/python3"
+    let mountPlan = try AppUninstaller.discover(settings: mountSettings, appURL: app, supportRoot: mountSupport,
+                                               homeDirectory: home, preferenceDomains: [])
+    let mountSelection = try AppUninstaller.selection(from: mountPlan, selectedIDs: [mountFixture.path])
+    try expect(mountPlan.workspaceRoots.contains { $0.path == mountContainer.path }, "uninstall rejected a mounted workspace container")
+    try expect(mountSelection.deletionURLs.map(\.path) == [mountFixture.path], "mounted container changed the selected fixture deletion")
+    try expect(!mountSelection.emptyParentURLs.contains { $0.path == mountContainer.path }, "uninstall scheduled an empty mounted workspace root for deletion")
+    try rejected {
+        try AppUninstaller.validateDeletionTargets(.init(deletionURLs: [], retainedURLs: [], emptyParentURLs: [mountContainer],
+                                                         preferenceDomains: [], homeDirectory: home))
     }
     try rejected {
         try AppUninstaller.validateDeletionTargets(.init(deletionURLs: [], retainedURLs: [], emptyParentURLs: [], preferenceDomains: ["com.apple.finder"], homeDirectory: home))

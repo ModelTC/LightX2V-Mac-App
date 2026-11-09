@@ -31,6 +31,10 @@ struct AppStateChecks {
             try await startupEnvironmentChecks()
             return
         }
+        if CommandLine.arguments.dropFirst().first == "--workspace-recovery-only" {
+            try await workspaceRecoveryChecks()
+            return
+        }
         if CommandLine.arguments.dropFirst().first == "--settings-only" {
             try await generalRuntimeChecks()
             try await generalSettingsLayoutChecks()

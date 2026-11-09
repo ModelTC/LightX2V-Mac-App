@@ -309,8 +309,10 @@ func rejects(_ body: () throws -> Void) throws {
     }
 
     static func archiveValidation() throws {
-        try expect(SourceDownloader.archiveURL.absoluteString == "https://github.com/ModelTC/LightX2V/archive/\(BundledInferenceResources.sourceRevision).zip", "source must download the pinned official upstream ZIP")
-        try expect(SourceDownloader.manualCommand.contains("/archive/\(BundledInferenceResources.sourceRevision).zip") && !SourceDownloader.manualCommand.contains("git clone"), "manual download must use the pinned source without history")
+        let archiveURL = try SourceDownloader.archiveURL
+        let manualCommand = try SourceDownloader.manualCommand
+        try expect(archiveURL.absoluteString == "https://github.com/ModelTC/LightX2V/archive/refs/tags/\(BundledInferenceResources.sourceRevision).tar.gz", "source must download the manifest's pinned official upstream tar archive")
+        try expect(manualCommand.contains(archiveURL.absoluteString) && manualCommand.contains("shasum -a 256 -c -") && manualCommand.contains("lightx2v_rl") && manualCommand.contains("lightx2v_train") && !manualCommand.contains("git clone"), "manual download must verify and prune the pinned source without history")
         try SourceDownloader.validateArchivePaths("\(BundledInferenceResources.sourceRoot)/lightx2v/infer.py\n", commit: SourceDownloader.version)
         let sha = String(repeating: "a", count: 40)
         try expect(SourceDownloader.commit(in: "{\"sha\":\"\(sha)\"}") == sha, "API SHA parse")

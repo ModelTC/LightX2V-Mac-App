@@ -90,6 +90,9 @@ final class AppStore: ObservableObject {
     private var stateURL: URL?
     private let locatorRoot: URL
     private var canPersist = true
+    // Keep an unreadable locator target discoverable for uninstall, but only a
+    // successfully loaded or saved workspace may bypass destination decoding.
+    private var writableStateURL: URL? { canPersist ? stateURL : nil }
     private var restoringModelPaths = false
     private var draftImageDirectory: URL?
     private var draftCreationID = UUID()
@@ -230,18 +233,32 @@ final class AppStore: ObservableObject {
         try? UninstallWorkspaceRegistry.record(workspaceRoot: root, supportRoot: locatorRoot)
     }
 
-    func makeUninstallPlan(applicationURL: URL) throws -> AppUninstallPlan {
-        recordMaintenanceWorkspace()
+    func makeUninstallPlan(applicationURL: URL) async throws -> AppUninstallPlan {
+        let settings = settings
+        let supportRoot = locatorRoot
+        let additionalRoots = stateURL.map { [$0.deletingLastPathComponent()] } ?? []
         let domain = ProcessInfo.processInfo.environment["LIGHTX2V_APP_PREFERENCES_SUITE"] ?? "app.lightx2v.desktop"
-        var roots = UninstallWorkspaceRegistry.roots(in: locatorRoot)
-        if let stateURL { roots.append(stateURL.deletingLastPathComponent()) }
-        return try AppUninstaller.discover(settings: settings, appURL: applicationURL, supportRoot: locatorRoot,
-                                          additionalWorkspaceRoots: roots,
-                                          preferenceDomains: [domain])
+        let discovery = Task.detached(priority: .utility) {
+            try Task.checkCancellation()
+            if !settings.workingDirectory.isEmpty {
+                try? UninstallWorkspaceRegistry.record(workspaceRoot: WorkspaceLayout(settings.workingDirectory).root,
+                                                       supportRoot: supportRoot)
+            }
+            let plan = try AppUninstaller.discover(settings: settings, appURL: applicationURL, supportRoot: supportRoot,
+                                                   additionalWorkspaceRoots: additionalRoots,
+                                                   preferenceDomains: [domain])
+            try Task.checkCancellation()
+            return plan
+        }
+        return try await withTaskCancellationHandler(operation: {
+            try await discovery.value
+        }, onCancel: {
+            discovery.cancel()
+        })
     }
 
     func persist() {
-        guard canPersist, !isPreparingWorkspace, !settings.workingDirectory.isEmpty, let stateURL else { return }
+        guard !isPreparingWorkspace, !settings.workingDirectory.isEmpty, let stateURL = writableStateURL else { return }
         do { try JSONFile.write(WorkspaceData(settings: settings, generations: generations, hasCompletedGeneralSetup: hasCompletedGeneralSetup, creationSettings: creationSettings, activeCreationID: currentCreationID), to: stateURL) }
         catch { errorMessage = L10n.english("Unable to save application state: %@", [String(describing: error.localizedDescription)]) }
     }
@@ -406,7 +423,7 @@ final class AppStore: ObservableObject {
     }
 
     func existingWorkspaceSettings(at path: String) throws -> AppSettings? {
-        try WorkspaceStorage.existingWorkspace(at: path, previousState: stateURL)?.settings
+        try WorkspaceStorage.existingWorkspace(at: path, previousState: writableStateURL)?.settings
     }
 
     func applyGeneralSettings(_ value: AppSettings) async throws {
@@ -419,13 +436,13 @@ final class AppStore: ObservableObject {
         updated.workingDirectory = path(value.workingDirectory)
         updated.python = path(value.python)
         BundledInferenceResources.configure(&updated)
-        if try WorkspaceStorage.existingWorkspace(at: updated.workingDirectory, previousState: stateURL) == nil {
+        if try WorkspaceStorage.existingWorkspace(at: updated.workingDirectory, previousState: writableStateURL) == nil {
             try updated.validateGeneralPaths()
         }
         isPreparingWorkspace = true
         defer { isPreparingWorkspace = false; finishTerminationIfNeeded() }
         let snapshot = WorkspaceData(settings: updated, generations: generations, hasCompletedGeneralSetup: true, creationSettings: creationSettings, activeCreationID: currentCreationID)
-        let previous = stateURL; let locator = locatorRoot
+        let previous = writableStateURL; let locator = locatorRoot
         let saved = try await Task.detached(priority: .userInitiated) {
             try WorkspaceStorage.save(snapshot, previousState: previous, locatorRoot: locator)
         }.value

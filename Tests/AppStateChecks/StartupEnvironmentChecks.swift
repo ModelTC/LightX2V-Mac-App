@@ -5,6 +5,7 @@ import LightX2VCore
 
 @MainActor
 func startupEnvironmentChecks() async throws {
+    try await workspaceRecoveryChecks()
     let fm = FileManager.default
     let root = fm.temporaryDirectory.appendingPathComponent("startup-environment-\(UUID().uuidString)")
     let layout = WorkspaceLayout(root.appendingPathComponent("workspace").path)
@@ -228,7 +229,10 @@ print('LIGHTX2V_ENV:' + (root / 'versions.json').read_text(), flush=True)
     try Data([1, 2, 3]).write(to: output)
     var archivedJob = Generation(request: try InferenceRequest(settings: archivedSettings, prompt: "saved prompt", width: 1024, height: 1024, seed: 42, output: output.path))
     archivedJob.status = .completed
-    try JSONFile.write(WorkspaceData(settings: archivedSettings, generations: [archivedJob], hasCompletedGeneralSetup: true), to: layout.state)
+    let archivedCreation = CreationSettings(enhancementEnabled: false)
+    try JSONFile.write(WorkspaceData(settings: archivedSettings, generations: [archivedJob], hasCompletedGeneralSetup: true,
+                                     creationSettings: [archivedJob.creationID.uuidString: archivedCreation],
+                                     activeCreationID: archivedJob.creationID), to: layout.state)
     let archivedBytes = try Data(contentsOf: layout.state)
     try fm.removeItem(at: support.appendingPathComponent("workspace_location.json"))
     let ignoredState = support.appendingPathComponent("workspace.json")
@@ -299,4 +303,68 @@ print('LIGHTX2V_ENV:' + (root / 'versions.json').read_text(), flush=True)
     try await waitUntil { terminated }
     try check(!cancelled.isChecking && !cancelled.environmentReady && cancelled.setupTask == nil && kill(exitPID, 0) != 0,
               "termination cancels dependency probing and finishes app shutdown")
+}
+
+@MainActor
+func workspaceRecoveryChecks() async throws {
+    func check(_ good: @autoclosure () -> Bool, _ message: String) throws {
+        guard good() else { throw AppError.message(message) }
+        print("PASS \(message)")
+    }
+    let fm = FileManager.default
+    let root = fm.temporaryDirectory.appendingPathComponent("workspace-recovery-\(UUID().uuidString)")
+    let previousSupport = getenv("LIGHTX2V_APP_STATE_DIR").map { String(cString: $0) }
+    let support = root.appendingPathComponent("support")
+    setenv("LIGHTX2V_APP_STATE_DIR", support.path, 1)
+    defer {
+        if let previousSupport { setenv("LIGHTX2V_APP_STATE_DIR", previousSupport, 1) }
+        else { unsetenv("LIGHTX2V_APP_STATE_DIR") }
+        try? fm.removeItem(at: root)
+    }
+    var settings = AppSettings.defaults
+    settings.python = "/usr/bin/false"
+    let corruptLayout = WorkspaceLayout(root.appendingPathComponent("corrupt workspace").path)
+    try corruptLayout.prepare()
+    let corruptBytes = Data("{\"settings\": \"unreadable workspace fixture\"}".utf8)
+    try corruptBytes.write(to: corruptLayout.state)
+    let locator = support.appendingPathComponent("workspace_location.json")
+    try JSONFile.write(WorkspaceLocation(workingDirectory: corruptLayout.root.path), to: locator)
+    let corruptLocatorBytes = try Data(contentsOf: locator)
+    let recovery = AppStore()
+    recovery.start()
+    try check(recovery.needsGeneralSetup && recovery.showStartupSettings && !recovery.isChecking
+              && recovery.errorMessage != nil && recovery.generations.isEmpty,
+              "an unreadable located workspace starts recovery without loading empty state as saved data")
+    recovery.persist()
+    var rejectedPreview = false
+    do { _ = try recovery.existingWorkspaceSettings(at: corruptLayout.root.path) }
+    catch { rejectedPreview = true }
+    var corruptSelection = settings
+    corruptSelection.workingDirectory = corruptLayout.root.path
+    var rejectedSave = false
+    do { try await recovery.applyGeneralSettings(corruptSelection) }
+    catch { rejectedSave = true }
+    let corruptRetained = try Data(contentsOf: corruptLayout.state)
+    let corruptLocatorRetained = try Data(contentsOf: locator)
+    try check(rejectedPreview && rejectedSave && corruptRetained == corruptBytes && corruptLocatorRetained == corruptLocatorBytes,
+              "reselecting an unreadable located workspace rejects preview and save without overwriting its JSON or locator")
+    let recoveryUninstall = try await recovery.makeUninstallPlan(applicationURL: root.appendingPathComponent("unpackaged-app"))
+    let corruptRootPath = corruptLayout.root.resolvingSymlinksInPath().path
+    try check(recoveryUninstall.workspaceRoots.contains { $0.resolvingSymlinksInPath().path == corruptRootPath },
+              "unreadable locator targets remain discoverable for uninstall")
+    let recoveredLayout = WorkspaceLayout(root.appendingPathComponent("recovered workspace").path)
+    var recoveredSelection = settings
+    recoveredSelection.workingDirectory = recoveredLayout.root.path
+    try await recovery.applyGeneralSettings(recoveredSelection)
+    let recoveredLocation = try JSONFile.read(WorkspaceLocation.self, from: locator)
+    recovery.modelDirectory = root.appendingPathComponent("recovered model").path
+    let recoveredData = try JSONFile.read(WorkspaceData.self, from: recoveredLayout.state)
+    let originalAfterRecovery = try Data(contentsOf: corruptLayout.state)
+    let recoveredRootPath = recoveredLayout.root.resolvingSymlinksInPath().path
+    try check(URL(fileURLWithPath: recovery.settings.workingDirectory).resolvingSymlinksInPath().path == recoveredRootPath
+              && URL(fileURLWithPath: recoveredLocation.workingDirectory).resolvingSymlinksInPath().path == recoveredRootPath
+              && recoveredData.settings.model == recovery.modelDirectory && originalAfterRecovery == corruptBytes,
+              "choosing a new workspace recovers saving and automatic persistence while preserving the unreadable original")
+
+    print("PASS unreadable workspace protection, uninstall discovery and recovery into a new workspace")
 }

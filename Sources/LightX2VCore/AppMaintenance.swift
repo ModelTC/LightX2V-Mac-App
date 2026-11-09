@@ -2,11 +2,11 @@ import Foundation
 import CryptoKit
 import Darwin
 
-public enum AppMaintenanceOperation: String, Codable {
+public enum AppMaintenanceOperation: String, Codable, Sendable {
     case update, uninstall
 }
 
-public struct AppMaintenancePlan: Codable {
+public struct AppMaintenancePlan: Codable, Sendable {
     public var operation: AppMaintenanceOperation
     public var parentPID: Int32
     public var applicationURL: URL
@@ -45,6 +45,62 @@ public enum AppMaintenance {
     private static let jobMarker = ".lightx2v-maintenance-job"
     private static let bundleIdentifier = "app.lightx2v.desktop"
 
+    private final class Preparation: NSObject, FileManagerDelegate, @unchecked Sendable {
+        private let lock = NSLock()
+        private var cancelled = false
+        private var process: Process?
+
+        func checkCancellation() throws {
+            lock.lock()
+            defer { lock.unlock() }
+            if cancelled { throw CancellationError() }
+        }
+
+        func cancel() {
+            lock.lock()
+            defer { lock.unlock() }
+            cancelled = true
+            if let process, process.isRunning { process.terminate() }
+        }
+
+        func run(_ process: Process) throws {
+            lock.lock()
+            defer { lock.unlock() }
+            if cancelled { throw CancellationError() }
+            try process.run()
+            self.process = process
+        }
+
+        func startHelper(_ helper: Process) throws {
+            lock.lock()
+            defer { lock.unlock() }
+            if cancelled { throw CancellationError() }
+            try helper.run()
+        }
+
+        func clearProcess() {
+            lock.lock()
+            defer { lock.unlock() }
+            process = nil
+        }
+
+        func copyItem(at source: URL, to destination: URL) throws {
+            try checkCancellation()
+            let manager = FileManager()
+            manager.delegate = self
+            do { try manager.copyItem(at: source, to: destination) }
+            catch {
+                try checkCancellation()
+                throw error
+            }
+            try checkCancellation()
+        }
+
+        func fileManager(_ fileManager: FileManager, shouldCopyItemAt source: URL, to destination: URL) -> Bool {
+            (try? checkCancellation()) != nil
+        }
+    }
+
     public static func createJobDirectory(excluding paths: [URL] = []) throws -> URL {
         let fm = FileManager.default
         var base = fm.temporaryDirectory.standardizedFileURL.resolvingSymlinksInPath()
@@ -59,24 +115,30 @@ public enum AppMaintenance {
     }
 
     public static func prepare(plan original: AppMaintenancePlan, helperURL: URL? = nil) throws -> AppMaintenancePlan {
+        try prepare(plan: original, helperURL: helperURL, preparation: Preparation())
+    }
+
+    private static func prepare(plan original: AppMaintenancePlan, helperURL: URL?, preparation: Preparation) throws -> AppMaintenancePlan {
         var plan = original
-        try preflight(plan)
         let exclusions = (try deletionSelection(plan)?.deletionURLs ?? []) + (plan.uninstallPlan?.workspaceRoots ?? [])
         let job = try plan.jobDirectory ?? createJobDirectory(excluding: exclusions + [plan.applicationURL])
         try validateJob(job, excluding: exclusions + [plan.applicationURL])
         plan.jobDirectory = job
         let fm = FileManager.default
         var completed = false
+        var ownedPreparedURL: URL?
         defer {
             if !completed {
-                if let prepared = plan.preparedApplicationURL { try? fm.removeItem(at: prepared) }
+                if let prepared = ownedPreparedURL { try? fm.removeItem(at: prepared) }
                 try? fm.removeItem(at: job)
             }
         }
+        try preparation.checkCancellation()
+        try preflight(plan, preparation: preparation)
         let helper = helperURL ?? Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/" + helperName)
         guard fm.isExecutableFile(atPath: helper.path) else { throw AppError.message("The maintenance helper is missing. Download LightX2V again.") }
         let copiedHelper = job.appendingPathComponent(helperName)
-        try fm.copyItem(at: helper, to: copiedHelper)
+        try preparation.copyItem(at: helper, to: copiedHelper)
         try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: copiedHelper.path)
         plan.originalApplicationDigest = try applicationDigest(plan.applicationURL)
         if plan.operation == .update {
@@ -84,9 +146,11 @@ public enum AppMaintenance {
             let prepared = plan.applicationURL.deletingLastPathComponent()
                 .appendingPathComponent(".LightX2V-update-" + UUID().uuidString + ".app")
             plan.preparedApplicationURL = prepared
-            try fm.copyItem(at: staged, to: prepared)
-            try validateApplication(prepared, signature: true)
+            ownedPreparedURL = prepared
+            try preparation.copyItem(at: staged, to: prepared)
+            try validateApplication(prepared, signature: true, preparation: preparation)
         }
+        try preparation.checkCancellation()
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(plan).write(to: job.appendingPathComponent("plan.json"), options: .atomic)
@@ -94,9 +158,23 @@ public enum AppMaintenance {
         return plan
     }
 
+    /// Cancellation completes preparation cleanup before returning. Once the
+    /// helper starts, it owns the job and the caller must allow the app to exit.
     @discardableResult
-    public static func launch(plan: AppMaintenancePlan, helperURL: URL? = nil) throws -> URL {
-        let prepared = try prepare(plan: plan, helperURL: helperURL)
+    public static func launch(plan: AppMaintenancePlan, helperURL: URL? = nil) async throws -> URL {
+        let preparation = Preparation()
+        return try await withTaskCancellationHandler(operation: {
+            let worker = Task.detached(priority: .userInitiated) {
+                try launch(plan: plan, helperURL: helperURL, preparation: preparation)
+            }
+            return try await worker.value
+        }, onCancel: {
+            preparation.cancel()
+        })
+    }
+
+    private static func launch(plan: AppMaintenancePlan, helperURL: URL?, preparation: Preparation) throws -> URL {
+        let prepared = try prepare(plan: plan, helperURL: helperURL, preparation: preparation)
         let job = prepared.jobDirectory!
         do {
             let process = Process()
@@ -110,7 +188,9 @@ public enum AppMaintenance {
             process.standardInput = FileHandle.nullDevice
             process.standardOutput = output
             process.standardError = output
-            try process.run()
+            // Starting the helper is the ownership handoff. A later cancellation
+            // must never remove files that the helper is about to use.
+            try preparation.startHelper(process)
             return job
         } catch {
             if let app = prepared.preparedApplicationURL { try? FileManager.default.removeItem(at: app) }
@@ -161,6 +241,11 @@ public enum AppMaintenance {
     }
 
     public static func preflight(_ plan: AppMaintenancePlan) throws {
+        try preflight(plan, preparation: nil)
+    }
+
+    private static func preflight(_ plan: AppMaintenancePlan, preparation: Preparation?) throws {
+        try preparation?.checkCancellation()
         guard plan.parentPID > 1 else { throw AppError.message("Invalid maintenance parent process.") }
         try validateApplication(plan.applicationURL, signature: false)
         if let expected = plan.originalApplicationDigest {
@@ -176,7 +261,7 @@ public enum AppMaintenance {
             }
             guard let staged = plan.preparedApplicationURL ?? plan.stagedApplicationURL else { throw AppError.message("The downloaded application is missing.") }
             guard !samePath(staged, plan.applicationURL) else { throw AppError.message("The update must be staged separately from the installed application.") }
-            try validateApplication(staged, signature: true)
+            try validateApplication(staged, signature: true, preparation: preparation)
             if let prepared = plan.preparedApplicationURL {
                 guard samePath(prepared.deletingLastPathComponent(), plan.applicationURL.deletingLastPathComponent()),
                       prepared.lastPathComponent.hasPrefix(".LightX2V-update-") else {
@@ -228,7 +313,7 @@ public enum AppMaintenance {
         }
     }
 
-    private static func validateApplication(_ app: URL, signature: Bool) throws {
+    private static func validateApplication(_ app: URL, signature: Bool, preparation: Preparation? = nil) throws {
         let fm = FileManager.default
         let values = try app.resourceValues(forKeys: [.isSymbolicLinkKey, .isDirectoryKey])
         guard app.isFileURL, app.pathExtension == "app", values.isDirectory == true, values.isSymbolicLink != true,
@@ -243,8 +328,8 @@ public enum AppMaintenance {
             throw AppError.message("The application is not a complete LightX2V bundle.")
         }
         if signature {
-            try command("/usr/bin/codesign", ["--verify", "--deep", "--strict", app.path])
-            let architectures = try command("/usr/bin/lipo", ["-archs", app.appendingPathComponent("Contents/MacOS/" + executable).path])
+            try command("/usr/bin/codesign", ["--verify", "--deep", "--strict", app.path], preparation: preparation)
+            let architectures = try command("/usr/bin/lipo", ["-archs", app.appendingPathComponent("Contents/MacOS/" + executable).path], preparation: preparation)
             guard architectures.split(separator: " ").contains(where: { $0.trimmingCharacters(in: .whitespacesAndNewlines) == "arm64" }) else {
                 throw AppError.message("The application does not support Apple Silicon.")
             }
@@ -345,16 +430,19 @@ public enum AppMaintenance {
     }
 
     @discardableResult
-    private static func command(_ executable: String, _ arguments: [String]) throws -> String {
+    private static func command(_ executable: String, _ arguments: [String], preparation: Preparation? = nil) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe
-        try process.run()
+        if let preparation { try preparation.run(process) }
+        else { try process.run() }
+        defer { preparation?.clearProcess() }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
+        try preparation?.checkCancellation()
         let output = String(decoding: data, as: UTF8.self)
         guard process.terminationStatus == 0 else { throw AppError.message("Application verification failed. " + output) }
         return output
