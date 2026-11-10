@@ -296,64 +296,6 @@ struct ComposerView: View {
 
 }
 
-struct ModelSelector: View {
-    @ObservedObject private var language = LanguagePreferences.shared
-    @EnvironmentObject var store: AppStore
-
-    var body: some View {
-        Menu {
-            ForEach(GenerationModel.allCases) { model in
-                Button {
-                    store.selectModel(model)
-                } label: {
-                    if store.selectedModel == model {
-                        Label(model.title, systemImage: "checkmark")
-                    } else {
-                        Text(model.title)
-                    }
-                }
-            }
-        } label: {
-            Label(store.selectedModel?.title ?? L10n.text("Choose model"), systemImage: "cube.transparent")
-        }
-        .font(.system(size: 11, weight: .medium))
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.visible)
-        // Constrain the native menu itself, so changing its title does not
-        // move either the popup anchor or the indicator while it closes.
-        .frame(width: 230)
-        .padding(.horizontal, 8).frame(height: 30)
-        .foregroundStyle(store.selectedModel == nil ? Palette.accent : Palette.ink)
-        .background(store.selectedModel == nil ? Palette.accentSurface : Palette.surfaceSubtle,
-                    in: RoundedRectangle(cornerRadius: 7))
-        .overlay {
-            if store.selectedModel == nil { ModelSelectionRing() }
-        }
-        .hoverSurface(radius: 7, border: false)
-        .disabled(store.configurationBusy)
-        .allowsHitTesting(!store.isImportingImages)
-        .help(L10n.text("Choose generation model"))
-        .accessibilityLabel(L10n.text("Choose model"))
-        .accessibilityValue(store.selectedModel?.title ?? L10n.text("Not selected"))
-    }
-}
-
-/// A quiet breathing outline draws attention without changing layout or hit areas.
-private struct ModelSelectionRing: View {
-    @ObservedObject private var language = LanguagePreferences.shared
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var bright = false
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: 7)
-            .strokeBorder(Palette.accent.opacity(reduceMotion ? 0.8 : bright ? 0.9 : 0.35), lineWidth: 1)
-            .animation(reduceMotion ? nil : .easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: bright)
-            .onAppear { bright = true }
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-    }
-}
-
 private struct PromptMessageView: View {
     @ObservedObject private var language = LanguagePreferences.shared
     let prompt: String

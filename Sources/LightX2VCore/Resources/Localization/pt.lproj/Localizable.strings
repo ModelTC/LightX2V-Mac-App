@@ -441,3 +441,5 @@
 "Remove selected files?" = "Eliminar os ficheiros selecionados?";
 "Delete and restart" = "Eliminar e reiniciar";
 "Programs used for image generation and prompt enhancement. These files can be downloaded again when needed." = "Programas utilizados para gerar imagens e melhorar os prompts. Estes ficheiros podem ser transferidos novamente quando necessário.";
+"Model variants" = "Variantes do modelo";
+"Standard" = "Padrão";

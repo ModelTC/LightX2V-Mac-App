@@ -441,3 +441,5 @@
 "Remove selected files?" = "選択したファイルを削除しますか？";
 "Delete and restart" = "削除して再起動";
 "Programs used for image generation and prompt enhancement. These files can be downloaded again when needed." = "画像生成とプロンプト拡張に使用するプログラムファイルです。必要なときに再ダウンロードできます。";
+"Model variants" = "モデルのバリエーション";
+"Standard" = "標準";

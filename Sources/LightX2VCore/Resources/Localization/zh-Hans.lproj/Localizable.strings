@@ -441,3 +441,5 @@
 "Remove selected files?" = "删除所选文件？";
 "Delete and restart" = "删除并重启";
 "Programs used for image generation and prompt enhancement. These files can be downloaded again when needed." = "用于生图和提示词增强的程序文件，需要时可重新下载。";
+"Model variants" = "模型版本";
+"Standard" = "标准";

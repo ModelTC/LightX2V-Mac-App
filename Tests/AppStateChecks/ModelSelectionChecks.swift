@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 import LightX2VCore
 
-/// Measure the production native menu throughout first selection. Reserving an
-/// outer frame alone is insufficient if the native menu itself still moves.
+/// Both model titles must fit the production selector without resizing it.
+/// Render the surrounding composer at narrow and full workspace widths too.
 @MainActor
 func modelSelectionLayoutChecks() async throws {
     let fm = FileManager.default
@@ -26,11 +26,6 @@ func modelSelectionLayoutChecks() async throws {
     try JSONFile.write(WorkspaceData(settings: settings, hasCompletedGeneralSetup: true), to: layout.state)
     try JSONFile.write(WorkspaceLocation(workingDirectory: layout.root.path),
                        to: root.appendingPathComponent("support/workspace_location.json"))
-    func nativeMenu(in view: NSView) -> NSPopUpButton? {
-        if let menu = view as? NSPopUpButton,
-           menu.title == "选择模型" || menu.title == QwenImage21Turbo.title { return menu }
-        return view.subviews.lazy.compactMap { nativeMenu(in: $0) }.first
-    }
     func snapshot(_ name: String, of host: NSView) throws {
         guard let directory = ProcessInfo.processInfo.environment["LIGHTX2V_MODEL_SNAPSHOTS"] else { return }
         let url = URL(fileURLWithPath: directory)
@@ -53,26 +48,30 @@ func modelSelectionLayoutChecks() async throws {
         window.isReleasedWhenClosed = false
         window.contentView = host
         defer { window.contentView = nil }
+        let selector = NSHostingView(rootView: ModelSelector().environmentObject(store).preferredColorScheme(.light))
         host.layoutSubtreeIfNeeded()
         try await Task.sleep(for: .milliseconds(100))
-        guard let menu = nativeMenu(in: host) else { throw AppError.message("Model menu missing") }
-        let initial = menu.convert(menu.bounds, to: host)
+        let initial = selector.fittingSize
+        guard initial.width == 246 && initial.height == 30 else {
+            throw AppError.message("Unexpected model selector size: \(initial)")
+        }
         let name = "\(workspace ? "workspace" : "composer")-\(Int(width))"
         try snapshot(name + "-empty", of: host)
-        store.selectModel(.qwenImage21Turbo)
-        // Sample immediate and intermediate layouts, not only the settled frame.
-        for _ in 0..<25 {
-            host.layoutSubtreeIfNeeded()
-            guard let current = nativeMenu(in: host) else { throw AppError.message("Model menu disappeared") }
-            let frame = current.convert(current.bounds, to: host)
-            let changes = [frame.minX - initial.minX, frame.minY - initial.minY,
-                           frame.width - initial.width, frame.height - initial.height]
-            guard changes.allSatisfy({ abs($0) < 0.5 }) else {
-                throw AppError.message("Model menu moved after first selection in \(name): \(initial) -> \(frame)")
+        for model in GenerationModel.allCases {
+            store.selectModel(model)
+            // Sample immediate and intermediate layouts, not only the settled frame.
+            for _ in 0..<25 {
+                host.layoutSubtreeIfNeeded()
+                selector.layoutSubtreeIfNeeded()
+                let size = selector.fittingSize
+                let changes = [size.width - initial.width, size.height - initial.height]
+                guard changes.allSatisfy({ abs($0) < 0.5 }) else {
+                    throw AppError.message("Model selector resized after selecting \(model.title) in \(name): \(initial) -> \(size)")
+                }
+                try await Task.sleep(for: .milliseconds(16))
             }
-            try await Task.sleep(for: .milliseconds(16))
+            try snapshot(name + "-" + model.id, of: host)
         }
-        try snapshot(name + "-selected", of: host)
-        print("PASS first model selection keeps the native menu position and size in \(name)")
+        print("PASS both model versions keep the selector size in \(name)")
     }
 }

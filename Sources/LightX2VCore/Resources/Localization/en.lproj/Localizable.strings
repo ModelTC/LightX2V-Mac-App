@@ -441,3 +441,5 @@
 "Remove selected files?" = "Remove selected files?";
 "Delete and restart" = "Delete and restart";
 "Programs used for image generation and prompt enhancement. These files can be downloaded again when needed." = "Programs used for image generation and prompt enhancement. These files can be downloaded again when needed.";
+"Model variants" = "Model variants";
+"Standard" = "Standard";
