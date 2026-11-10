@@ -422,8 +422,7 @@
 "Checking the stable release…" = "正在检查稳定版…";
 "Build information is unavailable. Use a packaged LightX2V app." = "无法获取构建信息，请使用打包后的 LightX2V 应用。";
 "Stable version %@ is available." = "稳定版 %@ 可供更新。";
-"LightX2V is up to date." = "LightX2V 已是最新版本。";
-"The installed build is newer than the current stable release." = "当前安装的构建比现有稳定版更新。";
+"LightX2V is up to date." = "当前已是最新版";
 "Preparing the stable update…" = "正在准备稳定版更新…";
 "Application" = "应用程序";
 "Models" = "模型";

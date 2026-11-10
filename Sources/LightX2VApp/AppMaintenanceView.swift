@@ -195,10 +195,8 @@ struct AppMaintenanceView: View {
                     message = L10n.english("Build information is unavailable. Use a packaged LightX2V app.")
                 } else if value.isNewer(than: currentCommit, commitDate: currentCommitDate) {
                     message = L10n.english("Stable version %@ is available.", [String(value.commit.prefix(7))])
-                } else if value.commit == currentCommit {
-                    message = L10n.english("LightX2V is up to date.")
                 } else {
-                    message = L10n.english("The installed build is newer than the current stable release.")
+                    message = L10n.english("LightX2V is up to date.")
                 }
             } catch {
                 message = ""

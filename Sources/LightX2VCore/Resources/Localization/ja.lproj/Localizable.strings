@@ -423,7 +423,6 @@
 "Build information is unavailable. Use a packaged LightX2V app." = "ビルド情報を取得できません。パッケージ化された LightX2V アプリを使用してください。";
 "Stable version %@ is available." = "安定版 %@ が利用可能です。";
 "LightX2V is up to date." = "LightX2V は最新です。";
-"The installed build is newer than the current stable release." = "インストール済みのビルドは現在の安定版より新しいバージョンです。";
 "Preparing the stable update…" = "安定版アップデートを準備中…";
 "Application" = "アプリケーション";
 "Models" = "モデル";

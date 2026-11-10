@@ -423,7 +423,6 @@
 "Build information is unavailable. Use a packaged LightX2V app." = "Les informations de compilation sont indisponibles. Utilisez une application LightX2V empaquetée.";
 "Stable version %@ is available." = "La version stable %@ est disponible.";
 "LightX2V is up to date." = "LightX2V est à jour.";
-"The installed build is newer than the current stable release." = "La version installée est plus récente que la version stable actuelle.";
 "Preparing the stable update…" = "Préparation de la mise à jour stable…";
 "Application" = "Application";
 "Models" = "Modèles";
