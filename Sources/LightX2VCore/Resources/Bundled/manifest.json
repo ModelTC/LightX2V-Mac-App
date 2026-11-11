@@ -1,18 +1,19 @@
 {
-  "LightX2V-0.6.0-minimal.tar.gz": {
-    "url": "https://github.com/ModelTC/LightX2V/archive/refs/tags/0.6.0.tar.gz",
-    "sha256": "2c070a2ee55248a4294572f9271f051e3b00129d24de83eb94352636a7d48cb6",
-    "archive_root": "LightX2V-0.6.0",
+  "LightX2V-0.6.1-minimal.tar.gz": {
+    "url": "https://github.com/ModelTC/LightX2V/archive/refs/tags/0.6.1.tar.gz",
+    "sha256": "0621f4f7af6303fb66a52b700585156a73d7069ad8727cc8fa3891218345b059",
+    "archive_root": "LightX2V-0.6.1",
     "prune": [
       "assert",
       "assets",
       "dockerfiles",
       "docs",
       "examples",
+      "lightx2v_rl",
       "lightx2v_ros",
       "lightx2v_train"
     ],
-    "bundle_sha256": "fbb8256d037e98c317b0ad95c041cb6f88b1ccad9c2e6e9ce17946957d287a29"
+    "bundle_sha256": "7fd739858f33857c73e1c4ddf7cf6cad0097222e33ba04c1bdb30c51d3abf41d"
   },
   "llama-b11583-bin-macos-arm64.tar.gz": {
     "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11583/llama-b11583-bin-macos-arm64.tar.gz",

@@ -6,6 +6,14 @@ struct ModelPreparationView: View {
     @ObservedObject private var language = LanguagePreferences.shared
     @EnvironmentObject var store: AppStore
 
+    private var turboResource: ModelResource { store.selectedModelResource }
+    private var turboPath: Binding<String> {
+        Binding(get: { store.selectedModelDirectory }, set: { value in
+            if turboResource == .turboInt8 { store.int8ModelDirectory = value }
+            else { store.modelDirectory = value }
+        })
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
@@ -21,12 +29,12 @@ struct ModelPreparationView: View {
                     }.buttonStyle(HoverButtonStyle(radius: 6))
                         .disabled(!store.isDownloadingAllModels && (store.busy || store.needsGeneralSetup))
                 }.frame(height: 20)
-                Picker(L10n.text("Download source"), selection: Binding(get: { store.settings.modelDownloadSource }, set: store.setModelDownloadSource)) {
+                Picker(L10n.text("Download source"), selection: Binding(get: { store.selectedModelDownloadSource }, set: store.setModelDownloadSource)) {
                     ForEach(ModelDownloadSource.allCases) { source in Text(source.title).tag(source) }
                 }.pickerStyle(.segmented).labelsHidden().controlSize(.small)
                     .disabled(store.busy).accessibilityLabel(L10n.text("Download source"))
             }
-            ModelDownloadCard(resource: .turbo, path: $store.modelDirectory)
+            ModelDownloadCard(resource: turboResource, path: turboPath)
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkles").foregroundStyle(Palette.muted)
@@ -56,7 +64,7 @@ private struct ModelDownloadCard: View {
     @State private var statusHovered = false
     private var showsStatus: Bool { statusPinned || statusHovered }
     private var queued: Bool { store.queuedModelDownloads.contains(resource) }
-    private var optionalDisabled: Bool { resource != .turbo && !store.settings.promptEnhancement.enabled && !downloading && !queued }
+    private var optionalDisabled: Bool { !resource.isTurbo && !store.settings.promptEnhancement.enabled && !downloading && !queued }
     private var downloading: Bool { store.activeModelDownload == resource }
     private var ready: Bool { store.readyModelResources.contains(resource) && !store.modelDownloadErrors.contains(resource) && !downloading }
     private var status: String {
@@ -77,12 +85,13 @@ private struct ModelDownloadCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text(resource == .turbo ? QwenImage21Turbo.title : resource.title).font(.system(size: 12, weight: .semibold)).lineLimit(1).help(resource.modelName)
+                Text(resource.isTurbo ? (resource == .turboInt8 ? QwenImage21TurboInt8.title : QwenImage21Turbo.title) : resource.title)
+                    .font(.system(size: 12, weight: .semibold)).lineLimit(1).help(resource.modelName)
                 Spacer(minLength: 0)
                 Button { showsGuide = true } label: { Text(L10n.text("Download guide")) }
                     .font(.system(size: 10)).buttonStyle(HoverButtonStyle(radius: 6))
                     .accessibilityLabel(L10n.render(resource.title) + " " + L10n.text("Download guide"))
-                    .popover(isPresented: $showsGuide, arrowEdge: .leading) { ModelDownloadGuide(resource: resource, source: store.settings.modelDownloadSource) }
+                    .popover(isPresented: $showsGuide, arrowEdge: .leading) { ModelDownloadGuide(resource: resource, source: store.selectedModelDownloadSource) }
             }.frame(height: 20)
             HStack(spacing: 0) {
                 PathInputField(title: L10n.render(resource.title) + " " + L10n.text("Directory"), placeholder: L10n.text("Local model directory"), symbol: nil, text: $path, minimumHeight: 36)

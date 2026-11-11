@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """LightX2V APP process supervisor; all stdout is NDJSON."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -16,6 +17,28 @@ sys.dont_write_bytecode = True
 
 TURBO_STEPS = 8
 TURBO_SIGMAS = [1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568]
+
+
+def validate_int8_libraries(model):
+    name = 'qwen_image_21_turbo_int8_metal.json'
+    script = Path(__file__).resolve()
+    candidates = [script.with_name(name),
+                  script.parent.parent / 'LightX2VAPP_LightX2VCore.bundle' / name,
+                  script.parents[3] / 'LightX2VAPP_LightX2VCore.bundle/Contents/Resources' / name,
+                  script.parents[2] / 'LightX2VCore/Resources' / name]
+    metadata = next((path for path in candidates if path.is_file()), None)
+    if metadata is None:
+        raise ValueError('App is missing its bundled INT8 Metal integrity metadata')
+    data = json.loads(metadata.read_text(encoding='utf-8'))
+    for library in data['libraries']:
+        filename = library['file']
+        if Path(filename).name != filename:
+            raise ValueError('Invalid bundled INT8 Metal library filename')
+        path = model / 'apple_silicon_metal' / filename
+        if not path.is_file() or path.stat().st_size != library['size']:
+            raise ValueError(f'Quantized model is missing or has an invalid Metal library: {filename}')
+        if hashlib.sha256(path.read_bytes()).hexdigest() != library['sha256']:
+            raise ValueError(f'Metal library checksum failed: {filename}')
 
 
 def emit(kind, **fields):
@@ -49,15 +72,27 @@ def load_request(path):
         raise ValueError("Turbo configuration requires do_time_shift=false")
     if cfg.get("enable_cfg") is not False or cfg.get("sample_guide_scale") != 1.0:
         raise ValueError("Turbo configuration requires CFG disabled and sample_guide_scale=1.0")
+    if cfg.get("dit_quant_scheme") == "int8-metal":
+        if cfg.get("dit_quantized") is not True:
+            raise ValueError("INT8 Metal configuration is incomplete")
+        validate_int8_libraries(model)
+        apple_python = repo / "lightx2v_kernel/apple/python/lightx2v_kernel_apple/int8_gemm/gemm.py"
+        if not apple_python.is_file():
+            raise ValueError("Bundled LightX2V runtime is missing the Apple INT8 kernel package")
+    elif cfg.get("dit_quantized"):
+        raise ValueError("Unsupported quantized model configuration")
     return request, cfg
 
 
-def environment(request):
+def environment(request, cfg):
     env = os.environ.copy()
     # Keep base.sh semantics while selecting the Python explicitly in the app.
+    python_paths = [request["repository"]]
+    if cfg.get("dit_quant_scheme") == "int8-metal":
+        python_paths.append(str(Path(request["repository"]) / "lightx2v_kernel/apple/python"))
     env.update({
         "PLATFORM": "mps", "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8",
-        "PYTHONPATH": request["repository"] + os.pathsep + env.get("PYTHONPATH", ""),
+        "PYTHONPATH": os.pathsep.join(python_paths + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else [])),
         "MOONCAKE_CONFIG_PATH": str(Path(request["repository"]) / "configs/mooncake_config.json"),
         "TOKENIZERS_PARALLELISM": "false", "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
         "PYTORCH_ALLOC_CONF": "expandable_segments:True", "DTYPE": "BF16",
@@ -65,6 +100,8 @@ def environment(request):
         "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1",
         "PATH": str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "/usr/bin:/bin"),
     })
+    if cfg.get("dit_quant_scheme") == "int8-metal":
+        env["LIGHTX2V_METALLIB_DIR"] = str(Path(request["model"]) / "apple_silicon_metal")
     return env
 
 
@@ -224,7 +261,7 @@ def run(request, cfg):
         emit("status", message="Loading model", phase="loading")
         tail = []
         with (destination / "inference.log").open("w", encoding="utf-8") as log:
-            child = supervisor.spawn(cmd, cwd=str(destination), env=environment(request), stdout=subprocess.PIPE,
+            child = supervisor.spawn(cmd, cwd=str(destination), env=environment(request, cfg), stdout=subprocess.PIPE,
                                      stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", bufsize=1)
             for raw in child.stdout:
                 line = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", raw).rstrip("\r\n")

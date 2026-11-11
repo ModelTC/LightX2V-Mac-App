@@ -32,7 +32,15 @@ print('Downloading bytes: | 10.0MB 2.50MB/s', end='\r', flush=True)
 print('Reconstructing (incomplete total...): 50%|██| 250MB / 500MB 99MB/s', end='\r', flush=True)
 time.sleep(0.7 if behavior == 'normal' else 20 if behavior in ['cancel','unknown'] else 0.2)
 if behavior == 'fail' or (behavior == 'fail-t2i' and 'PE-T2I' in sys.argv[2]): print('network failure', flush=True); sys.exit(3)
-if sys.argv[2].startswith('Qwen/'):
+if 'Qwen-Image-2.1-Turbo-INT8' in sys.argv[2]:
+    import json, hashlib
+    (p / 'model_index.json').write_text(json.dumps({'sample_sigmas': [1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568]}))
+    for name in ['transformer','text_encoder','vae','scheduler','processor']: (p / name).mkdir(exist_ok=True)
+    metal = p / 'apple_silicon_metal'; metal.mkdir(exist_ok=True)
+    import shutil
+    fixtures = pathlib.Path(r'\#(URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().path)') / 'Fixtures/qwen-int8-metal'
+    for library in fixtures.glob('*.metallib'): shutil.copyfile(library, metal / library.name)
+elif sys.argv[2].startswith('Qwen/'):
     (p / 'model_index.json').write_text('{}')
     for name in ['transformer','text_encoder','vae','scheduler','processor']: (p / name).mkdir(exist_ok=True)
 else:

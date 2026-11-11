@@ -1,27 +1,36 @@
 #!/bin/bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP="${1:-$ROOT/dist/LightX2V APP.app}"
+APP="${1:-$ROOT/dist/LightX2V.app}"
 SCRATCH="${LIGHTX2V_BUILD_DIR:-$ROOT/.build}"
 
 python3 "$ROOT/scripts/prepare-bundled-resources.py"
 
 swift build --package-path "$ROOT" --scratch-path "$SCRATCH" -c release --arch arm64 --product LightX2VApp
+swift build --package-path "$ROOT" --scratch-path "$SCRATCH" -c release --arch arm64 --product LightX2VMaintenance
 BIN="$(swift build --package-path "$ROOT" --scratch-path "$SCRATCH" -c release --arch arm64 --show-bin-path)"
-mkdir -p "$APP/Contents/MacOS"
+APP_RES="$BIN/LightX2VAPP_LightX2VApp.bundle"
+CORE_RES="$BIN/LightX2VAPP_LightX2VCore.bundle"
+# SwiftPM's native and Swift Build backends use different bundle layouts.
+[[ ! -d "$APP_RES/Contents/Resources" ]] || APP_RES="$APP_RES/Contents/Resources"
+[[ ! -d "$CORE_RES/Contents/Resources" ]] || CORE_RES="$CORE_RES/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Helpers"
 # Rebuild generated resources so removed adapters cannot survive an incremental build.
 rm -rf "$APP/Contents/Resources"
 mkdir -p "$APP/Contents/Resources"
 cp "$BIN/LightX2VApp" "$APP/Contents/MacOS/LightX2VApp"
+cp "$BIN/LightX2VMaintenance" "$APP/Contents/Helpers/LightX2VMaintenance"
 # A .app uses the native Resources directory; SwiftPM's bundle remains a development fallback.
 for resource in bridge.py prompt_enhancement.py requirements.txt; do
-    cp "$BIN/LightX2VAPP_LightX2VApp.bundle/$resource" "$APP/Contents/Resources/$resource"
+    cp "$APP_RES/$resource" "$APP/Contents/Resources/$resource"
 done
-cp "$BIN/LightX2VAPP_LightX2VCore.bundle/qwen_image_21_turbo.json" "$APP/Contents/Resources/qwen_image_21_turbo.json"
+for config in qwen_image_21_turbo.json qwen_image_21_turbo_int8.json qwen_image_21_turbo_int8_metal.json; do
+    cp "$CORE_RES/$config" "$APP/Contents/Resources/$config"
+done
 
-cp -R "$BIN/LightX2VAPP_LightX2VCore.bundle/Bundled" "$APP/Contents/Resources/Bundled"
+cp -R "$CORE_RES/Bundled" "$APP/Contents/Resources/Bundled"
 
-for locale in "$BIN/LightX2VAPP_LightX2VCore.bundle/"*.lproj; do
+for locale in "$CORE_RES/"*.lproj; do
     cp -R "$locale" "$APP/Contents/Resources/"
 done
 
@@ -31,8 +40,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <plist version="1.0"><dict>
 <key>CFBundleDevelopmentRegion</key><string>en</string>
 <key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string><string>fr</string><string>ja</string><string>ko</string><string>de</string><string>ru</string><string>es</string><string>pt</string></array>
-<key>CFBundleDisplayName</key><string>LightX2V APP</string>
-<key>CFBundleName</key><string>LightX2V APP</string>
+<key>CFBundleDisplayName</key><string>LightX2V</string>
+<key>CFBundleName</key><string>LightX2V</string>
 <key>CFBundleIdentifier</key><string>app.lightx2v.desktop</string>
 <key>CFBundleExecutable</key><string>LightX2VApp</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
@@ -43,9 +52,21 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>LSArchitecturePriority</key><array><string>arm64</string></array>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSPrincipalClass</key><string>NSApplication</string>
-<key>NSHumanReadableCopyright</key><string>LightX2V APP · Local image generation</string>
+<key>NSHumanReadableCopyright</key><string>LightX2V · Local image generation</string>
 </dict></plist>
 PLIST
+
+python3 - "$ROOT" "$APP/Contents/Info.plist" <<'PY'
+from pathlib import Path
+import plistlib
+import subprocess
+import sys
+root, destination = sys.argv[1:]
+info = plistlib.loads(Path(destination).read_bytes())
+info["LightX2VCommit"] = subprocess.check_output(["git", "-C", root, "rev-parse", "HEAD"], text=True).strip()
+info["LightX2VCommitDate"] = subprocess.check_output(["git", "-C", root, "show", "-s", "--format=%cI", "HEAD"], text=True).strip()
+Path(destination).write_bytes(plistlib.dumps(info))
+PY
 
 ICON_WORK="$SCRATCH/icon"
 mkdir -p "$ICON_WORK/AppIcon.iconset"
@@ -56,6 +77,7 @@ for size in 16 32 128 256 512; do
     sips -z "$twice" "$twice" "$ICON_WORK/master.png" --out "$ICON_WORK/AppIcon.iconset/icon_${size}x${size}@2x.png" >/dev/null
 done
 iconutil -c icns "$ICON_WORK/AppIcon.iconset" -o "$APP/Contents/Resources/AppIcon.icns"
+codesign --force --sign - "$APP/Contents/Helpers/LightX2VMaintenance"
 codesign --force --deep --sign - "$APP"
 codesign --verify --deep --strict "$APP"
 printf 'Built: %s\n' "$APP"

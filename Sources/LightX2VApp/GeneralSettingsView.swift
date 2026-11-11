@@ -25,6 +25,7 @@ struct SettingsView: View {
     @State private var installLines: [String] = []
     @State private var installError: String?
     @State private var installCancelled = false
+    @State private var maintenanceSection: AppMaintenanceSection?
 
     private var layout: WorkspaceLayout { WorkspaceLayout(normalized(settings.workingDirectory)) }
     private var hasWorkDirectory: Bool { (try? WorkspaceLayout.validate(normalized(settings.workingDirectory))) != nil }
@@ -40,6 +41,11 @@ struct SettingsView: View {
                 languageCard
                 workspaceCard
                 pythonCard
+                HStack {
+                    Spacer()
+                    Button(L10n.text("Application updates")) { maintenanceSection = .updates }
+                    Button(L10n.text("Uninstall")) { maintenanceSection = .uninstall }
+                }.padding(.top, 8).disabled(store.busy)
             }.padding(.horizontal, 24).padding(.bottom, 12)
             Rectangle().fill(Palette.line).frame(height: 1)
             HStack(spacing: 10) {
@@ -79,6 +85,9 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showEnvironments, onDismiss: { if searching { store.setupTask?.cancel() } }) {
                 environmentPicker
+            }
+            .sheet(item: $maintenanceSection) { section in
+                AppMaintenanceView(section: section).environmentObject(store)
             }
     }
 
@@ -143,7 +152,7 @@ struct SettingsView: View {
         } actions: {
             Button { startSearch() } label: { Label(L10n.text("Search local environments"), systemImage: "magnifyingglass").fixedSize() }
                 .disabled(store.busy || !hasWorkDirectory)
-            SettingsStatusLine(message: pythonMatchesSaved && store.isChecking ? L10n.text("Checking") : "",
+            SettingsStatusLine(message: pythonMatchesSaved && store.isChecking ? L10n.render(store.environmentMessage) : "",
                                running: pythonMatchesSaved && store.isChecking,
                                color: pythonMatchesSaved && store.environmentReady ? Palette.green : Palette.muted)
         }
@@ -278,6 +287,7 @@ struct SettingsView: View {
         showInstaller = true; installing = true; installError = nil; installCancelled = false
         installLines = []; installProgress = .init(.download); store.isPreparingResources = true
         let workspace = layout; let selectedSource = installSource; let token = UUID(); operationID = token
+        store.registerMaintenanceWorkspace(workspace.root)
         store.setupTask = Task {
             defer { installing = false; operationID = nil; store.finishSetupTask() }
             do {

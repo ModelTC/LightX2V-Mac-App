@@ -118,7 +118,7 @@ def prepare(source, sample, root=None):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--app', type=Path, default=Path(__file__).resolve().parents[1] / 'dist/LightX2V APP.app')
+    parser.add_argument('--app', type=Path, default=Path(__file__).resolve().parents[1] / 'dist/LightX2V.app')
     parser.add_argument('--sample', type=Path, required=True, help='PNG fixture copied into the cache before launching')
     parser.add_argument('--root', type=Path, help='A separate cache directory for a fresh UI workspace')
     args = parser.parse_args()

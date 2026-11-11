@@ -31,6 +31,10 @@ struct AppStateChecks {
             try await startupEnvironmentChecks()
             return
         }
+        if CommandLine.arguments.dropFirst().first == "--workspace-recovery-only" {
+            try await workspaceRecoveryChecks()
+            return
+        }
         if CommandLine.arguments.dropFirst().first == "--settings-only" {
             try await generalRuntimeChecks()
             try await generalSettingsLayoutChecks()
@@ -114,8 +118,10 @@ struct AppStateChecks {
         let missingPreview = await LocalImagePreview.load(root.appendingPathComponent("missing.png").path, maximumDimension: 180)
         try check(missingPreview == nil, "missing preview fails without blocking app state")
         try check(store.selectedModel == nil && !store.modelPreparationExpanded && !store.generationParametersExpanded, "launch requires model selection with folded inspector")
-        try check(GenerationModel.allCases == [.qwenImage21Turbo] && GenerationModel.qwenImage21Turbo.title == QwenImage21Turbo.title,
-                  "Turbo is the sole model choice")
+        try check(GenerationModel.allCases == [.qwenImage21Turbo, .qwenImage21TurboInt8]
+                  && GenerationModel.qwenImage21Turbo.title == QwenImage21Turbo.title
+                  && GenerationModel.qwenImage21TurboInt8.title == QwenImage21TurboInt8.title,
+                  "Turbo exposes BF16 and INT8 model profiles")
         store.addInputImages([original])
         try check(!store.isImportingImages && store.inputImages.isEmpty, "no model rejects attachment import")
         store.selectModel(.qwenImage21Turbo)

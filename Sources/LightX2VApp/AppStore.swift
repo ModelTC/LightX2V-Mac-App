@@ -4,11 +4,14 @@ import LightX2VCore
 import UniformTypeIdentifiers
 
 enum GenerationModel: String, CaseIterable, Identifiable {
-    case qwenImage21Turbo
+    case qwenImage21Turbo, qwenImage21TurboInt8
 
     var id: String { rawValue }
     var title: String {
-        switch self { case .qwenImage21Turbo: return QwenImage21Turbo.title }
+        switch self {
+        case .qwenImage21Turbo: return QwenImage21Turbo.title
+        case .qwenImage21TurboInt8: return QwenImage21TurboInt8.title
+        }
     }
 }
 
@@ -21,6 +24,7 @@ final class AppStore: ObservableObject {
         }
     }
     @Published var modelDirectory: String { didSet { if oldValue != modelDirectory { modelPathChanged(.turbo) } } }
+    @Published var int8ModelDirectory: String { didSet { if oldValue != int8ModelDirectory { modelPathChanged(.turboInt8) } } }
     @Published var t2iDirectory: String { didSet { if oldValue != t2iDirectory { modelPathChanged(.t2i) } } }
     @Published var i2iDirectory: String { didSet { if oldValue != i2iDirectory { modelPathChanged(.i2i) } } }
     @Published var queuedModelDownloads: [ModelResource] = []
@@ -86,6 +90,9 @@ final class AppStore: ObservableObject {
     private var stateURL: URL?
     private let locatorRoot: URL
     private var canPersist = true
+    // Keep an unreadable locator target discoverable for uninstall, but only a
+    // successfully loaded or saved workspace may bypass destination decoding.
+    private var writableStateURL: URL? { canPersist ? stateURL : nil }
     private var restoringModelPaths = false
     private var draftImageDirectory: URL?
     private var draftCreationID = UUID()
@@ -165,12 +172,17 @@ final class AppStore: ObservableObject {
     }
     var configurationBusy: Bool { isRunning || isChecking || isPreparingWorkspace || isPreparingResources }
     var busy: Bool { configurationBusy || isImportingImages }
-    var canReferenceImages: Bool { selectedModel == .qwenImage21Turbo && !needsGeneralSetup && !isPreparingWorkspace && terminationCompletion == nil }
+    var canReferenceImages: Bool { selectedModel != nil && !needsGeneralSetup && !isPreparingWorkspace && terminationCompletion == nil }
     var canAddImages: Bool { canReferenceImages && !isImportingImages }
     var needsGeneralSetup: Bool { !hasCompletedGeneralSetup || !settings.hasGeneralPaths }
     var width: Int? { generationSize.dimensions?.width }
     var height: Int? { generationSize.dimensions?.height }
-    var canGenerate: Bool { selectedModel != nil && !needsGeneralSetup && environmentReady && readyModelResources.contains(.turbo) && !busy && !isComposingPrompt && (!settings.promptEnhancement.enabled || enhancementResourcesReady) && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var selectedModelResource: ModelResource { selectedModel == .qwenImage21TurboInt8 ? .turboInt8 : .turbo }
+    var selectedModelDirectory: String { selectedModel == .qwenImage21TurboInt8 ? int8ModelDirectory : modelDirectory }
+    var selectedModelDownloadSource: ModelDownloadSource {
+        selectedModel == .qwenImage21TurboInt8 ? settings.qwenImage21TurboInt8.modelDownloadSource : settings.modelDownloadSource
+    }
+    var canGenerate: Bool { selectedModel != nil && !needsGeneralSetup && environmentReady && readyModelResources.contains(selectedModelResource) && !busy && !isComposingPrompt && (!settings.promptEnhancement.enabled || enhancementResourcesReady) && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var bridgePath: String {
         (Bundle.main.url(forResource: "bridge", withExtension: "py")
          ?? Bundle.module.url(forResource: "bridge", withExtension: "py")!).path
@@ -189,11 +201,15 @@ final class AppStore: ObservableObject {
             canPersist = false
             readError = L10n.english("Unable to read the previous workspace. Original files were preserved. %@", [String(describing: error.localizedDescription)])
         }
+        if let maintenanceError = AppMaintenance.failureMessage() {
+            readError = L10n.english("Application maintenance failed.\n%@", [maintenanceError])
+        }
         data.recoverInterrupted()
         BundledInferenceResources.configure(&data.settings)
         settings = data.settings; generations = data.generations
         creationSettings = data.creationSettings
         modelDirectory = data.settings.model
+        int8ModelDirectory = data.settings.qwenImage21TurboInt8.modelDirectory
         t2iDirectory = data.settings.promptEnhancement.t2iDirectory; i2iDirectory = data.settings.promptEnhancement.i2iDirectory
         hasCompletedGeneralSetup = data.hasCompletedGeneralSetup
         errorMessage = readError
@@ -205,10 +221,44 @@ final class AppStore: ObservableObject {
             restoreCreationParameters()
         }
         refreshEnhancementResources(); refreshModelResources()
+        recordMaintenanceWorkspace()
+    }
+
+    private func recordMaintenanceWorkspace() {
+        guard !settings.workingDirectory.isEmpty else { return }
+        registerMaintenanceWorkspace(WorkspaceLayout(settings.workingDirectory).root)
+    }
+
+    func registerMaintenanceWorkspace(_ root: URL) {
+        try? UninstallWorkspaceRegistry.record(workspaceRoot: root, supportRoot: locatorRoot)
+    }
+
+    func makeUninstallPlan(applicationURL: URL) async throws -> AppUninstallPlan {
+        let settings = settings
+        let supportRoot = locatorRoot
+        let additionalRoots = stateURL.map { [$0.deletingLastPathComponent()] } ?? []
+        let domain = ProcessInfo.processInfo.environment["LIGHTX2V_APP_PREFERENCES_SUITE"] ?? "app.lightx2v.desktop"
+        let discovery = Task.detached(priority: .utility) {
+            try Task.checkCancellation()
+            if !settings.workingDirectory.isEmpty {
+                try? UninstallWorkspaceRegistry.record(workspaceRoot: WorkspaceLayout(settings.workingDirectory).root,
+                                                       supportRoot: supportRoot)
+            }
+            let plan = try AppUninstaller.discover(settings: settings, appURL: applicationURL, supportRoot: supportRoot,
+                                                   additionalWorkspaceRoots: additionalRoots,
+                                                   preferenceDomains: [domain])
+            try Task.checkCancellation()
+            return plan
+        }
+        return try await withTaskCancellationHandler(operation: {
+            try await discovery.value
+        }, onCancel: {
+            discovery.cancel()
+        })
     }
 
     func persist() {
-        guard canPersist, !isPreparingWorkspace, !settings.workingDirectory.isEmpty, let stateURL else { return }
+        guard !isPreparingWorkspace, !settings.workingDirectory.isEmpty, let stateURL = writableStateURL else { return }
         do { try JSONFile.write(WorkspaceData(settings: settings, generations: generations, hasCompletedGeneralSetup: hasCompletedGeneralSetup, creationSettings: creationSettings, activeCreationID: currentCreationID), to: stateURL) }
         catch { errorMessage = L10n.english("Unable to save application state: %@", [String(describing: error.localizedDescription)]) }
     }
@@ -373,25 +423,26 @@ final class AppStore: ObservableObject {
     }
 
     func existingWorkspaceSettings(at path: String) throws -> AppSettings? {
-        try WorkspaceStorage.existingWorkspace(at: path, previousState: stateURL)?.settings
+        try WorkspaceStorage.existingWorkspace(at: path, previousState: writableStateURL)?.settings
     }
 
     func applyGeneralSettings(_ value: AppSettings) async throws {
         guard !busy else { throw AppError.message(L10n.english("Wait for the current task to finish before saving settings.")) }
         var updated = settings
+        recordMaintenanceWorkspace()
         func path(_ value: String) -> String {
             (value.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath
         }
         updated.workingDirectory = path(value.workingDirectory)
         updated.python = path(value.python)
         BundledInferenceResources.configure(&updated)
-        if try WorkspaceStorage.existingWorkspace(at: updated.workingDirectory, previousState: stateURL) == nil {
+        if try WorkspaceStorage.existingWorkspace(at: updated.workingDirectory, previousState: writableStateURL) == nil {
             try updated.validateGeneralPaths()
         }
         isPreparingWorkspace = true
         defer { isPreparingWorkspace = false; finishTerminationIfNeeded() }
         let snapshot = WorkspaceData(settings: updated, generations: generations, hasCompletedGeneralSetup: true, creationSettings: creationSettings, activeCreationID: currentCreationID)
-        let previous = stateURL; let locator = locatorRoot
+        let previous = writableStateURL; let locator = locatorRoot
         let saved = try await Task.detached(priority: .userInitiated) {
             try WorkspaceStorage.save(snapshot, previousState: previous, locatorRoot: locator)
         }.value
@@ -417,6 +468,7 @@ final class AppStore: ObservableObject {
         refreshModelResources()
         canPersist = true; hasCompletedGeneralSetup = saved.hasCompletedGeneralSetup; environmentReady = keepEnvironmentReady
         errorMessage = nil
+        recordMaintenanceWorkspace()
         isPreparingWorkspace = false
         guard !needsGeneralSetup else { return }
         checkEnvironment(reuseVerifiedEnvironment: keepEnvironmentReady)
@@ -426,7 +478,12 @@ final class AppStore: ObservableObject {
     }
 
     func resourceDirectory(_ resource: ModelResource) -> String {
-        switch resource { case .turbo: return modelDirectory; case .t2i: return t2iDirectory; case .i2i: return i2iDirectory }
+        switch resource {
+        case .turbo: return modelDirectory
+        case .turboInt8: return int8ModelDirectory
+        case .t2i: return t2iDirectory
+        case .i2i: return i2iDirectory
+        }
     }
 
     func modelPathChanged(_ resource: ModelResource) {
@@ -438,6 +495,7 @@ final class AppStore: ObservableObject {
         let path = Self.normalizedModelPath(resourceDirectory(resource))
         switch resource {
         case .turbo: updated.model = path
+        case .turboInt8: updated.qwenImage21TurboInt8.modelDirectory = path
         case .t2i:
             updated.promptEnhancement.t2iDirectory = path
             updated.promptEnhancement.t2iModel = ""; updated.promptEnhancement.t2iSystemPrompt = ""
@@ -474,6 +532,7 @@ final class AppStore: ObservableObject {
 
     private func restoreModelPaths() {
         modelDirectory = settings.model
+        int8ModelDirectory = settings.qwenImage21TurboInt8.modelDirectory
         t2iDirectory = settings.promptEnhancement.t2iDirectory; i2iDirectory = settings.promptEnhancement.i2iDirectory
     }
 
@@ -482,9 +541,10 @@ final class AppStore: ObservableObject {
     }
 
     func setModelDownloadSource(_ source: ModelDownloadSource) {
-        guard !busy, settings.modelDownloadSource != source else { return }
+        guard !busy, selectedModelDownloadSource != source else { return }
         modelDownloadMessages.removeAll(); modelDownloadErrors.removeAll(); modelDownloadProgress.removeAll()
-        settings.modelDownloadSource = source
+        if selectedModel == .qwenImage21TurboInt8 { settings.qwenImage21TurboInt8.modelDownloadSource = source }
+        else { settings.modelDownloadSource = source }
         persist()
     }
 
@@ -493,7 +553,7 @@ final class AppStore: ObservableObject {
     }
 
     func downloadAllModels() {
-        downloadModels([.turbo, .t2i, .i2i], all: true)
+        downloadModels([selectedModelResource, .t2i, .i2i], all: true)
     }
 
     func stopModelDownloads() {
@@ -515,7 +575,7 @@ final class AppStore: ObservableObject {
         queuedModelDownloads = Array(resources.dropFirst())
         let firstID = beginModelDownload(first)
         let python = settings.python; let layout = WorkspaceLayout(settings.workingDirectory)
-        let source = settings.modelDownloadSource
+        let source = selectedModelDownloadSource
         setupTask = Task { [weak self] in
             guard let self else { return }
             defer {
@@ -551,7 +611,12 @@ final class AppStore: ObservableObject {
                         }
                     }
                     try Task.checkCancellation()
-                    switch resource { case .turbo: self.modelDirectory = path; case .t2i: self.t2iDirectory = path; case .i2i: self.i2iDirectory = path }
+                    switch resource {
+                    case .turbo: self.modelDirectory = path
+                    case .turboInt8: self.int8ModelDirectory = path
+                    case .t2i: self.t2iDirectory = path
+                    case .i2i: self.i2iDirectory = path
+                    }
                     self.modelDownloadMessages[resource] = L10n.english("Download complete · Saved automatically")
                     self.refreshModelResources(); self.refreshEnhancementResources()
                     self.modelDownloadProgress.removeValue(forKey: resource); self.modelDownloadID = nil
@@ -603,7 +668,13 @@ final class AppStore: ObservableObject {
                 do {
                     // Startup and the general-settings picker share one policy.
                     // Environment readiness is independent of model selection.
-                    try await BundledInferenceResources.prepare(in: layout)
+                    try await BundledInferenceResources.prepare(in: layout) { [self] message in
+                        Task { @MainActor in
+                            guard self.isChecking, WorkspaceLayout(self.settings.workingDirectory).root == layout.root else { return }
+                            self.environmentMessage = message
+                        }
+                    }
+                    try Task.checkCancellation()
                     BundledInferenceResources.configure(&settings)
                     refreshEnhancementResources()
                     if reuseVerifiedEnvironment {
@@ -612,6 +683,7 @@ final class AppStore: ObservableObject {
                         if enterWorkspaceOnSuccess { showStartupSettings = false }
                         return
                     }
+                    environmentMessage = L10n.english("Checking dependencies and MPS…")
                     let environment = try await PythonEnvironmentSearch.probe(python, workspace: layout)
                     try Task.checkCancellation()
                     environmentReady = environment.isCompatible
@@ -634,8 +706,9 @@ final class AppStore: ObservableObject {
         guard !needsGeneralSetup else { showSettings = true; return }
         guard environmentReady else { showSettings = true; return }
         do {
-            try settings.validatePaths()
-            try ModelResource.turbo.validate(directory: settings.model)
+            let resource = selectedModelResource
+            try settings.validatePaths(modelDirectory: selectedModelDirectory)
+            try resource.validate(directory: selectedModelDirectory)
             if settings.promptEnhancement.enabled && (try? settings.promptEnhancement.validate(for: enhancementMode)) == nil {
                 showModelPreparation()
                 errorMessage = L10n.english("Configure complete enhancement model directories in model preparation, or turn off prompt enhancement.")
@@ -647,12 +720,18 @@ final class AppStore: ObservableObject {
             let directory = URL(fileURLWithPath: settings.outputDirectory)
                 .appendingPathComponent(formatter.string(from: Date()) + "-" + id.uuidString.prefix(8))
             var runSettings = settings
+            if selectedModel == .qwenImage21TurboInt8 {
+                runSettings.qwenImage21Turbo.modelDirectory = selectedModelDirectory
+            }
             if runSettings.promptEnhancement.enabled { runSettings.promptEnhancement = try runSettings.promptEnhancement.resolvedResources(for: enhancementMode) }
             var request = try InferenceRequest(settings: runSettings, prompt: prompt, width: width, height: height,
                                                seed: seed, output: directory.appendingPathComponent("image.png").path,
                                                inputImages: inputImages, resolution: generationSize.automaticResolution)
+            request.modelName = selectedModel?.title ?? QwenImage21Turbo.title
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            request.config = try QwenImage21Turbo.writeConfig(in: directory)
+            request.config = try selectedModel == .qwenImage21TurboInt8
+                ? QwenImage21TurboInt8.writeConfig(in: directory)
+                : QwenImage21Turbo.writeConfig(in: directory)
             request.inputImages = try InputImages.snapshot(inputImages, in: directory)
             let requestURL = directory.appendingPathComponent("request.json")
             var generation = Generation(id: id, creationID: selected?.creationID ?? draftCreationID, request: request)

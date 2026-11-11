@@ -56,11 +56,13 @@ func modelSettingsChecks() throws {
     try JSONFile.write(WorkspaceData(settings: settings, generations: jobs, hasCompletedGeneralSetup: true), to: stateURL)
     let json = try JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as! [String: Any]
     let general = json["settings"] as! [String: Any]
-    try expect(Set(general.keys) == ["python", "workingDirectory", "Qwen-Image-2.1-Turbo"], "settings are not model-scoped")
+    try expect(Set(general.keys) == ["python", "workingDirectory", "Qwen-Image-2.1-Turbo", "Qwen-Image-2.1-Turbo-INT8"], "settings are not model-scoped")
     let model = general["Qwen-Image-2.1-Turbo"] as! [String: Any]
     try expect(Set(model.keys) == ["modelDirectory", "modelDownloadSource", "promptEnhancement"], "model settings contain derived paths")
     let pe = model["promptEnhancement"] as! [String: Any]
     try expect(Set(pe.keys) == ["enabled", "t2iDirectory", "i2iDirectory"], "PE settings contain resolved file paths")
+    let int8Model = general["Qwen-Image-2.1-Turbo-INT8"] as! [String: Any]
+    try expect(Set(int8Model.keys) == ["modelDirectory", "modelDownloadSource", "promptEnhancement"], "INT8 model settings are persisted separately")
     let records = json["generations"] as! [[String: Any]]
     for (index, mode) in [PromptEnhancementMode.t2i, .i2i].enumerated() {
         let record = records[index]
@@ -113,6 +115,10 @@ func modelSettingsChecks() throws {
     var rejected = false
     do { _ = try JSONDecoder().decode(AppSettings.self, from: old) } catch { rejected = true }
     try expect(rejected, "flat model settings were accepted")
+    var legacyScoped = general
+    legacyScoped.removeValue(forKey: "Qwen-Image-2.1-Turbo-INT8")
+    let legacySettings = try JSONDecoder().decode(AppSettings.self, from: JSONSerialization.data(withJSONObject: legacyScoped))
+    try expect(legacySettings.qwenImage21TurboInt8.modelDirectory.isEmpty, "old model-scoped settings did not default the INT8 profile")
     var invalid = general
     var invalidModel = model
     invalidModel["promptEnhancement"] = ["enabled": true, "t2iModel": "/old/model.gguf"]
