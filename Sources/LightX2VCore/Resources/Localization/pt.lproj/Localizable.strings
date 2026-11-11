@@ -432,7 +432,6 @@
 "Caches and logs" = "Caches e registos";
 "Settings and history" = "Definições e histórico";
 "Application updates" = "Atualizações da aplicação";
-"Uninstall LightX2V" = "Desinstalar o LightX2V";
 "Downloading Stable application…" = "A transferir a aplicação estável…";
 "Downloading Stable application · %.1f / %.1f MB" = "A transferir a aplicação estável · %.1f / %.1f MB";
 "Verifying Stable application…" = "A verificar a aplicação estável…";
@@ -443,3 +442,10 @@
 "Programs used for image generation and prompt enhancement. These files can be downloaded again when needed." = "Programas utilizados para gerar imagens e melhorar os prompts. Estes ficheiros podem ser transferidos novamente quando necessário.";
 "Model variants" = "Variantes do modelo";
 "Standard" = "Padrão";
+"Remove model weights" = "Remover os pesos dos modelos";
+"Remove workspace data" = "Remover os dados de trabalho";
+"Remove app and settings" = "Remover a aplicação e as definições";
+"Image generation and prompt enhancement model weights." = "Pesos dos modelos de geração de imagens e melhoria de prompts.";
+"Generated images, history, program files, managed Python environments, caches and logs." = "Imagens geradas, histórico, programas, ambientes Python geridos, caches e registos.";
+"The app, preferences, workspace location records and application caches." = "Aplicação, preferências, localizações das pastas de trabalho e caches da aplicação.";
+"Includes configured external folders." = "Inclui pastas externas configuradas.";

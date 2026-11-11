@@ -11,18 +11,19 @@ struct AppMaintenanceView: View {
     @ObservedObject private var language = LanguagePreferences.shared
     @EnvironmentObject var store: AppStore
     @Environment(\.dismiss) private var dismiss
-    @State private var section: AppMaintenanceSection
+    private let section: AppMaintenanceSection
     @State private var release: StableAppRelease?
     @State private var uninstallPlan: AppUninstallPlan?
-    @State private var selectedItems: Set<String> = []
+    @State private var selectedGroups: Set<UninstallGroup> = []
+    private var selectedItems: Set<String> { uninstallPlan?.selectedIDs(for: selectedGroups) ?? [] }
     @State private var message = ""
     @State private var failure: String?
     @State private var working = false
     @State private var confirmUninstall = false
     private let applicationURL: URL
 
-    init(initialSection: AppMaintenanceSection, applicationURL: URL = Bundle.main.bundleURL) {
-        _section = State(initialValue: initialSection)
+    init(section: AppMaintenanceSection, applicationURL: URL = Bundle.main.bundleURL) {
+        self.section = section
         self.applicationURL = applicationURL
     }
 
@@ -40,13 +41,9 @@ struct AppMaintenanceView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 BrandMark(size: 28)
-                Text(L10n.text("Application management")).font(.system(size: 18, weight: .semibold))
+                Text(L10n.text(section == .updates ? "Application updates" : "Uninstall")).font(.system(size: 18, weight: .semibold))
                 Spacer()
             }
-            Picker(L10n.text("Application management"), selection: $section) {
-                Text(L10n.text("Updates")).tag(AppMaintenanceSection.updates)
-                Text(L10n.text("Uninstall")).tag(AppMaintenanceSection.uninstall)
-            }.pickerStyle(.segmented).disabled(working)
             if section == .updates { updateContent }
             else { uninstallContent }
             Spacer(minLength: 0)
@@ -66,14 +63,10 @@ struct AppMaintenanceView: View {
                 Button(L10n.text("Close")) { dismiss() }.disabled(working).keyboardShortcut(.cancelAction)
             }
         }
-        .padding(24).frame(width: 720, height: 610)
+        .padding(24).frame(width: 640, height: section == .updates ? 380 : 560)
         .background(Palette.canvas).foregroundStyle(Palette.ink)
         .buttonStyle(SettingsActionStyle())
         .onAppear { if section == .uninstall { loadUninstallPlan() } }
-        .onChange(of: section) { _, value in
-            failure = nil; message = ""
-            if value == .uninstall { loadUninstallPlan() }
-        }
         .onDisappear { if working { store.setupTask?.cancel() } }
         .alert(L10n.text(removesApplication ? "Uninstall LightX2V?" : "Remove selected files?"), isPresented: $confirmUninstall) {
             Button(L10n.text("Cancel"), role: .cancel) {}
@@ -105,40 +98,29 @@ struct AppMaintenanceView: View {
             Text(L10n.text("Choose what to remove")).font(.system(size: 15, weight: .semibold))
             Text(L10n.text("Select the files to delete. Unchecked items will be kept."))
                 .font(.system(size: 12)).foregroundStyle(Palette.muted)
-            HStack {
-                Button(L10n.text("Select all")) { selectedItems = Set(uninstallPlan?.items.map(\.id) ?? []) }
-                Button(L10n.text("Keep all")) { selectedItems = [] }
-                Spacer()
-            }.disabled(working)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    if let uninstallPlan {
-                        ForEach(UninstallCategory.allCases, id: \.self) { category in
-                            let items = uninstallPlan.items.filter { $0.category == category }
-                            if !items.isEmpty {
-                                Text(L10n.text(category.title)).font(.system(size: 12, weight: .semibold))
-                                if category == .sources {
-                                    Text(L10n.text("Programs used for image generation and prompt enhancement. These files can be downloaded again when needed."))
-                                        .font(.system(size: 11)).foregroundStyle(Palette.muted)
-                                }
-                                ForEach(items, id: \.id) { item in
-                                    Toggle(isOn: Binding(get: { selectedItems.contains(item.id) }, set: { selected in
-                                        select(item, selected: selected)
-                                    })) {
-                                        VStack(alignment: .leading, spacing: 3) {
-                                            if item.isExternal {
-                                                Text(L10n.text("External folder")).font(.system(size: 10)).foregroundStyle(Palette.accent)
-                                            }
-                                            Text(item.path).font(.system(size: 11, design: .monospaced))
-                                                .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                                        }
-                                    }.toggleStyle(.checkbox).disabled(working)
-                                }
+            VStack(spacing: 10) {
+                ForEach(UninstallGroup.allCases) { group in
+                    let items = uninstallPlan?.items(in: group) ?? []
+                    Toggle(isOn: Binding(get: { selectedGroups.contains(group) }, set: { selected in
+                        if selected { selectedGroups.insert(group) }
+                        else { selectedGroups.remove(group) }
+                    })) {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(L10n.text(group.title)).font(.system(size: 13, weight: .medium))
+                            Text(L10n.text(group.detail)).font(.system(size: 11)).foregroundStyle(Palette.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                            if items.contains(where: \.isExternal) {
+                                Text(L10n.text("Includes configured external folders."))
+                                    .font(.system(size: 10)).foregroundStyle(Palette.accent)
                             }
                         }
                     }
-                }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
-            }.frame(maxHeight: .infinity).background(Palette.surface, in: RoundedRectangle(cornerRadius: 8))
+                    .toggleStyle(.checkbox).disabled(working || items.isEmpty)
+                    .accessibilityIdentifier("uninstall-group-" + group.rawValue)
+                    .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Palette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10))
+                }
+            }
             Button(L10n.text("Delete selected items…"), role: .destructive) { confirmUninstall = true }
                 .disabled(working || store.busy || selectedItems.isEmpty)
         }
@@ -153,22 +135,15 @@ struct AppMaintenanceView: View {
                 let plan = try await store.makeUninstallPlan(applicationURL: applicationURL)
                 try Task.checkCancellation()
                 uninstallPlan = plan
-                selectedItems = Set(plan.items.filter(\.defaultSelected).map(\.id))
+                selectedGroups = Set(UninstallGroup.allCases.filter { group in
+                    let items = plan.items(in: group)
+                    return !items.isEmpty && items.allSatisfy(\.defaultSelected)
+                })
                 message = ""
             } catch {
                 message = ""
                 if !Task.isCancelled { failure = error.localizedDescription }
             }
-        }
-    }
-
-    private func select(_ item: UninstallItem, selected: Bool) {
-        guard let uninstallPlan else { return }
-        let children = uninstallPlan.items.filter { $0.path == item.path || $0.path.hasPrefix(item.path + "/") }
-        if selected {
-            selectedItems.formUnion(children.map(\.id))
-        } else {
-            selectedItems.subtract(children.map(\.id))
         }
     }
 

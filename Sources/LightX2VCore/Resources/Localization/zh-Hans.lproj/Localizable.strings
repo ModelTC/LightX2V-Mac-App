@@ -432,7 +432,6 @@
 "Caches and logs" = "缓存与日志";
 "Settings and history" = "设置与历史记录";
 "Application updates" = "应用更新";
-"Uninstall LightX2V" = "卸载 LightX2V";
 "Downloading Stable application…" = "正在下载稳定版应用…";
 "Downloading Stable application · %.1f / %.1f MB" = "正在下载稳定版应用 · %.1f / %.1f MB";
 "Verifying Stable application…" = "正在验证稳定版应用…";
@@ -443,3 +442,10 @@
 "Programs used for image generation and prompt enhancement. These files can be downloaded again when needed." = "用于生图和提示词增强的程序文件，需要时可重新下载。";
 "Model variants" = "模型版本";
 "Standard" = "标准";
+"Remove model weights" = "卸载模型权重";
+"Remove workspace data" = "卸载工作目录记录";
+"Remove app and settings" = "卸载 APP 本体及配置";
+"Image generation and prompt enhancement model weights." = "生图模型与 Prompt 增强模型的权重。";
+"Generated images, history, program files, managed Python environments, caches and logs." = "生成图片、历史记录、程序文件、托管 Python 环境、缓存与日志。";
+"The app, preferences, workspace location records and application caches." = "APP 本体、偏好设置、工作目录位置记录及应用缓存。";
+"Includes configured external folders." = "包含已配置的外部文件夹。";

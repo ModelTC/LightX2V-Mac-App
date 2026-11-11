@@ -432,7 +432,6 @@
 "Caches and logs" = "캐시 및 로그";
 "Settings and history" = "설정 및 기록";
 "Application updates" = "앱 업데이트";
-"Uninstall LightX2V" = "LightX2V 제거";
 "Downloading Stable application…" = "안정 버전 앱 다운로드 중…";
 "Downloading Stable application · %.1f / %.1f MB" = "안정 버전 앱 다운로드 중 · %.1f / %.1f MB";
 "Verifying Stable application…" = "안정 버전 앱 확인 중…";
@@ -443,3 +442,10 @@
 "Programs used for image generation and prompt enhancement. These files can be downloaded again when needed." = "이미지 생성과 프롬프트 향상에 사용하는 프로그램 파일입니다. 필요할 때 다시 다운로드할 수 있습니다.";
 "Model variants" = "모델 버전";
 "Standard" = "표준";
+"Remove model weights" = "모델 가중치 삭제";
+"Remove workspace data" = "작업 데이터 삭제";
+"Remove app and settings" = "앱 및 설정 삭제";
+"Image generation and prompt enhancement model weights." = "이미지 생성 및 프롬프트 향상 모델 가중치.";
+"Generated images, history, program files, managed Python environments, caches and logs." = "생성 이미지, 기록, 프로그램 파일, 관리되는 Python 환경, 캐시 및 로그.";
+"The app, preferences, workspace location records and application caches." = "앱, 환경설정, 작업 폴더 위치 기록 및 앱 캐시.";
+"Includes configured external folders." = "설정된 외부 폴더를 포함합니다.";

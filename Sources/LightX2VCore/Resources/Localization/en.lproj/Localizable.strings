@@ -432,7 +432,6 @@
 "Caches and logs" = "Caches and logs";
 "Settings and history" = "Settings and history";
 "Application updates" = "Application updates";
-"Uninstall LightX2V" = "Uninstall LightX2V";
 "Downloading Stable application…" = "Downloading Stable application…";
 "Downloading Stable application · %.1f / %.1f MB" = "Downloading Stable application · %.1f / %.1f MB";
 "Verifying Stable application…" = "Verifying Stable application…";
@@ -443,3 +442,10 @@
 "Programs used for image generation and prompt enhancement. These files can be downloaded again when needed." = "Programs used for image generation and prompt enhancement. These files can be downloaded again when needed.";
 "Model variants" = "Model variants";
 "Standard" = "Standard";
+"Remove model weights" = "Remove model weights";
+"Remove workspace data" = "Remove workspace data";
+"Remove app and settings" = "Remove app and settings";
+"Image generation and prompt enhancement model weights." = "Image generation and prompt enhancement model weights.";
+"Generated images, history, program files, managed Python environments, caches and logs." = "Generated images, history, program files, managed Python environments, caches and logs.";
+"The app, preferences, workspace location records and application caches." = "The app, preferences, workspace location records and application caches.";
+"Includes configured external folders." = "Includes configured external folders.";

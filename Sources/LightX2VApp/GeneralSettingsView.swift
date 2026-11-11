@@ -42,10 +42,9 @@ struct SettingsView: View {
                 workspaceCard
                 pythonCard
                 HStack {
-                    Text("LightX2V").font(.system(size: 12, weight: .medium))
                     Spacer()
                     Button(L10n.text("Application updates")) { maintenanceSection = .updates }
-                    Button(L10n.text("Uninstall LightX2V")) { maintenanceSection = .uninstall }
+                    Button(L10n.text("Uninstall")) { maintenanceSection = .uninstall }
                 }.padding(.top, 8).disabled(store.busy)
             }.padding(.horizontal, 24).padding(.bottom, 12)
             Rectangle().fill(Palette.line).frame(height: 1)
@@ -88,7 +87,7 @@ struct SettingsView: View {
                 environmentPicker
             }
             .sheet(item: $maintenanceSection) { section in
-                AppMaintenanceView(initialSection: section).environmentObject(store)
+                AppMaintenanceView(section: section).environmentObject(store)
             }
     }
 

@@ -17,6 +17,26 @@ public enum UninstallCategory: String, CaseIterable, Codable, Sendable {
     }
 }
 
+/// User-facing choices map onto the detailed filesystem plan used by the helper.
+public enum UninstallGroup: String, CaseIterable, Identifiable, Sendable {
+    case models, workspace, application
+    public var id: Self { self }
+    public var title: String {
+        switch self {
+        case .models: return "Remove model weights"
+        case .workspace: return "Remove workspace data"
+        case .application: return "Remove app and settings"
+        }
+    }
+    public var detail: String {
+        switch self {
+        case .models: return "Image generation and prompt enhancement model weights."
+        case .workspace: return "Generated images, history, program files, managed Python environments, caches and logs."
+        case .application: return "The app, preferences, workspace location records and application caches."
+        }
+    }
+}
+
 public struct UninstallItem: Identifiable, Codable, Equatable, Sendable {
     public var id: String { path }
     public let path: String
@@ -47,6 +67,26 @@ public struct AppUninstallPlan: Codable, Sendable {
         self.supportRoot = supportRoot; self.homeDirectory = homeDirectory
         self.preferenceDomains = preferenceDomains
     }
+
+    public func items(in group: UninstallGroup) -> [UninstallItem] {
+        items.filter { self.group(for: $0) == group }
+    }
+
+    public func selectedIDs(for groups: Set<UninstallGroup>) -> Set<String> {
+        Set(items.filter { groups.contains(group(for: $0)) }.map(\.id))
+    }
+
+    private func group(for item: UninstallItem) -> UninstallGroup {
+        switch item.category {
+        case .models: return .models
+        case .application: return .application
+        case .sources, .environment, .history: return .workspace
+        case .settings, .caches:
+            let inWorkspace = workspaceRoots.contains { item.path == $0.path || item.path.hasPrefix($0.path + "/") }
+            return inWorkspace ? .workspace : .application
+        }
+    }
+
 }
 
 public struct AppUninstallSelection: Codable, Sendable {
@@ -212,7 +252,12 @@ public enum AppUninstaller {
         let selected = plan.items.filter { selectedIDs.contains($0.id) }.map { URL(fileURLWithPath: $0.path, isDirectory: false) }
             .sorted { $0.pathComponents.count < $1.pathComponents.count }
         let unselected = plan.items.filter { !selectedIDs.contains($0.id) }.map { URL(fileURLWithPath: $0.path, isDirectory: false) }
-        let choices = Dictionary(uniqueKeysWithValues: plan.items.map { ($0.path, selectedIDs.contains($0.id)) })
+        var choices = Dictionary(uniqueKeysWithValues: plan.items.map { ($0.path, selectedIDs.contains($0.id)) })
+        // A workspace nested inside app configuration still owns its unlisted
+        // files. Only explicitly selected resources inside it inherit deletion.
+        for root in plan.workspaceRoots where choices[root.path] == nil {
+            choices[root.path] = false
+        }
         // A kept container can contain an explicitly selected child. Its other
         // contents are retained during traversal instead of blocking that child.
         var retained = unselected.filter { parent in
@@ -230,8 +275,8 @@ public enum AppUninstaller {
             guard visited.insert(url.path).inserted,
                   !retained.contains(where: { contains(url, in: $0) }) else { return }
             let remove = choices[url.path] ?? inheritedSelection
-            let changesBelow = plan.items.contains {
-                $0.path != url.path && $0.path.hasPrefix(url.path + "/") && selectedIDs.contains($0.id) != remove
+            let changesBelow = choices.contains { path, selected in
+                path != url.path && path.hasPrefix(url.path + "/") && selected != remove
             }
             let keepsBelow = retained.contains { contains($0, in: url) }
             if !changesBelow && !keepsBelow {

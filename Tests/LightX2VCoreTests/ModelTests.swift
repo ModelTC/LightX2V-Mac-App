@@ -12,6 +12,7 @@ struct CoreChecks {
         setbuf(stdout, nil)
         try await appUpdaterChecks()
         try appUninstallerChecks()
+        try uninstallGroupChecks()
         try await appMaintenanceChecks()
         try await bundledResourceChecks()
         try localizationChecks()
