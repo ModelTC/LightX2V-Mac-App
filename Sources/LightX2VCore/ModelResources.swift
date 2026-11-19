@@ -170,6 +170,7 @@ public enum ModelDownloader {
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
         let updates = DownloadUpdates(source: source)
         onProgress(updates.begin(totalBytes: nil))
+        try QwenModelWeightReuse.prepare(resource, in: workspace)
         // Load the same login/interactive shell configuration as Terminal, then
         // exec the selected CLI beside the configured Python. Positional
         // arguments preserve paths literally, including quotes and shell syntax.
