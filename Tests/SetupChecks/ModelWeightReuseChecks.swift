@@ -16,8 +16,13 @@ extension SetupChecks {
             try data.write(to: file)
         }
 
+        let aliasRoot = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
+            .appendingPathComponent("lightx2v-weight-reuse-check-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: aliasRoot) }
         for resource in [ModelResource.turbo, .turboInt8] {
-            let workspace = WorkspaceLayout(root.appendingPathComponent("weight reuse " + resource.rawValue).path)
+            // Capture a fresh workspace path before mkdir, as the app does on first use.
+            let base = resource == .turboInt8 ? aliasRoot : root
+            let workspace = WorkspaceLayout(base.appendingPathComponent("weight reuse " + resource.rawValue).path)
             let sibling: ModelResource = resource == .turbo ? .turboInt8 : .turbo
             let destination = resource.destination(in: workspace)
             let source = sibling.destination(in: workspace).appendingPathComponent(weightPath)

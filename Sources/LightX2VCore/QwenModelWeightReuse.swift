@@ -26,8 +26,10 @@ package enum QwenModelWeightReuse {
     package static func prepare(_ resource: ModelResource, in workspace: WorkspaceLayout, weights: [Weight] = sharedWeights) throws {
         guard resource.isTurbo else { return }
         let sibling: ModelResource = resource == .turbo ? .turboInt8 : .turbo
-        let source = sibling.destination(in: workspace)
-        let destination = resource.destination(in: workspace)
+        // Foundation can only resolve system path aliases once the workspace exists.
+        let preparedWorkspace = WorkspaceLayout(workspace.root.path)
+        let source = sibling.destination(in: preparedWorkspace)
+        let destination = resource.destination(in: preparedWorkspace)
         for weight in weights {
             try Task.checkCancellation()
             do {
