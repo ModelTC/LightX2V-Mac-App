@@ -187,6 +187,16 @@ private struct ModelDownloadFeedback: View {
     let progress: ModelDownloadProgress
 
     var body: some View {
+        if progress.stage == .checkingLocalWeights {
+            Text(L10n.render(progress.detail(at: Date())))
+                .font(.system(size: 9)).lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            transferFeedback
+        }
+    }
+
+    private var transferFeedback: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             HStack(spacing: 4) {
                 Text(progress.stage == .downloading ? progress.percentage : "…").font(.system(size: 9)).monospacedDigit()

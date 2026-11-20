@@ -169,14 +169,25 @@ public enum ModelDownloader {
         let destination = resource.destination(in: workspace)
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
         let updates = DownloadUpdates(source: source)
+        let shell = loginShell
+        let candidates = QwenModelWeightReuse.candidates(resource, in: workspace)
+        var revision: [String] = []
+        if !candidates.isEmpty,
+           let manifest = try await ModelDownloadManifest.resolve(source: source, repository: resource.repository,
+               paths: candidates, python: python, shell: shell, workspace: workspace),
+           candidates.contains(where: { manifest.weights[$0]?.isValid == true }) {
+            onProgress(updates.checkingLocalWeights())
+            if try QwenModelWeightReuse.prepare(resource, in: workspace, manifest: manifest) {
+                revision = ["--revision", manifest.revision]
+            }
+        }
         onProgress(updates.begin(totalBytes: nil))
         // Load the same login/interactive shell configuration as Terminal, then
         // exec the selected CLI beside the configured Python. Positional
         // arguments preserve paths literally, including quotes and shell syntax.
-        let shell = loginShell
-        let command = source == .huggingFace
+        let command = (source == .huggingFace
             ? [cli, "download", resource.repository, "--local-dir", destination.path]
-            : [cli, "download", "--model", resource.repository, "--local_dir", destination.path]
+            : [cli, "download", "--model", resource.repository, "--local_dir", destination.path]) + revision
         let exports = source == .huggingFace ? "export HF_HUB_DISABLE_PROGRESS_BARS=0; " : ""
         let arguments = ["-lic", exports + "export TQDM_POSITION=-1 TQDM_MININTERVAL=0.5; exec \"$@\"",
                          "lightx2v-" + source.executableName] + command
@@ -216,6 +227,9 @@ public enum ModelDownloader {
             lock.lock(); defer { lock.unlock() }
             if line.contains("Failed to download ") || line.contains("file(s) failed to download") { failedFiles = true }
             return parser.consume(line)
+        }
+        func checkingLocalWeights() -> ModelDownloadProgress {
+            lock.lock(); defer { lock.unlock() }; return parser.checkingLocalWeights()
         }
         func checking() -> ModelDownloadProgress { lock.lock(); defer { lock.unlock() }; return parser.checking() }
     }

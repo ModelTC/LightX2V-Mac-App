@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import LightX2VCore
 
 private final class ModelDownloadUpdates: @unchecked Sendable {
@@ -9,6 +10,7 @@ private final class ModelDownloadUpdates: @unchecked Sendable {
     func append(_ progress: ModelDownloadProgress) { lock.lock(); snapshots.append(progress); lock.unlock() }
     var hasProgress: Bool { lock.lock(); defer { lock.unlock() }; return values.contains { $0.contains("25%") } }
     var hasBytesAndSpeed: Bool { lock.lock(); defer { lock.unlock() }; return snapshots.contains { $0.fileCountText == "8/32" && $0.percentage == "25%" && $0.bytesPerSecond == 2_500_000 } }
+    var checkedLocalWeights: Bool { lock.lock(); defer { lock.unlock() }; return snapshots.contains { $0.stage == .checkingLocalWeights } }
     var checked: Bool { lock.lock(); defer { lock.unlock() }; return snapshots.last?.stage == .checking }
 }
 
@@ -18,7 +20,17 @@ extension SetupChecks {
         let bin = root.appendingPathComponent("HF env 中文/bin")
         try fm.createDirectory(at: bin, withIntermediateDirectories: true)
         let python = bin.appendingPathComponent("python")
-        try Data("#!/bin/sh\nexit 99\n".utf8).write(to: python)
+        let manifestCLI = #"""
+#!/usr/bin/python3
+import json, pathlib, sys
+plan = json.loads(pathlib.Path('reuse-fixture.json').read_text())
+assert sys.argv[1] == '-c' and sys.argv[3] == plan['source']
+assert sys.argv[4:] == ['Qwen/Qwen-Image-2.1-Turbo', 'vae/diffusion_pytorch_model.safetensors']
+if plan.get('manifest') is None:
+    sys.exit(1)
+print('LIGHTX2V_MODEL_MANIFEST:' + json.dumps(plan['manifest']))
+"""#
+        try Data(manifestCLI.utf8).write(to: python)
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: python.path)
         let previousHome = getenv("HF_HOME").map { String(cString: $0) }
         let terminalCache = root.appendingPathComponent("terminal-hf-cache")
@@ -36,7 +48,17 @@ path = pathlib.Path(args[3]); path.mkdir(parents=True, exist_ok=True)
 assert pathlib.Path(os.environ['HF_HOME']).name == 'terminal-hf-cache', 'terminal HF cache was overridden'
 assert os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] == '0'
 assert os.environ['TQDM_POSITION'] == '-1'
-assert args[4:] == []
+plan_file = path.parents[2] / 'reuse-fixture.json'
+if plan_file.exists():
+    plan = json.loads(plan_file.read_text())
+    staged = path / 'vae/diffusion_pytorch_model.safetensors'
+    if plan['reuse']:
+        assert args[4:] == ['--revision', plan['manifest']['revision']], args
+        assert staged.read_bytes() == b'official fixture', staged
+    else:
+        assert args[4:] == [] and not staged.exists(), args
+else:
+    assert args[4:] == [], args
 print('Fetching 32 files: 25%|██| 8/32 [00:01<00:03]', end='\r', flush=True)
 print('Downloading bytes: | 10.0MB 2.50MB/s', end='\r', flush=True)
 print('Reconstructing (incomplete total...): 50%|██| 250MB / 500MB 99MB/s', end='\r', flush=True)
@@ -79,7 +101,7 @@ print('Fetching 32 files: 100%|██| 32/32 [00:02<00:00]', flush=True)
             .replacingOccurrences(of: "assert args[0] == 'download' and args[2] == '--local-dir', args", with: "assert args[0] == 'download' and args[1] == '--model' and args[3] == '--local_dir', args")
             .replacingOccurrences(of: "pathlib.Path(args[3])", with: "pathlib.Path(args[4])")
             .replacingOccurrences(of: "assert os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] == '0'", with: "assert os.environ['PYTHONUNBUFFERED'] == '1'")
-            .replacingOccurrences(of: "assert args[4:] == []", with: "assert args[5:] == []")
+            .replacingOccurrences(of: "args[4:]", with: "args[5:]")
             .replacingOccurrences(of: "repo = args[1]", with: "repo = args[2]")
             .replacingOccurrences(of: "Fetching 32 files:", with: "Downloading:")
             .replacingOccurrences(of: "Downloading bytes: | 10.0MB 2.50MB/s", with: "Downloading [weights.gguf]: 25%|██| 10.0MB/40.0MB [00:01<00:03, 2.50MB/s]")
@@ -95,6 +117,37 @@ print('Fetching 32 files: 100%|██| 32/32 [00:02<00:00]', flush=True)
             let args = try JSONFile.read([String].self, from: URL(fileURLWithPath: directory + "/arguments.json"))
             try expect(args == ["download", "--model", resource.repository, "--local_dir", directory] && updates.hasBytesAndSpeed && updates.checked, "ModelScope lost literal arguments, file counts, speed or final validation")
         }
+        let weightPath = "vae/diffusion_pytorch_model.safetensors"
+        let fixture = Data("official fixture".utf8)
+        let checksum = SHA256.hash(data: fixture).map { String(format: "%02x", $0) }.joined()
+        let revision = String(repeating: "a", count: 40)
+        let weight: [String: Any] = ["size": fixture.count, "sha256": checksum]
+        let manifest: [String: Any] = ["revision": revision, "weights": [weightPath: weight]]
+        for source in ModelDownloadSource.allCases {
+            let plans: [(String, [String: Any]?, Bool)] = [
+                ("verified", manifest, true),
+                ("missing-manifest", nil, false),
+                ("missing-weight", ["revision": revision, "weights": [:]], false),
+                ("changed-weight", ["revision": revision, "weights": [weightPath: [
+                    "size": fixture.count, "sha256": String(repeating: "b", count: 64)
+                ]]], false),
+            ]
+            for (name, expected, reuse) in plans {
+                let work = WorkspaceLayout(root.appendingPathComponent(source.rawValue + "-" + name).path)
+                let sibling = ModelResource.turboInt8.destination(in: work).appendingPathComponent(weightPath)
+                try fm.createDirectory(at: sibling.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try fixture.write(to: sibling)
+                var plan: [String: Any] = ["source": source.rawValue, "reuse": reuse]
+                plan["manifest"] = expected
+                try JSONSerialization.data(withJSONObject: plan).write(to: work.root.appendingPathComponent("reuse-fixture.json"))
+                let updates = ModelDownloadUpdates()
+                _ = try await ModelDownloader.download(.turbo, python: python.path, workspace: work, source: source,
+                                                       onProgress: { updates.append($0) }) { _ in }
+                try expect(updates.checked, "download did not finish validation")
+                if reuse { try expect(updates.checkedLocalWeights, "verified reuse was not visible in download progress") }
+            }
+        }
+        print("PASS both providers pin verified reuse and fall back when remote metadata is unavailable or changed")
         do {
             _ = try await ModelDownloader.download(.t2i, python: python.path, workspace: WorkspaceLayout(root.appendingPathComponent("ms-download-failure").path), source: .modelScope) { _ in }
             throw Failure(message: "ModelScope file failure with zero exit status was accepted")

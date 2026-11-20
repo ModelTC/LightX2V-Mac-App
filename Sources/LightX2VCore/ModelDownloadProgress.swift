@@ -1,7 +1,7 @@
 import Foundation
 
 public struct ModelDownloadProgress: Equatable, Sendable {
-    public enum Stage: Equatable, Sendable { case preparing, downloading, checking }
+    public enum Stage: Equatable, Sendable { case preparing, checkingLocalWeights, downloading, checking }
     public var stage: Stage = .preparing
     public var sequence = 0
     public var completedBytes: Double = 0
@@ -20,7 +20,7 @@ public struct ModelDownloadProgress: Equatable, Sendable {
     public var fileCountText: String { totalFiles.map { "\(completedFiles)/\($0)" } ?? "—/—" }
     public var percentage: String {
         if stage == .preparing { return L10n.english("Preparing") }
-        if stage == .checking { return L10n.english("Verifying") }
+        if stage == .checking || stage == .checkingLocalWeights { return L10n.english("Verifying") }
         return fraction.map { "\(Int(($0 * 100).rounded(.down)))%" } ?? "—%"
     }
     public func speed(at date: Date) -> Double? {
@@ -33,6 +33,7 @@ public struct ModelDownloadProgress: Equatable, Sendable {
     public func detail(at date: Date) -> String {
         switch stage {
         case .preparing: return L10n.english("Fetching model information…")
+        case .checkingLocalWeights: return L10n.english("Checking model files…")
         case .checking: return L10n.english("Download finished; checking model files…")
         case .downloading:
             let amount = Self.bytes(completedBytes) + (totalBytes.map { " / " + Self.bytes($0) } ?? L10n.english(" · Total size pending"))
@@ -73,6 +74,12 @@ public struct ModelDownloadProgressParser: Sendable {
         progress.sequence += 1
         return progress
     }
+    mutating func checkingLocalWeights() -> ModelDownloadProgress {
+        progress.stage = .checkingLocalWeights
+        progress.sequence += 1
+        return progress
+    }
+
     public mutating func checking() -> ModelDownloadProgress {
         progress.stage = .checking; progress.bytesPerSecond = nil; progress.remainingSeconds = nil
         progress.sequence += 1
