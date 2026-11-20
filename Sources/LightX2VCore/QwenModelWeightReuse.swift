@@ -2,38 +2,46 @@ import Darwin
 import Foundation
 
 package enum QwenModelWeightReuse {
-    package struct Weight {
-        package let path: String
-        let size: Int64
-        let sha256: String
+    package static let sharedPaths = ["text_encoder/model.safetensors", "vae/diffusion_pytorch_model.safetensors"]
 
-        package init(path: String, size: Int64, sha256: String) {
-            self.path = path
-            self.size = size
-            self.sha256 = sha256
+    private static func sibling(of resource: ModelResource) -> ModelResource? {
+        switch resource {
+        case .turbo: return .turboInt8
+        case .turboInt8: return .turbo
+        case .t2i, .i2i: return nil
         }
     }
 
-    // These two artifacts have matching SHA-256 hashes in both official Turbo repositories.
-    // The download CLI still checks the files against the selected repository revision.
-    package static let sharedWeights = [
-        Weight(path: "text_encoder/model.safetensors", size: 17_534_340_584,
-               sha256: "a1eee8233f3063466dd3b06e857b0a2cf13a77c543908374771d51a546beb2e0"),
-        Weight(path: "vae/diffusion_pytorch_model.safetensors", size: 675_508_656,
-               sha256: "71879ffd5321e6d10c3c87513e2b474b1252efa7f3dec2969214a9bf06a6dd5c"),
-    ]
+    static func candidates(_ resource: ModelResource, in workspace: WorkspaceLayout) -> [String] {
+        guard let sibling = sibling(of: resource) else { return [] }
+        let preparedWorkspace = WorkspaceLayout(workspace.root.path)
+        let source = sibling.destination(in: preparedWorkspace)
+        let destination = resource.destination(in: preparedWorkspace)
+        return sharedPaths.filter { path in
+            let existing = source.appendingPathComponent(path)
+            let target = destination.appendingPathComponent(path)
+            guard let info = fileInfo(existing), info.st_size > 0 else { return false }
+            guard let targetInfo = fileInfo(target) else { return true }
+            guard info.st_dev == targetInfo.st_dev, info.st_ino != targetInfo.st_ino else { return false }
+            if let stream = cloneID(existing), stream == cloneID(target) { return false }
+            return true
+        }
+    }
 
-    package static func prepare(_ resource: ModelResource, in workspace: WorkspaceLayout, weights: [Weight] = sharedWeights) throws {
-        guard resource.isTurbo else { return }
-        let sibling: ModelResource = resource == .turbo ? .turboInt8 : .turbo
+    package static func prepare(_ resource: ModelResource, in workspace: WorkspaceLayout,
+                                manifest: ModelDownloadManifest?) throws -> Bool {
+        guard let manifest, manifest.hasPinnedRevision, let sibling = sibling(of: resource) else { return false }
         // Foundation can only resolve system path aliases once the workspace exists.
         let preparedWorkspace = WorkspaceLayout(workspace.root.path)
         let source = sibling.destination(in: preparedWorkspace)
         let destination = resource.destination(in: preparedWorkspace)
-        for weight in weights {
+        var reused = false
+        for path in sharedPaths {
             try Task.checkCancellation()
+            guard let weight = manifest.weights[path], weight.isValid else { continue }
             do {
-                try reuse(weight, from: source, to: destination)
+                if try reuse(weight, from: source.appendingPathComponent(path), to: destination.appendingPathComponent(path),
+                             in: destination) { reused = true }
             } catch is CancellationError {
                 throw CancellationError()
             } catch let error as ReplacementError {
@@ -43,6 +51,7 @@ package enum QwenModelWeightReuse {
                 continue
             }
         }
+        return reused
     }
 
     private struct ReplacementError: LocalizedError {
@@ -53,28 +62,21 @@ package enum QwenModelWeightReuse {
         }
     }
 
-    private static func reuse(_ weight: Weight, from sibling: URL, to destination: URL) throws {
-        let source = sibling.appendingPathComponent(weight.path)
-        let target = destination.appendingPathComponent(weight.path)
+    private static func reuse(_ weight: ModelDownloadManifest.Weight, from source: URL, to target: URL,
+                              in destination: URL) throws -> Bool {
         guard source.resolvingSymlinksInPath().path == source.path,
               target.resolvingSymlinksInPath().path == target.path,
-              let sourceInfo = fileInfo(source), sourceInfo.st_size == weight.size else { return }
+              let sourceInfo = fileInfo(source), sourceInfo.st_size == weight.size else { return false }
         let existing = fileInfo(target)
         if let existing {
             guard existing.st_size == weight.size, existing.st_nlink == 1,
-                  existing.st_dev == sourceInfo.st_dev, existing.st_ino != sourceInfo.st_ino else { return }
-            if let stream = cloneID(source), stream == cloneID(target) { return }
-        } else {
-            // An orphaned Hugging Face sidecar could cause its CLI to trust the cloned file
-            // as a different revision without hashing it. Leave that recovery to the CLI.
-            let metadata = destination.appendingPathComponent(".cache/huggingface/download/" + weight.path + ".metadata")
-            var info = stat()
-            guard lstat(metadata.path, &info) != 0, errno == ENOENT else { return }
+                  existing.st_dev == sourceInfo.st_dev, existing.st_ino != sourceInfo.st_ino else { return false }
+            if let stream = cloneID(source), stream == cloneID(target) { return false }
         }
 
         let fm = FileManager.default
         try fm.createDirectory(at: destination, withIntermediateDirectories: true)
-        guard destination.resolvingSymlinksInPath().path == destination.path else { return }
+        guard destination.resolvingSymlinksInPath().path == destination.path else { return false }
         let temporary = destination.appendingPathComponent(".lightx2v-clone-\(UUID().uuidString)", isDirectory: true)
         try fm.createDirectory(at: temporary, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         let staged = temporary.appendingPathComponent(target.lastPathComponent)
@@ -82,30 +84,30 @@ package enum QwenModelWeightReuse {
         defer { if !preserveOriginal { try? fm.removeItem(at: temporary) } }
 
         guard clonefile(source.path, staged.path, UInt32(CLONE_NOFOLLOW)) == 0,
-              fileInfo(staged)?.st_size == weight.size, try PyTorchEnvironmentInstaller.digest(staged) == weight.sha256 else { return }
+              fileInfo(staged)?.st_size == weight.size, try PyTorchEnvironmentInstaller.digest(staged) == weight.sha256 else { return false }
         try Task.checkCancellation()
 
         guard let existing else {
             let parent = target.deletingLastPathComponent()
             try fm.createDirectory(at: parent, withIntermediateDirectories: true)
             // Exclusive rename leaves a file installed by a concurrent download untouched.
-            _ = renamex_np(staged.path, target.path, UInt32(RENAME_EXCL))
-            return
+            return renamex_np(staged.path, target.path, UInt32(RENAME_EXCL)) == 0
         }
         guard try PyTorchEnvironmentInstaller.digest(target) == weight.sha256,
               copyfile(target.path, staged.path, nil, copyfile_flags_t(COPYFILE_METADATA | COPYFILE_NOFOLLOW)) == 0,
               let current = fileInfo(target), sameFile(existing, current),
               current.st_ctimespec.tv_sec == existing.st_ctimespec.tv_sec,
-              current.st_ctimespec.tv_nsec == existing.st_ctimespec.tv_nsec else { return }
+              current.st_ctimespec.tv_nsec == existing.st_ctimespec.tv_nsec else { return false }
         try Task.checkCancellation()
         let swap = UInt32(RENAME_SWAP)
-        guard renamex_np(staged.path, target.path, swap) == 0 else { return }
+        guard renamex_np(staged.path, target.path, swap) == 0 else { return false }
         // Keep the previous file until we verify that the swap displaced the file we checked.
-        if let displaced = fileInfo(staged), sameFile(existing, displaced) { return }
+        if let displaced = fileInfo(staged), sameFile(existing, displaced) { return true }
         if renamex_np(staged.path, target.path, swap) != 0 {
             preserveOriginal = true
             throw ReplacementError(preservedFile: staged)
         }
+        return false
     }
 
     private static func fileInfo(_ url: URL) -> stat? {
