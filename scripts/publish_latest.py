@@ -16,6 +16,11 @@ ASSET_NAME = "LightX2V-APP-macOS-arm64.zip"
 PREFIX = "LightX2V-APP-macOS-arm64-"
 DISPLAY_TIMEZONE = timezone(timedelta(hours=8))
 DATE_FORMAT = "%Y-%m-%d %H:%M"
+LEGACY_PACKAGE_REQUIREMENTS = "- Requires local LightX2V source, model weights and a Python inference environment"
+PACKAGE_REQUIREMENTS = (
+    "- Includes LightX2V source and llama.cpp. Requires model weights and a compatible Python environment.\n"
+    "- Qwen-Image-2.1-Turbo-INT8 Metal inference requires macOS 26.4+."
+)
 
 
 class GitHub:
@@ -109,7 +114,7 @@ def publish(client, archive, sha, run_number, run_id, attempt, tag="latest"):
         f"{retention} Downloads do not expire automatically.\n\n"
         f"- Commit: `{sha}`\n- [Publication workflow]({url}/actions/runs/{run_id})\n"
         "- Apple Silicon / macOS 14+\n- Ad-hoc signed; not notarized\n"
-        "- Requires local LightX2V source, model weights and a Python inference environment\n\n"
+        f"{PACKAGE_REQUIREMENTS}\n\n"
         f"SHA-256:\n```text\n{digest}  {ASSET_NAME}\n```\n")
     client.api("PATCH", f"releases/{release['id']}", {
         "name": f"LightX2V · {title}", "target_commitish": sha,
@@ -127,6 +132,18 @@ def publish(client, archive, sha, run_number, run_id, attempt, tag="latest"):
             client.api("DELETE", f"actions/artifacts/{artifact['id']}")
     print(f"Published {url}/releases/download/{tag}/{ASSET_NAME}\nSHA-256: {digest}")
     return True
+
+
+def refresh_stable_notes(client):
+    """Correct older release text without publishing another Stable package."""
+    release = client.api("GET", "releases/tags/stable", missing_ok=True)
+    if not release or release.get("draft"):
+        return
+    body = release.get("body") or ""
+    updated = re.sub(r"^" + re.escape(LEGACY_PACKAGE_REQUIREMENTS) + r"$",
+                     PACKAGE_REQUIREMENTS, body, flags=re.MULTILINE)
+    if updated != body:
+        client.api("PATCH", f"releases/{release['id']}", {"body": updated})
 
 
 def download_row_pattern(tag):
@@ -169,6 +186,7 @@ if __name__ == "__main__":
         if publish(client, Path(sys.argv[1]), os.environ["GITHUB_SHA"], int(os.environ["GITHUB_RUN_NUMBER"]),
                    os.environ["GITHUB_RUN_ID"], os.environ["GITHUB_RUN_ATTEMPT"]):
             record_download_commit(client, "latest", os.environ["GITHUB_SHA"])
+            refresh_stable_notes(client)
     except urllib.error.HTTPError as error:
         print(f"GitHub API error {error.code}: {error.read().decode(errors='replace')}", file=sys.stderr)
         sys.exit(1)

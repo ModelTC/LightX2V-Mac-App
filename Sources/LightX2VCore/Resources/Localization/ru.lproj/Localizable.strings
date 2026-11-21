@@ -401,8 +401,6 @@
 "Wait for environment search to finish" = "Дождитесь завершения поиска сред";
 
 // Application updates and uninstall.
-"Application management" = "Управление приложением";
-"Updates" = "Обновления";
 "Uninstall" = "Удаление";
 "Cancel" = "Отмена";
 "Uninstall LightX2V?" = "Удалить LightX2V?";
@@ -415,9 +413,6 @@
 "Download and install" = "Скачать и установить";
 "Choose what to remove" = "Выберите, что удалить";
 "Select the files to delete. Unchecked items will be kept." = "Выберите файлы для удаления. Неотмеченные элементы будут сохранены.";
-"Select all" = "Выбрать всё";
-"Keep all" = "Сохранить всё";
-"External folder" = "Внешняя папка";
 "Delete selected items…" = "Удалить выбранные элементы…";
 "Checking the stable release…" = "Проверка стабильной версии…";
 "Build information is unavailable. Use a packaged LightX2V app." = "Информация о сборке недоступна. Используйте упакованное приложение LightX2V.";
@@ -439,7 +434,6 @@
 "Application maintenance failed.\n%@" = "Не удалось выполнить операцию обслуживания приложения.\n%@";
 "Remove selected files?" = "Удалить выбранные файлы?";
 "Delete and restart" = "Удалить и перезапустить";
-"Programs used for image generation and prompt enhancement. These files can be downloaded again when needed." = "Программы для генерации изображений и улучшения запросов. При необходимости эти файлы можно скачать снова.";
 "Model variants" = "Варианты модели";
 "Standard" = "Стандарт";
 "Remove model weights" = "Удалить веса моделей";

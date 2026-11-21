@@ -401,8 +401,6 @@
 "Wait for environment search to finish" = "Attendez la fin de la recherche des environnements";
 
 // Application updates and uninstall.
-"Application management" = "Gestion de l’application";
-"Updates" = "Mises à jour";
 "Uninstall" = "Désinstaller";
 "Cancel" = "Annuler";
 "Uninstall LightX2V?" = "Désinstaller LightX2V ?";
@@ -415,9 +413,6 @@
 "Download and install" = "Télécharger et installer";
 "Choose what to remove" = "Choisir les éléments à supprimer";
 "Select the files to delete. Unchecked items will be kept." = "Sélectionnez les fichiers à supprimer. Les éléments non cochés seront conservés.";
-"Select all" = "Tout sélectionner";
-"Keep all" = "Tout conserver";
-"External folder" = "Dossier externe";
 "Delete selected items…" = "Supprimer la sélection…";
 "Checking the stable release…" = "Recherche de la version stable…";
 "Build information is unavailable. Use a packaged LightX2V app." = "Les informations de compilation sont indisponibles. Utilisez une application LightX2V empaquetée.";
@@ -439,7 +434,6 @@
 "Application maintenance failed.\n%@" = "La gestion de l’application a échoué.\n%@";
 "Remove selected files?" = "Supprimer les fichiers sélectionnés ?";
 "Delete and restart" = "Supprimer et redémarrer";
-"Programs used for image generation and prompt enhancement. These files can be downloaded again when needed." = "Programmes utilisés pour générer des images et améliorer les prompts. Ces fichiers peuvent être téléchargés à nouveau si nécessaire.";
 "Model variants" = "Versions du modèle";
 "Standard" = "Standard";
 "Remove model weights" = "Supprimer les poids des modèles";

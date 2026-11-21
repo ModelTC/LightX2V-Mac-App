@@ -124,6 +124,18 @@ class LatestReleaseTests(unittest.TestCase):
 
 
 class StableReleaseTests(unittest.TestCase):
+    def test_refreshing_stable_notes_keeps_the_package_and_release_identity(self):
+        client = FakeGitHub(tag="stable")
+        client.release.update(target_commitish="stable-commit",
+                              body=f"Stable build\n\n{publisher.LEGACY_PACKAGE_REQUIREMENTS}\n\nSHA-256: original")
+        original_assets = copy.deepcopy(client.assets)
+        publisher.refresh_stable_notes(client)
+        publisher.refresh_stable_notes(client)
+        self.assertEqual(client.release["body"], f"Stable build\n\n{publisher.PACKAGE_REQUIREMENTS}\n\nSHA-256: original")
+        self.assertEqual(client.release["target_commitish"], "stable-commit")
+        self.assertEqual(client.assets, original_assets)
+        self.assertEqual(client.requests.count(("PATCH", "releases/1")), 1)
+
     def test_stable_replaces_only_its_package_and_keeps_latest_untouched(self):
         with tempfile.TemporaryDirectory() as directory:
             archive = Path(directory) / publisher.ASSET_NAME
