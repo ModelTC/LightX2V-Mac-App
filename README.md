@@ -1,4 +1,4 @@
-# LightX2V
+# LightX2V <img src="Sources/LightX2VApp/Resources/BrandMark.png" alt="" width="36" height="36" align="absmiddle">
 
 A native macOS app for local image generation with [Qwen-Image-2.1-Turbo](https://huggingface.co/Qwen/Qwen-Image-2.1-Turbo) on Apple Silicon. It uses [LightX2V](https://github.com/ModelTC/LightX2V) for image inference and [llama.cpp](https://github.com/ggml-org/llama.cpp) for optional prompt enhancement, with a simple interface for text-to-image and image-to-image creation. Verified on an Apple M4 Pro with 24GB of unified memory.
 
