@@ -69,12 +69,12 @@ Path(destination).write_bytes(plistlib.dumps(info))
 PY
 
 ICON_WORK="$SCRATCH/icon"
+ICON_SOURCE="$ROOT/scripts/AppIcon.png"
 mkdir -p "$ICON_WORK/AppIcon.iconset"
-swift "$ROOT/scripts/make-icon.swift" "$ICON_WORK/master.png"
 for size in 16 32 128 256 512; do
-    sips -z "$size" "$size" "$ICON_WORK/master.png" --out "$ICON_WORK/AppIcon.iconset/icon_${size}x${size}.png" >/dev/null
+    sips -z "$size" "$size" "$ICON_SOURCE" --out "$ICON_WORK/AppIcon.iconset/icon_${size}x${size}.png" >/dev/null
     twice=$((size * 2))
-    sips -z "$twice" "$twice" "$ICON_WORK/master.png" --out "$ICON_WORK/AppIcon.iconset/icon_${size}x${size}@2x.png" >/dev/null
+    sips -z "$twice" "$twice" "$ICON_SOURCE" --out "$ICON_WORK/AppIcon.iconset/icon_${size}x${size}@2x.png" >/dev/null
 done
 iconutil -c icns "$ICON_WORK/AppIcon.iconset" -o "$APP/Contents/Resources/AppIcon.icns"
 codesign --force --sign - "$APP/Contents/Helpers/LightX2VMaintenance"
