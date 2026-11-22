@@ -7,7 +7,7 @@ A native macOS app for local image generation with [Qwen-Image-2.1-Turbo](https:
 | Channel | Apple Silicon · macOS 14+ | Commit | Date (UTC+8) |
 | --- | --- | --- | --- |
 | Latest | [Download Latest APP](https://github.com/ModelTC/LightX2V-Mac-App/releases/download/latest/LightX2V-APP-macOS-arm64.zip) | [`1d69e4c`](https://github.com/ModelTC/LightX2V-Mac-App/commit/1d69e4c360fc642ced74ac29b01268b91bdf2059) | 2026-11-22 12:48 |
-| Stable | [⬇️ Download Stable APP](https://github.com/ModelTC/LightX2V-Mac-App/releases/download/stable/LightX2V-APP-macOS-arm64.zip) · **⭐ Recommended** | [`65acaee`](https://github.com/ModelTC/LightX2V-Mac-App/commit/65acaee0c063200651629cb21df7c46711687e65) | 2026-11-11 20:59 |
+| Stable | [⬇️ Download Stable APP](https://github.com/ModelTC/LightX2V-Mac-App/releases/download/stable/LightX2V-APP-macOS-arm64.zip) · **⭐ Recommended** | [`1d69e4c`](https://github.com/ModelTC/LightX2V-Mac-App/commit/1d69e4c360fc642ced74ac29b01268b91bdf2059) | 2026-11-22 12:48 |
 
 The app bundles LightX2V source and llama.cpp. Model weights and a compatible Python environment are prepared separately in the app.
 
