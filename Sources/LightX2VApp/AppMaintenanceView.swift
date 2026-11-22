@@ -12,6 +12,7 @@ struct AppMaintenanceView: View {
     @EnvironmentObject var store: AppStore
     @Environment(\.dismiss) private var dismiss
     private let section: AppMaintenanceSection
+    private let onMaintenanceHandoff: () -> Void
     @State private var release: StableAppRelease?
     @State private var uninstallPlan: AppUninstallPlan?
     @State private var selectedGroups: Set<UninstallGroup> = []
@@ -22,9 +23,11 @@ struct AppMaintenanceView: View {
     @State private var confirmUninstall = false
     private let applicationURL: URL
 
-    init(section: AppMaintenanceSection, applicationURL: URL = Bundle.main.bundleURL) {
+    init(section: AppMaintenanceSection, applicationURL: URL = Bundle.main.bundleURL,
+         onMaintenanceHandoff: @escaping () -> Void) {
         self.section = section
         self.applicationURL = applicationURL
+        self.onMaintenanceHandoff = onMaintenanceHandoff
     }
 
     private var buildInfo: [String: Any] { Bundle(url: applicationURL)?.infoDictionary ?? [:] }
@@ -189,6 +192,7 @@ struct AppMaintenanceView: View {
             defer {
                 if !helperStarted, let directory { try? FileManager.default.removeItem(at: directory) }
                 finishOperation()
+                if helperStarted { onMaintenanceHandoff() }
             }
             do {
                 var excluded = [applicationURL]
@@ -203,8 +207,6 @@ struct AppMaintenanceView: View {
                 plan.jobDirectory = job
                 _ = try await AppMaintenance.launch(plan: plan)
                 helperStarted = true
-                finishOperation()
-                NSApp.terminate(nil)
             } catch {
                 message = ""
                 if !Task.isCancelled { failure = error.localizedDescription }
@@ -217,11 +219,14 @@ struct AppMaintenanceView: View {
         let plan = AppMaintenancePlan(uninstall: uninstallPlan, selectedIDs: selectedItems)
         beginOperation(L10n.english("Preparing"))
         store.setupTask = Task {
-            defer { finishOperation() }
+            var helperStarted = false
+            defer {
+                finishOperation()
+                if helperStarted { onMaintenanceHandoff() }
+            }
             do {
                 _ = try await AppMaintenance.launch(plan: plan)
-                finishOperation()
-                NSApp.terminate(nil)
+                helperStarted = true
             } catch {
                 message = ""
                 if !Task.isCancelled { failure = error.localizedDescription }

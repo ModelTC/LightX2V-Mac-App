@@ -23,6 +23,7 @@ test -f "$APP/Contents/Info.plist"
 test -x "$APP/Contents/MacOS/LightX2VApp"
 test -x "$APP/Contents/Helpers/LightX2VMaintenance"
 test -f "$APP/Contents/Resources/bridge.py"
+test -s "$APP/Contents/Resources/BrandMark.png"
 test -f "$APP/Contents/Resources/prompt_enhancement.py"
 test -s "$APP/Contents/Resources/requirements.txt"
 test -s "$APP/Contents/Resources/qwen_image_21_turbo.json"
@@ -49,7 +50,7 @@ codesign --verify --deep --strict "$RESTORED_APP"
 cmp "$APP/Contents/MacOS/LightX2VApp" "$RESTORED_APP/Contents/MacOS/LightX2VApp"
 cmp "$APP/Contents/Helpers/LightX2VMaintenance" "$RESTORED_APP/Contents/Helpers/LightX2VMaintenance"
 cmp "$APP/Contents/Info.plist" "$RESTORED_APP/Contents/Info.plist"
-for resource in bridge.py prompt_enhancement.py requirements.txt qwen_image_21_turbo.json qwen_image_21_turbo_int8.json qwen_image_21_turbo_int8_metal.json; do
+for resource in BrandMark.png bridge.py prompt_enhancement.py requirements.txt qwen_image_21_turbo.json qwen_image_21_turbo_int8.json qwen_image_21_turbo_int8_metal.json; do
     cmp "$APP/Contents/Resources/$resource" "$RESTORED_APP/Contents/Resources/$resource"
 done
 

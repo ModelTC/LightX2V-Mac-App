@@ -67,7 +67,7 @@ func generalSettingsLayoutChecks() async throws {
         ("ready", settings, true)
     ] {
         let app = try store(value, completed: completed)
-        let host = NSHostingView(rootView: SettingsView(settings: value).environmentObject(app).preferredColorScheme(.light))
+        let host = NSHostingView(rootView: SettingsView(settings: value, onMaintenanceHandoff: {}).environmentObject(app).preferredColorScheme(.light))
         window.contentView = host
         window.setContentSize(host.fittingSize)
         window.makeKeyAndOrderFront(nil)
@@ -78,7 +78,7 @@ func generalSettingsLayoutChecks() async throws {
         try snapshot(name, host)
     }
     let app = try store(settings)
-    let host = NSHostingView(rootView: SettingsView(settings: settings).environmentObject(app).preferredColorScheme(.light))
+    let host = NSHostingView(rootView: SettingsView(settings: settings, onMaintenanceHandoff: {}).environmentObject(app).preferredColorScheme(.light))
     window.contentView = host; window.setContentSize(host.fittingSize)
     try await Task.sleep(for: .milliseconds(200))
     let initial = try geometry(host)

@@ -21,7 +21,7 @@ mkdir -p "$APP/Contents/Resources"
 cp "$BIN/LightX2VApp" "$APP/Contents/MacOS/LightX2VApp"
 cp "$BIN/LightX2VMaintenance" "$APP/Contents/Helpers/LightX2VMaintenance"
 # A .app uses the native Resources directory; SwiftPM's bundle remains a development fallback.
-for resource in bridge.py prompt_enhancement.py requirements.txt; do
+for resource in BrandMark.png bridge.py prompt_enhancement.py requirements.txt; do
     cp "$APP_RES/$resource" "$APP/Contents/Resources/$resource"
 done
 for config in qwen_image_21_turbo.json qwen_image_21_turbo_int8.json qwen_image_21_turbo_int8_metal.json; do
@@ -69,7 +69,7 @@ Path(destination).write_bytes(plistlib.dumps(info))
 PY
 
 ICON_WORK="$SCRATCH/icon"
-ICON_SOURCE="$ROOT/scripts/AppIcon.png"
+ICON_SOURCE="$APP/Contents/Resources/BrandMark.png"
 mkdir -p "$ICON_WORK/AppIcon.iconset"
 for size in 16 32 128 256 512; do
     sips -z "$size" "$size" "$ICON_SOURCE" --out "$ICON_WORK/AppIcon.iconset/icon_${size}x${size}.png" >/dev/null

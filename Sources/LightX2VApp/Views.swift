@@ -4,13 +4,18 @@ import LightX2VCore
 import UniformTypeIdentifiers
 
 struct BrandMark: View {
-    @ObservedObject private var language = LanguagePreferences.shared
     var size: CGFloat = 30
+
+    private static let artwork = (Bundle.main.url(forResource: "BrandMark", withExtension: "png")
+                                  ?? Bundle.module.url(forResource: "BrandMark", withExtension: "png"))
+        .flatMap { NSImage(contentsOf: $0) }
+
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: size * 0.29).fill(Palette.button)
-            Image(systemName: "bolt.fill").font(.system(size: size * 0.56, weight: .medium)).foregroundStyle(Palette.onButton)
-        }.frame(width: size, height: size)
+        Group {
+            if let artwork = Self.artwork {
+                Image(nsImage: artwork).resizable().scaledToFit()
+            }
+        }.frame(width: size, height: size).accessibilityHidden(true)
     }
 }
 
@@ -31,6 +36,7 @@ struct WorkspaceView: View {
     @ObservedObject private var language = LanguagePreferences.shared
     @EnvironmentObject var store: AppStore
     @State private var minimumWindowSize = ScreenFittingWindow.minimumContentSize
+    @State private var terminateAfterSettingsDismissal = false
     var body: some View {
         GeometryReader { workspace in
             HStack(spacing: 0) {
@@ -62,7 +68,17 @@ struct WorkspaceView: View {
         .frame(minWidth: minimumWindowSize.width, minHeight: minimumWindowSize.height)
         .overlay(alignment: .top) { WindowDragArea(isNativeTitleBar: true).frame(height: 28) }
         .ignoresSafeArea(.container, edges: .top)
-        .sheet(isPresented: $store.showSettings) { SettingsView(settings: store.settings).environmentObject(store) }
+        .sheet(isPresented: $store.showSettings, onDismiss: {
+            guard terminateAfterSettingsDismissal else { return }
+            terminateAfterSettingsDismissal = false
+            // AppKit ignores termination while the settings sheets are active.
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+        }) {
+            SettingsView(settings: store.settings, onMaintenanceHandoff: {
+                terminateAfterSettingsDismissal = true
+                store.showSettings = false
+            }).environmentObject(store)
+        }
 
         .alert("LightX2V", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
             Button(L10n.text("OK")) { store.errorMessage = nil }

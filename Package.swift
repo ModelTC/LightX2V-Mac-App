@@ -9,7 +9,7 @@ let package = Package(
                .executable(name: "LightX2VMaintenance", targets: ["LightX2VMaintenance"])],
     targets: [
         .target(name: "LightX2VCore", resources: [.copy("Resources/qwen_image_21_turbo.json"), .copy("Resources/qwen_image_21_turbo_int8.json"), .copy("Resources/qwen_image_21_turbo_int8_metal.json"), .copy("Resources/Bundled"), .process("Resources/Localization")]),
-        .executableTarget(name: "LightX2VApp", dependencies: ["LightX2VCore"], resources: [.copy("Resources/bridge.py"), .copy("Resources/prompt_enhancement.py"), .copy("Resources/requirements.txt")]),
+        .executableTarget(name: "LightX2VApp", dependencies: ["LightX2VCore"], resources: [.copy("Resources/BrandMark.png"), .copy("Resources/bridge.py"), .copy("Resources/prompt_enhancement.py"), .copy("Resources/requirements.txt")]),
         .executableTarget(name: "LightX2VMaintenance", dependencies: ["LightX2VCore"]),
         // Standalone checks also run with Command Line Tools (XCTest requires full Xcode).
         .executableTarget(name: "LightX2VCoreChecks", dependencies: ["LightX2VCore"], path: "Tests/LightX2VCoreTests"),

@@ -7,6 +7,7 @@ struct SettingsView: View {
     @EnvironmentObject var store: AppStore
     @FocusState private var headerFocused: Bool
     @State var settings: AppSettings
+    var onMaintenanceHandoff: (() -> Void)?
     @State private var setupProgress = GeneralSetupProgress()
     @State private var saveError: String?
     @State private var showEnvironments = false
@@ -41,11 +42,13 @@ struct SettingsView: View {
                 languageCard
                 workspaceCard
                 pythonCard
-                HStack {
-                    Spacer()
-                    Button(L10n.text("Application updates")) { maintenanceSection = .updates }
-                    Button(L10n.text("Uninstall")) { maintenanceSection = .uninstall }
-                }.padding(.top, 8).disabled(store.busy)
+                if onMaintenanceHandoff != nil {
+                    HStack {
+                        Spacer()
+                        Button(L10n.text("Application updates")) { maintenanceSection = .updates }
+                        Button(L10n.text("Uninstall")) { maintenanceSection = .uninstall }
+                    }.padding(.top, 8).disabled(store.busy)
+                }
             }.padding(.horizontal, 24).padding(.bottom, 12)
             Rectangle().fill(Palette.line).frame(height: 1)
             HStack(spacing: 10) {
@@ -87,7 +90,10 @@ struct SettingsView: View {
                 environmentPicker
             }
             .sheet(item: $maintenanceSection) { section in
-                AppMaintenanceView(section: section).environmentObject(store)
+                if let onMaintenanceHandoff {
+                    AppMaintenanceView(section: section, onMaintenanceHandoff: onMaintenanceHandoff)
+                        .environmentObject(store)
+                }
             }
     }
 
